@@ -1,181 +1,325 @@
 import streamlit as st
+
 import pandas as pd
+
 import json
+
 import datetime
+
+import time
+
 from google.cloud import firestore
+
 from google.oauth2 import service_account
-from io import BytesIO
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
-from pdfrw import PdfReader, PdfWriter, PageMerge
+
+
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
+
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
 
-# --- ESTILIZAÇÃO VISUAL (CARDS TOTAIS) ---
-st.markdown("""
-    <style>
-    .card {
-        background-color: #ffffff;
-        padding: 18px;
-        border-radius: 12px;
-        margin-bottom: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        border-top: 1px solid #eee;
-    }
-    .card-pub { border-left: 8px solid #4e73df; }
-    .card-aux { border-left: 8px solid #1cc88a; }
-    .card-reg { border-left: 8px solid #f6c23e; }
-    .card-pendente { border-left: 8px solid #e74a3b; background-color: #fffcfc; }
-    
-    .metric-label { color: #64748b; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
-    .metric-value { color: #1e293b; font-size: 1.05rem; font-weight: bold; margin-bottom: 10px; display: block; }
-    .obs-box { font-size: 0.85rem; color: #475569; background: #f8fafc; padding: 8px; border-radius: 6px; margin-top: 8px; border: 1px dashed #cbd5e1; }
-    </style>
-""", unsafe_allow_html=True)
+
+
+# --- LISTAS MESTRAS ---
+
+PIONEIROS_REGULARES = [
+
+    "Ana Dilma Cardoso", "Cintia Aparecida Travaglin", "Diva Cordeiro de Souza", 
+
+    "Edna Alves Secundo", "Ivan Rodrigues Vieira da Silva", "Jessica Melo da Silva", 
+
+    "Joselita Maria dos Santos", "Katia Almeida Nunes Dantas", "Marcia Rocha de Oliveira", 
+
+    "Maria Dalia Silva Oliveira", "Marilele de Andrade e Melo Silva", "Marilene Lopes Araujo", 
+
+    "Miriam Silva Oliveira", "Rene Fonseca Cardoso", "Romys Ferreira Primo", 
+
+    "Ruth Almeida Nunes", "Sirlene Rodrigues Calado", "Thalita Lopes de Oliveira", "Zelia Pereira Santos"
+
+]
+
+
+
+TODOS_PUBLICADORES = [
+
+    "Airton Pereira da Silva", "Anderson de Almeida Silva", "Anderson Vieira Dantas",
+
+    "Antonia Cordeiro Silva", "Aparecida Cruz dos Santos", "Ariana Rodrigues Calado Oliveira",
+
+    "Beatriz Dantas dos Santos", "Brenda Vieira Dantas", "Bruno Oliveira da Silva",
+
+    "Cecilia Geremias Cunha", "Celidalva de Souza Santos", "Clauberto de Oliveira Silva",
+
+    "Cosme Ferreira Primo", "Dalva Dias de Queiroz", "Deise Santana Nogueira Fernandes",
+
+    "Doralice Carlos Souza Silva", "Edna Olibeira Sales Gomes", "Edney da Cruz Barbosa",
+
+    "Eduardo Ferreira Fernandes", "Emerson Vieira Dantas", "Franciele Coelho Barbosa",
+
+    "Francisco Antonio da Silva Oliveira", "Francisco das Chagas Oliveira", "Francisco de Assis Angelos",
+
+    "Gabriela Carlos Batista", "Gabriela Pereira Santos", "Giovanna Coelho Barbosa",
+
+    "Heloisa Eduarda Santana Fernandes", "Hosana de Souza Primo", "Jacqueline Melo da Silva",
+
+    "Janete Pereira Oliveira", "Jaqueline Freitas de Souza", "Joaquim Antonio Barbosa",
+
+    "Jose Augusto Silva", "Jose Carlos Alves da Silva", "Jose Claudio de Oliveira Silva",
+
+    "Jose Pereira da Silva", "Jose Severino", "Josefa Santos Araujo", "Joyce Araujo Campos",
+
+    "Julia Melo da Silva", "Juliana Gabriel Pereira Primo", "Julio Cesar da Silva Matos",
+
+    "Kelvin Travaglin Andrade", "Laurinda Cipriano de Souza Oliveira", "Lidiane Maria Rocha Lima",
+
+    "Lucilene Carlos Silva Batista", "Lucilia Cassimiro da Silva", "Manoel Messias Andrade de Oliveira",
+
+    "Maria Almeida Nunes Couto", "Maria Aparecida Coelho F Barbosa", "Maria Aparecida Gonçalves Dias",
+
+    "Maria Elena Oliveira Felipe", "Maria Jussara Vilela Santos", "Maria Lucineide Araujo Silva",
+
+    "Maria Vilma do Nascimento", "Mateus Jean Silva Oliveira", "Olavo Amanço Batista",
+
+    "Pedro Vitor de Queiroz Freitas", "Renato Ferreira Primo", "Roberta Vieira Dantas",
+
+    "Rosemeire Pereira Barauna", "Sebastiao Souza Almeida", "Selma Geremias Cunha",
+
+    "Tiago da Silva Oliveira", "Valdete Carlene Borges", "Vanuza Rocha Silva",
+
+    "Vilma Pereira da Silva", "Wendley Leite Cunha"
+
+]
+
+
 
 # --- FUNÇÕES DE BANCO DE DADOS ---
+
 def inicializar_db():
+
     if "db" not in st.session_state:
+
         try:
+
             key_dict = json.loads(st.secrets["textkey"])
+
             creds = service_account.Credentials.from_service_account_info(key_dict)
+
             st.session_state.db = firestore.Client(credentials=creds, project="wendleydesenvolvimento")
+
         except Exception as e:
+
             st.error(f"Erro de conexão: {e}")
+
             return None
+
     return st.session_state.db
 
-def carregar_relatorios():
+
+
+def carregar_dados():
+
     db = inicializar_db()
+
     if db:
+
         docs = db.collection("relatorios_parque_alianca").stream()
+
         return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+
     return []
 
-def gerenciar_membros(acao, dados=None):
-    db = inicializar_db()
-    if not db: return {}
-    if acao == "listar":
-        docs = db.collection("membros_congregacao").stream()
-        return {doc.id: doc.to_dict() for doc in docs}
-    elif acao == "salvar":
-        db.collection("membros_congregacao").document(dados['nome']).set(dados)
 
-# --- LÓGICA DE PDF ---
-def gerar_pdf_s4t(dados):
-    try:
-        packet = BytesIO()
-        can = canvas.Canvas(packet, pagesize=letter)
-        meses_y = {"SETEMBRO": 455, "OUTUBRO": 438, "NOVEMBRO": 421, "DEZEMBRO": 404, "JANEIRO": 387, "FEVEREIRO": 370, "MARÇO": 353, "ABRIL": 336, "MAIO": 319, "JUNHO": 302, "JULHO": 285, "AGOSTO": 268}
-        mes_puro = str(dados.get('mes_referencia', '')).split()[0].upper()
-        y = meses_y.get(mes_puro, 100)
-        can.setFont("Helvetica-Bold", 10)
-        if dados.get('participou_ministerio'): can.drawString(168, y, "X")
-        can.drawString(220, y, str(dados.get('estudos_biblicos', 0)))
-        can.drawString(340, y, str(dados.get('horas', 0)))
-        can.save()
-        packet.seek(0)
-        new_pdf = PdfReader(packet)
-        existing_pdf = PdfReader("S-4-T_Template.pdf")
-        output = PdfWriter()
-        page = existing_pdf.pages[0]
-        PageMerge(page).add(new_pdf.pages[0]).render()
-        output.addpage(page)
-        result = BytesIO()
-        output.write(result)
-        return result.getvalue()
-    except: return None
+
+def processar_registro(row):
+
+    nome_original = str(row['nome']).strip().lower()
+
+    nome_oficial = row['nome']
+
+    
+
+    # Busca automática na lista oficial
+
+    for n in (PIONEIROS_REGULARES + TODOS_PUBLICADORES):
+
+        if nome_original in n.lower():
+
+            nome_oficial = n
+
+            break
+
+            
+
+    # Classificação Automática (Ponto 1)
+
+    if nome_oficial in PIONEIROS_REGULARES:
+
+        categoria = "PIONEIRO REGULAR"
+
+    else:
+
+        categoria = row.get('categoria', "PUBLICADOR")
+
+        
+
+    return nome_oficial, categoria
+
+
 
 def main():
-    st.title("📊 Administração Parque Aliança")
-    
-    # 1. CARREGAR DADOS
-    membros_db = gerenciar_membros("listar")
-    relatorios_brutos = carregar_relatorios()
-    
-    # 2. ABA DE GESTÃO (PREVENTIVA)
-    aba_rel, aba_gestao = st.tabs(["📝 PAINEL DE RELATÓRIOS", "⚙️ GESTÃO DE PESSOAS"])
 
-    with aba_gestao:
-        st.subheader("Cadastrar Novo Publicador")
-        with st.form("form_cadastro"):
-            nome_c = st.text_input("Nome Completo")
-            cat_c = st.selectbox("Categoria", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"])
-            if st.form_submit_button("Confirmar Cadastro"):
-                if nome_c:
-                    gerenciar_membros("salvar", {"nome": nome_c, "categoria": cat_c})
-                    st.success(f"{nome_c} cadastrado!")
-                    st.rerun()
+    st.title("📊 Painel Administrativo - Parque Aliança")
 
-    # 3. PROCESSAMENTO DOS RELATÓRIOS
-    if not relatorios_brutos:
-        with aba_rel: st.info("Nenhum relatório enviado ainda.")
+    
+
+    dados_brutos = carregar_dados()
+
+    if not dados_brutos:
+
+        st.info("Aguardando primeiros relatórios...")
+
         return
 
-    df = pd.DataFrame(relatorios_brutos)
+
+
+    df = pd.DataFrame(dados_brutos)
+
+    df[['nome', 'categoria']] = df.apply(lambda x: pd.Series(processar_registro(x)), axis=1)
+
+
+
+    # --- FILTRO POR MÊS (Ponto 2) ---
+
+    meses_disponiveis = sorted(df['mes_referencia'].unique())
+
+    mes_selecionado = st.selectbox("📅 Selecione o Mês para Visualizar:", meses_disponiveis, index=len(meses_disponiveis)-1)
+
     
-    # Garantir que a coluna categoria existe baseada no cadastro de membros
-    def vincular_categoria(nome_relatorio):
-        membro = membros_db.get(nome_relatorio)
-        if membro: return membro['categoria']
-        return "PUBLICADOR" # Fallback
 
-    df['categoria'] = df['nome'].apply(vincular_categoria)
+    df_mes = df[df['mes_referencia'] == mes_selecionado]
 
-    meses = sorted(df['mes_referencia'].unique())
-    mes_sel = st.sidebar.selectbox("📅 Selecione o Mês", meses, index=len(meses)-1)
-    df_mes = df[df['mes_referencia'] == mes_sel]
 
-    with aba_rel:
-        col1, col2, col3 = st.columns(3)
-        cats = [("PUBLICADOR", "Publicadores", "card-pub"), 
-                ("PIONEIRO AUXILIAR", "Auxiliares", "card-aux"), 
-                ("PIONEIRO REGULAR", "Regulares", "card-reg")]
 
-        for i, (cat_id, cat_label, cor) in enumerate(cats):
-            with [col1, col2, col3][i]:
-                df_cat = df_mes[df_mes['categoria'] == cat_id]
-                
-                # --- CARD CONSOLIDADO ---
-                st.markdown(f"""<div class="card {cor}">
-                    <div class="metric-label">TOTAL {cat_label}</div>
-                    <div class="metric-value">⏱️ {int(df_cat['horas'].sum())}h | 📖 {int(df_cat['estudos_biblicos'].sum())} Est.</div>
-                    <div class="metric-label">Relatórios: {len(df_cat)}</div>
-                </div>""", unsafe_allow_html=True)
+    # --- STATUS DE ENTREGA ---
 
-                # --- CARDS INDIVIDUAIS (DADOS ABERTOS) ---
+    st.divider()
+
+    entregaram = df_mes['nome'].unique()
+
+    lista_total = list(set(PIONEIROS_REGULARES + TODOS_PUBLICADORES))
+
+    pendentes = [n for n in lista_total if n not in entregaram]
+
+
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("Entregues", len(entregaram))
+
+    c2.metric("Pendentes", len(pendentes))
+
+    c3.metric("Mês Filtrado", mes_selecionado)
+
+
+
+    if st.checkbox("Ver lista de nomes pendentes"):
+
+        st.warning(f"Total de {len(pendentes)} pessoas ainda não enviaram o relatório em {mes_selecionado}:")
+
+        st.write(", ".join(pendentes))
+
+
+
+    st.divider()
+
+
+
+    # --- 3 ABAS POR CATEGORIA (Ponto 1 e 2) ---
+
+    aba_pub, aba_aux, aba_reg = st.tabs(["👥 PUBLICADORES", "🏃 PIONEIROS AUXILIARES", "⭐ PIONEIROS REGULARES"])
+
+
+
+    categorias_map = {
+
+        "PUBLICADOR": aba_pub,
+
+        "PIONEIRO AUXILIAR": aba_aux,
+
+        "PIONEIRO REGULAR": aba_reg
+
+    }
+
+
+
+    for cat, aba in categorias_map.items():
+
+        with aba:
+
+            df_cat = df_mes[df_mes['categoria'] == cat]
+
+            
+
+            # Totais do Grupo (Ponto 4 do pedido anterior mantido)
+
+            col_t1, col_t2, col_t3 = st.columns(3)
+
+            col_t1.metric("Total Relatórios", len(df_cat))
+
+            col_t2.metric("Soma Horas", int(df_cat['horas'].sum()))
+
+            col_t3.metric("Soma Estudos", int(df_cat['estudos_biblicos'].sum()))
+
+            
+
+            st.markdown("---")
+
+
+
+            if df_cat.empty:
+
+                st.info(f"Nenhum relatório de {cat} para o mês de {mes_selecionado}.")
+
+            else:
+
+                # Cada um "dentro do seu quadrado" (Cards Individuais)
+
                 for _, row in df_cat.iterrows():
-                    st.markdown(f"""<div class="card {cor}">
-                        <div class="metric-label">Publicador</div>
-                        <div class="metric-value">{row['nome']}</div>
-                        <div class="metric-label">Relatório</div>
-                        <div class="metric-value">Horas: {row['horas']} | Estudos: {row['estudos_biblicos']}</div>
-                        <div class="metric-label">Participação</div>
-                        <div class="metric-value">{'✅ SIM' if row['participou_ministerio'] else '❌ NÃO'}</div>
-                        {f'<div class="obs-box"><b>Obs:</b> {row["observacoes"]}</div>' if row['observacoes'] else ''}
-                    </div>""", unsafe_allow_html=True)
-                    
-                    # Botão de PDF
-                    pdf = gerar_pdf_s4t(row)
-                    if pdf:
-                        st.download_button("📥 PDF S-4-T", pdf, f"S4T_{row['nome']}.pdf", "application/pdf", key=f"btn_{row['id']}")
 
-        st.divider()
-        st.subheader("Pendentes de Envio")
-        entregaram = df_mes['nome'].tolist()
-        pendentes = [n for n, d in membros_db.items() if n not in entregaram and d['categoria'] != "INATIVO"]
-        
-        if pendentes:
-            cols_p = st.columns(4)
-            for j, p_nome in enumerate(pendentes):
-                with cols_p[j % 4]:
-                    st.markdown(f"""<div class="card card-pendente">
-                        <div class="metric-label">{membros_db[p_nome]['categoria']}</div>
-                        <div class="metric-value">⚠️ {p_nome}</div>
-                    </div>""", unsafe_allow_html=True)
-        else:
-            st.success("Todos os relatórios foram entregues!")
+                    with st.expander(f"📋 {row['nome']}"):
+
+                        col_a, col_b = st.columns(2)
+
+                        with col_a:
+
+                            st.write(f"**Participou:** {'Sim' if row['participou_ministerio'] else 'Não'}")
+
+                            st.write(f"**Horas:** {row['horas']}")
+
+                        with col_b:
+
+                            st.write(f"**Estudos:** {row['estudos_biblicos']}")
+
+                            st.write(f"**Data Envio:** {row['data_envio'].strftime('%d/%m/%Y %H:%M') if hasattr(row['data_envio'], 'strftime') else row['data_envio']}")
+
+                        
+
+                        if row['observacoes']:
+
+                            st.info(f"**Obs:** {row['observacoes']}")
+
+                        
+
+                        if st.button("🖨️ Gerar PDF S-4-T", key=f"pdf_{row['id']}"):
+
+                            st.write("Em breve: Preenchimento automático do arquivo...")
+
+
+
+    st.caption("Sistema de Gestão S-4-T | Parque Aliança")
+
+
 
 if __name__ == "__main__":
+
     main()
