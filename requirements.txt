@@ -1,4 +1,6 @@
 streamlit
+pandas
 google-cloud-firestore
 google-auth
-pandas
+pdfrw
+reportlab
