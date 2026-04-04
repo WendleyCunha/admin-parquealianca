@@ -52,7 +52,6 @@ def deletar_membro(nome):
 def editar_nome_membro(nome_antigo, nome_novo, categoria):
     db = inicializar_db()
     if db and nome_antigo != nome_novo:
-        # No Firestore, mudar o ID (nome) requer criar novo e deletar antigo
         db.collection("membros_v2").document(nome_novo).set({"categoria": categoria})
         db.collection("membros_v2").document(nome_antigo).delete()
 
@@ -71,111 +70,104 @@ def main():
     membros_db = carregar_membros()
     relatorios_brutos = carregar_relatorios()
 
-    if not membros_db:
-        st.warning("⚠️ O Banco de Dados de membros está vazio.")
-    
+    # Processamento de Dados
     df = pd.DataFrame(relatorios_brutos) if relatorios_brutos else pd.DataFrame(columns=['nome', 'mes_referencia', 'horas'])
 
-    def validar_envio(row):
-        nome_validado = normalizar_nome_no_banco(row['nome'], membros_db.keys())
-        if nome_validado:
-            return pd.Series([nome_validado, membros_db[nome_validado]['categoria'], "IDENTIFICADO"])
-        return pd.Series([row['nome'], "DESCONHECIDO", "TRIAGEM"])
-
     if not df.empty and 'nome' in df.columns:
+        def validar_envio(row):
+            nome_validado = normalizar_nome_no_banco(row['nome'], membros_db.keys())
+            if nome_validado:
+                return pd.Series([nome_validado, membros_db[nome_validado].get('categoria', 'PUBLICADOR'), "IDENTIFICADO"])
+            return pd.Series([row['nome'], "DESCONHECIDO", "TRIAGEM"])
+        
         df[['nome_oficial', 'cat_oficial', 'status_validacao']] = df.apply(validar_envio, axis=1)
 
+    # Filtro Global de Mês
     meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty and 'mes_referencia' in df.columns else ["Abril/2026"]
-    mes_sel = st.sidebar.selectbox("📅 Selecione o Mês de análise", meses_disponiveis, index=len(meses_disponiveis)-1)
-    
+    mes_sel = st.sidebar.selectbox("📅 Mês de Análise", meses_disponiveis, index=len(meses_disponiveis)-1)
     df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
 
     tab_recebidos, tab_pendencias, tab_config = st.tabs(["📋 RELATÓRIOS RECEBIDOS", "⏳ PENDÊNCIAS", "⚙️ CONFIGURAÇÃO"])
 
     # --- ABA 1: RECEBIDOS ---
     with tab_recebidos:
-        if df_mes.empty:
-            st.write("Nenhum relatório para este mês.")
+        if df_mes.empty or "status_validacao" not in df_mes.columns:
+            st.info("Nenhum relatório recebido para este mês.")
         else:
             df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
-            sub_tabs = st.tabs(["PUBLICADORES", "PIONEIROS AUXILIARES", "PIONEIROS REGULARES"])
-            map_abas = {"PUBLICADOR": sub_tabs[0], "PIONEIRO AUXILIAR": sub_tabs[1], "PIONEIRO REGULAR": sub_tabs[2]}
-            for cat, aba in map_abas.items():
-                with aba:
+            cats = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
+            sub_tabs = st.tabs(cats)
+            for i, cat in enumerate(cats):
+                with sub_tabs[i]:
                     df_cat = df_ok[df_ok['cat_oficial'] == cat]
-                    cols = st.columns(4)
-                    for i, (_, r) in enumerate(df_cat.iterrows()):
-                        with cols[i % 4]:
-                            st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div><div style="font-size:0.8rem;">⏱️ {r["horas"]}h</div></div>', unsafe_allow_html=True)
+                    if df_cat.empty:
+                        st.write("Nenhum relatório nesta categoria.")
+                    else:
+                        cols = st.columns(4)
+                        for idx, (_, r) in enumerate(df_cat.iterrows()):
+                            with cols[idx % 4]:
+                                st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div><div style="font-size:0.8rem;">⏱️ {r["horas"]}h</div></div>', unsafe_allow_html=True)
 
-    # --- ABA 2: PENDÊNCIAS ---
+    # --- ABA 2: PENDÊNCIAS (Lógica Corrigida) ---
     with tab_pendencias:
-        entregaram_nomes = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]['nome_oficial'].unique() if not df_mes.empty else []
-        p_tabs = st.tabs(["PUBLICADORES", "PIONEIROS AUXILIARES", "PIONEIROS REGULARES"])
-        map_p_abas = {"PUBLICADOR": p_tabs[0], "PIONEIRO AUXILIAR": p_tabs[1], "PIONEIRO REGULAR": p_tabs[2]}
-
-        for cat_p, aba_p in map_p_abas.items():
-            with aba_p:
-                lista_banco_cat = [nome for nome, dados in membros_db.items() if dados.get('categoria') == cat_p]
-                lista_pendentes = sorted([nome for nome in lista_banco_cat if nome not in entregaram_nomes])
-                if not lista_pendentes:
-                    st.success(f"✅ Todos os {cat_p} estão em dia!")
+        st.subheader(f"Pendentes: {mes_sel}")
+        entregaram_nomes = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]['nome_oficial'].unique() if not df_mes.empty and "status_validacao" in df_mes.columns else []
+        
+        cats_pend = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
+        p_tabs = st.tabs(cats_pend)
+        
+        for i, cat in enumerate(cats_pend):
+            with p_tabs[i]:
+                # Busca no banco quem pertence a essa categoria
+                membros_da_categoria = [nome for nome, dados in membros_db.items() if dados.get('categoria') == cat]
+                pendentes = sorted([n for n in membros_da_categoria if n not in entregaram_nomes])
+                
+                if not pendentes:
+                    st.success(f"✅ Tudo em dia para {cat}!")
                 else:
-                    for nome_p in lista_pendentes:
+                    for p_nome in pendentes:
                         c1, c2, c3 = st.columns([3, 2, 1])
-                        c1.write(f"⚠️ {nome_p}")
-                        opcoes = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"]
-                        nova_cat = c2.selectbox("Alterar grupo", opcoes, index=opcoes.index(cat_p), key=f"pend_{nome_p}")
-                        if c3.button("Salvar", key=f"btn_pend_{nome_p}"):
-                            atualizar_membro(nome_p, nova_cat)
+                        c1.write(f"⚠️ {p_nome}")
+                        nova_cat = c2.selectbox("Mover para", cats_pend + ["INATIVO"], index=cats_pend.index(cat), key=f"p_sel_{p_nome}")
+                        if c3.button("Atualizar", key=f"p_btn_{p_nome}"):
+                            atualizar_membro(p_nome, nova_cat)
                             st.rerun()
 
-    # --- ABA 3: CONFIGURAÇÃO (MELHORADA) ---
+    # --- ABA 3: CONFIGURAÇÃO ---
     with tab_config:
-        menu_conf = st.radio("Selecione uma ação:", ["🗂️ Lista Completa e Edição", "➕ Adicionar Novo"], horizontal=True)
+        menu = st.radio("Ação:", ["🗂️ Lista Completa e Edição", "➕ Adicionar Novo"], horizontal=True)
         
-        if menu_conf == "➕ Adicionar Novo":
-            with st.form("add_form"):
-                novo_n = st.text_input("Nome Completo do Publicador:")
-                nova_c = st.selectbox("Categoria:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"])
-                if st.form_submit_button("Cadastrar no Banco"):
-                    if novo_n:
-                        atualizar_membro(novo_n, nova_c)
-                        st.success(f"{novo_n} adicionado!")
+        if menu == "➕ Adicionar Novo":
+            with st.form("new_member"):
+                n_nome = st.text_input("Nome:")
+                n_cat = st.selectbox("Categoria:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"])
+                if st.form_submit_button("Salvar no Banco"):
+                    if n_nome:
+                        atualizar_membro(n_nome, n_cat)
+                        st.success("Adicionado!")
                         st.rerun()
-        
-        elif menu_conf == "🗂️ Lista Completa e Edição":
-            st.write(f"Total de registros: **{len(membros_db)}**")
-            
-            # Criar um DataFrame para facilitar a visualização e busca na lista
-            membros_list = [{"Nome Original": k, "Categoria": v['categoria']} for k, v in membros_db.items()]
-            df_membros = pd.DataFrame(membros_list).sort_values("Nome Original")
-            
-            for index, row in df_membros.iterrows():
-                with st.expander(f"👤 {row['Nome Original']} ({row['Categoria']})"):
-                    col_ed1, col_ed2 = st.columns(2)
-                    
-                    with col_ed1:
-                        st.write("**Editar Dados**")
-                        novo_nome_input = st.text_input("Editar Nome:", value=row['Nome Original'], key=f"edit_n_{index}")
-                        nova_cat_input = st.selectbox("Editar Categoria:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], 
-                                                     index=["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"].index(row['Categoria']),
-                                                     key=f"edit_c_{index}")
-                        
-                        if st.button("Confirmar Alterações", key=f"btn_save_{index}"):
-                            if novo_nome_input != row['Nome Original']:
-                                editar_nome_membro(row['Nome Original'], novo_nome_input, nova_cat_input)
+
+        else:
+            st.write(f"Membros no Banco: {len(membros_db)}")
+            lista_ordenada = sorted(membros_db.keys())
+            for m_nome in lista_ordenada:
+                with st.expander(f"👤 {m_nome} ({membros_db[m_nome].get('categoria', 'N/A')})"):
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        edit_n = st.text_input("Nome:", value=m_nome, key=f"ed_n_{m_nome}")
+                        edit_c = st.selectbox("Cat:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], 
+                                            index=["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"].index(membros_db[m_nome].get('categoria', 'PUBLICADOR')),
+                                            key=f"ed_c_{m_nome}")
+                        if st.button("Salvar Alterações", key=f"ed_bt_{m_nome}"):
+                            if edit_n != m_nome:
+                                editar_nome_membro(m_nome, edit_n, edit_c)
                             else:
-                                atualizar_membro(row['Nome Original'], nova_cat_input)
-                            st.success("Dados atualizados!")
+                                atualizar_membro(m_nome, edit_c)
                             st.rerun()
-                    
-                    with col_ed2:
-                        st.write("**Zona de Perigo**")
-                        st.write("A exclusão é permanente.")
-                        if st.button(f"🗑️ Deletar {row['Nome Original']}", key=f"del_{index}"):
-                            deletar_membro(row['Nome Original'])
-                            st.warning("Membro excluído!")
+                    with col_b:
+                        st.write("---")
+                        if st.button(f"🗑️ Excluir {m_nome}", key=f"del_{m_nome}"):
+                            deletar_membro(m_nome)
                             st.rerun()
 
 if __name__ == "__main__":
