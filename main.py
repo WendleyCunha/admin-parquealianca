@@ -1,8 +1,14 @@
 import streamlit as st
 import pandas as pd
 import json
+import io
+import zipfile
 from google.cloud import firestore
 from google.oauth2 import service_account
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
@@ -31,7 +37,53 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE CONEXÃO E BANCO ---
+# --- FUNÇÃO PERITA PARA GERAR PDF (Igual à imagem S-21) ---
+def gerar_pdf_registro_s21(row, mes_sel):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Título Principal
+    title_style = ParagraphStyle('Title', fontSize=16, alignment=1, spaceAfter=20, fontName='Helvetica-Bold')
+    elements.append(Paragraph("REGISTRO DE PUBLICADOR DE CONGREGAÇÃO", title_style))
+    
+    # Cabeçalho de Identificação
+    data_cabecalho = [
+        [Paragraph(f"<b>Nome:</b> {row['nome_oficial']}", styles['Normal']), ""],
+        [f"Mês: {mes_sel}", "Ano de serviço: 2025"]
+    ]
+    t_cabecalho = Table(data_cabecalho, colWidths=[350, 150])
+    elements.append(t_cabecalho)
+    elements.append(Spacer(1, 15))
+    
+    # Tabela de Dados (Simulando o layout da imagem enviada)
+    # Cabeçalho da Tabela
+    header = ["Participou no\nministério", "Estudos\nbíblicos", "Pioneiro\nauxiliar", "Horas", "Observações"]
+    
+    # Corpo (Marcação baseada nos dados do relatório)
+    check_min = "X" if row['horas'] > 0 else ""
+    check_pion = "X" if row['cat_oficial'] == "PIONEIRO AUXILIAR" else ""
+    
+    corpo = [
+        [f"[{check_min}]", str(int(row['estudos_biblicos'])), f"[{check_pion}]", str(int(row['horas'])), row.get('observacoes', '')]
+    ]
+    
+    t_dados = Table([header] + corpo, colWidths=[100, 80, 80, 70, 160])
+    t_dados.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 10),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+    ]))
+    
+    elements.append(t_dados)
+    doc.build(elements)
+    return buffer.getvalue()
+
+# --- FUNÇÕES DE CONEXÃO E BANCO (Mantidas 100%) ---
 def inicializar_db():
     if "db" not in st.session_state:
         try:
@@ -72,28 +124,22 @@ def editar_nome_membro(nome_antigo, nome_novo, categoria):
         db.collection("membros_v2").document(nome_novo).set({"categoria": categoria})
         db.collection("membros_v2").document(nome_antigo).delete()
 
-# --- FUNÇÃO PARA VALIDAR/GRAVAR (Seja novo ou fundir) ---
 def validar_e_gravar_novo_membro(relatorio_id, nome_correto, categoria):
     db = inicializar_db()
     if db:
-        # 1. Atualiza/Cria no banco de membros
         db.collection("membros_v2").document(nome_correto).set({"categoria": categoria}, merge=True)
-        # 2. Vincula o relatório ao nome oficial (Dando baixa na triagem e pendência)
         db.collection("relatorios_parque_alianca").document(relatorio_id).update({"nome": nome_correto})
         st.toast(f"✅ {nome_correto} validado com sucesso!")
 
-# --- INTELIGÊNCIA DE CONFRONTO DE NOMES ---
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
     entrada = str(nome_recebido).strip().lower()
     if not entrada: return None
     for nome_oficial in lista_membros:
-        if entrada in nome_oficial.lower():
-            return nome_oficial
+        if entrada in nome_oficial.lower(): return nome_oficial
     return None
 
 def main():
     st.title("📊 Gestão Parque Aliança")
-    
     membros_db = carregar_membros()
     relatorios_brutos = carregar_relatorios()
 
@@ -119,8 +165,9 @@ def main():
     mes_sel = st.sidebar.selectbox("📅 Mês de Análise", meses_disponiveis, index=len(meses_disponiveis)-1)
     df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
 
-    tab_recebidos, tab_triagem, tab_pendencias, tab_config = st.tabs([
-        "📋 RELATÓRIOS RECEBIDOS", "⚠️ TRIAGEM DE NOMES", "⏳ PENDÊNCIAS", "⚙️ CONFIGURAÇÃO"
+    # Adicionada a aba de Registros Totais mantendo as outras
+    tab_recebidos, tab_triagem, tab_pendencias, tab_registros, tab_config = st.tabs([
+        "📋 RELATÓRIOS RECEBIDOS", "⚠️ TRIAGEM DE NOMES", "⏳ PENDÊNCIAS", "📂 REGISTROS TOTAIS", "⚙️ CONFIGURAÇÃO"
     ])
 
     with tab_recebidos:
@@ -154,34 +201,21 @@ def main():
             st.success("✨ Nenhum nome pendente de triagem!")
         else:
             st.warning(f"Existem {len(df_triagem)} relatórios com nomes não reconhecidos.")
-            
-            # Lista de nomes que já existem para a função "Fundir"
             nomes_existentes = sorted(list(membros_db.keys()))
-
             for index, row in df_triagem.iterrows():
                 with st.container():
                     st.markdown(f"""<div class="triagem-box">
                         <b>Nome Digitado:</b> {row['nome']} | <b>Horas:</b> {row['horas']} | <b>Obs:</b> {row.get('observacoes', '-')}
                     </div>""", unsafe_allow_html=True)
-                    
-                    c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
-                    
-                    # OPÇÃO A: AJUSTAR/NOVO NOME (Seu código original)
+                    c1, c2 = st.columns(2)
                     nome_final = c1.text_input("Ajustar/Novo Nome:", value=row['nome'], key=f"tri_n_{row['id']}")
-                    
-                    # OPÇÃO B: SELECIONAR EXISTENTE (Lógica de Fundir)
                     nome_selecionado = c2.selectbox("Ou Fundir com Existente:", ["-- Selecionar Membro --"] + nomes_existentes, key=f"fundir_{row['id']}")
-                    
                     cat_nova = st.selectbox("Categoria Final:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], key=f"tri_c_{row['id']}")
-                    
                     col_btn1, col_btn2 = st.columns(2)
-                    
                     if col_btn1.button("✅ FUNDIR / VALIDAR", key=f"btn_v_{row['id']}", use_container_width=True):
-                        # Se escolheu um nome na lista, usa ele. Se não, usa o que foi digitado no input.
                         nome_para_salvar = nome_selecionado if nome_selecionado != "-- Selecionar Membro --" else nome_final
                         validar_e_gravar_novo_membro(row['id'], nome_para_salvar, cat_nova)
                         st.rerun()
-                    
                     if col_btn2.button("🗑️ RECUSAR", key=f"btn_r_{row['id']}", use_container_width=True):
                         deletar_relatorio(row['id'])
                         st.rerun()
@@ -203,7 +237,48 @@ def main():
                         atualizar_membro(p_nome, nova_cat)
                         st.rerun()
 
+    with tab_registros:
+        st.subheader(f"Exportação de Formulários - {mes_sel}")
+        df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+        
+        if df_ok.empty:
+            st.info("Aguardando relatórios identificados para gerar registros.")
+        else:
+            col_down, _ = st.columns([1, 3])
+            # Lógica para Download em Lote (ZIP)
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+                for _, r in df_ok.iterrows():
+                    pdf_bytes = gerar_pdf_registro_s21(r, mes_sel)
+                    zip_file.writestr(f"Registro_{r['nome_oficial']}_{mes_sel}.pdf", pdf_bytes)
+            
+            col_down.download_button("📥 Baixar Todos (ZIP)", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", "application/zip", use_container_width=True)
+            
+            st.write("---")
+            # Lista individual para download por pessoa
+            for _, r in df_ok.iterrows():
+                c1, c2 = st.columns([3, 1])
+                c1.write(f"👤 **{r['nome_oficial']}** ({r['cat_oficial']})")
+                pdf_ind = gerar_pdf_registro_s21(r, mes_sel)
+                c2.download_button("PDF Individual", pdf_ind, f"Registro_{r['nome_oficial']}.pdf", key=f"ind_{r['id']}")
+
     with tab_config:
+        # 1 - OPÇÃO DE CADASTRAR novo membro (Conforme pedido)
+        st.subheader("👤 Cadastrar Novo Membro")
+        with st.container(border=True):
+            col1, col2, col3 = st.columns([2, 1, 1])
+            new_name = col1.text_input("Nome do Membro:", placeholder="Nome Completo")
+            new_cat = col2.selectbox("Categoria Inicial:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"])
+            if col3.button("Salvar Cadastro", use_container_width=True):
+                if new_name:
+                    atualizar_membro(new_name, new_cat)
+                    st.success("Membro adicionado ao banco!")
+                    st.rerun()
+                else:
+                    st.error("Digite o nome.")
+
+        st.write("---")
+        st.subheader("Gerenciar Banco de Dados")
         st.write(f"Total de Membros no Banco: {len(membros_db)}")
         for m_nome in sorted(membros_db.keys()):
             with st.expander(f"👤 {m_nome}"):
