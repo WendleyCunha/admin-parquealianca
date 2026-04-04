@@ -13,6 +13,9 @@ st.markdown("""
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
     .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; }
     .triagem-box { background-color: #fff4e5; padding: 15px; border-radius: 10px; border: 1px solid #ffa94d; margin-bottom: 10px; }
+    .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; }
+    .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
+    .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -71,7 +74,11 @@ def main():
     membros_db = carregar_membros()
     relatorios_brutos = carregar_relatorios()
 
-    df = pd.DataFrame(relatorios_brutos) if relatorios_brutos else pd.DataFrame(columns=['nome', 'mes_referencia', 'horas', 'id'])
+    # Criação do DataFrame garantindo tipos numéricos para cálculos
+    df = pd.DataFrame(relatorios_brutos) if relatorios_brutos else pd.DataFrame(columns=['nome', 'mes_referencia', 'horas', 'id', 'estudos_biblicos'])
+    if not df.empty:
+        df['horas'] = pd.to_numeric(df['horas'], errors='coerce').fillna(0)
+        df['estudos_biblicos'] = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
 
     # Processamento e Validação
     if not df.empty and 'nome' in df.columns:
@@ -88,7 +95,7 @@ def main():
     if not df.empty and 'mes_referencia' in df.columns:
         df['mes_referencia'] = df['mes_referencia'].str.upper()
     
-    meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else ["MARÇO 2026"]
+    meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else ["ABRIL 2026"]
     mes_sel = st.sidebar.selectbox("📅 Mês de Análise", meses_disponiveis, index=len(meses_disponiveis)-1)
     df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
 
@@ -99,49 +106,61 @@ def main():
     # --- ABA 1: RECEBIDOS ---
     with tab_recebidos:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+        
         if df_ok.empty:
             st.info("Nenhum relatório identificado para este mês.")
         else:
             cats = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
             sub_tabs = st.tabs(cats)
+            
             for i, cat in enumerate(cats):
                 with sub_tabs[i]:
                     df_cat = df_ok[df_ok['cat_oficial'] == cat]
+                    
+                    # --- UPGRADE: SEÇÃO DE TOTAIS ---
+                    if not df_cat.empty:
+                        t_envios = len(df_cat)
+                        t_horas = df_cat['horas'].sum()
+                        t_estudos = df_cat['estudos_biblicos'].sum()
+                        
+                        m1, m2, m3 = st.columns(3)
+                        m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{t_envios}</div></div>', unsafe_allow_html=True)
+                        m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(t_horas)}h</div></div>', unsafe_allow_html=True)
+                        m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(t_estudos)}</div></div>', unsafe_allow_html=True)
+                        st.write("") # Espaçador
+                    
+                    # --- CARDS INDIVIDUAIS ---
                     cols = st.columns(4)
                     for idx, (_, r) in enumerate(df_cat.iterrows()):
                         with cols[idx % 4]:
-                            st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div><div style="font-size:0.8rem;">⏱️ {r["horas"]}h</div></div>', unsafe_allow_html=True)
+                            st.markdown(f"""
+                                <div class="card">
+                                    <div class="card-header">{r["nome_oficial"]}</div>
+                                    <div style="font-size:0.8rem;">⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])} est.</div>
+                                </div>
+                            """, unsafe_allow_html=True)
 
-    # --- ABA 2: TRIAGEM (NOVA FUNCIONALIDADE) ---
+    # --- ABA 2: TRIAGEM ---
     with tab_triagem:
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
-        
         if df_triagem.empty:
             st.success("✨ Nenhum nome pendente de triagem!")
         else:
             st.warning(f"Existem {len(df_triagem)} relatórios com nomes não reconhecidos.")
-            
             for index, row in df_triagem.iterrows():
                 with st.container():
                     st.markdown(f"""<div class="triagem-box">
                         <b>Nome Digitado:</b> {row['nome']} | <b>Horas:</b> {row['horas']} | <b>Obs:</b> {row.get('observacoes', '-')}
                     </div>""", unsafe_allow_html=True)
-                    
                     c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
-                    
                     nome_correto = c1.text_input("Nome Oficial para o Banco:", value=row['nome'], key=f"tri_n_{row['id']}")
                     cat_nova = c2.selectbox("Categoria:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], key=f"tri_c_{row['id']}")
-                    
                     if c3.button("✅ VALIDAR", key=f"btn_v_{row['id']}", use_container_width=True):
-                        # 1. Salva o novo membro no banco
                         atualizar_membro(nome_correto, cat_nova)
-                        # 2. O relatório já existe, na próxima atualização o sistema vai reconhecê-lo pelo nome oficial
-                        st.success(f"{nome_correto} cadastrado e relatório validado!")
+                        st.success(f"{nome_correto} cadastrado!")
                         st.rerun()
-                        
                     if c4.button("🗑️ RECUSAR", key=f"btn_r_{row['id']}", use_container_width=True):
                         deletar_relatorio(row['id'])
-                        st.warning("Relatório excluído.")
                         st.rerun()
                 st.markdown("---")
 
@@ -165,7 +184,6 @@ def main():
     # --- ABA 4: CONFIGURAÇÃO ---
     with tab_config:
         st.write(f"Total de Membros no Banco: {len(membros_db)}")
-        # (Mantive a lógica de edição/exclusão que já tínhamos)
         for m_nome in sorted(membros_db.keys()):
             with st.expander(f"👤 {m_nome}"):
                 ca, cb = st.columns(2)
