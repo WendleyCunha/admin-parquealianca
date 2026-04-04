@@ -72,16 +72,15 @@ def editar_nome_membro(nome_antigo, nome_novo, categoria):
         db.collection("membros_v2").document(nome_novo).set({"categoria": categoria})
         db.collection("membros_v2").document(nome_antigo).delete()
 
-# --- NOVA FUNÇÃO ESTRUTURAL PARA ATENDER SEU PEDIDO ---
+# --- FUNÇÃO PARA VALIDAR/GRAVAR (Seja novo ou fundir) ---
 def validar_e_gravar_novo_membro(relatorio_id, nome_correto, categoria):
     db = inicializar_db()
     if db:
-        # 1. Cadastra o nome no banco de dados (Aumenta o Total de Membros)
+        # 1. Atualiza/Cria no banco de membros
         db.collection("membros_v2").document(nome_correto).set({"categoria": categoria}, merge=True)
-        # 2. Atualiza o relatório recebido com este novo nome oficial
-        # Isso faz ele sair da Triagem e ir para Recebidos automaticamente
+        # 2. Vincula o relatório ao nome oficial (Dando baixa na triagem e pendência)
         db.collection("relatorios_parque_alianca").document(relatorio_id).update({"nome": nome_correto})
-        st.toast(f"✅ {nome_correto} cadastrado e relatório validado!")
+        st.toast(f"✅ {nome_correto} validado com sucesso!")
 
 # --- INTELIGÊNCIA DE CONFRONTO DE NOMES ---
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
@@ -104,7 +103,6 @@ def main():
         df['horas'] = pd.to_numeric(df['horas'], errors='coerce').fillna(0)
         df['estudos_biblicos'] = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
 
-    if not df.empty and 'nome' in df.columns:
         def validar_envio(row):
             nome_oficial = normalizar_nome_no_banco(row['nome'], membros_db.keys())
             if nome_oficial:
@@ -125,7 +123,6 @@ def main():
         "📋 RELATÓRIOS RECEBIDOS", "⚠️ TRIAGEM DE NOMES", "⏳ PENDÊNCIAS", "⚙️ CONFIGURAÇÃO"
     ])
 
-    # --- ABA 1: RECEBIDOS (Mantida Integralmente) ---
     with tab_recebidos:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
         if df_ok.empty:
@@ -137,13 +134,10 @@ def main():
                 with sub_tabs[i]:
                     df_cat = df_ok[df_ok['cat_oficial'] == cat]
                     if not df_cat.empty:
-                        t_envios = len(df_cat)
-                        t_horas = df_cat['horas'].sum()
-                        t_estudos = df_cat['estudos_biblicos'].sum()
                         m1, m2, m3 = st.columns(3)
-                        m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{t_envios}</div></div>', unsafe_allow_html=True)
-                        m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(t_horas)}h</div></div>', unsafe_allow_html=True)
-                        m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(t_estudos)}</div></div>', unsafe_allow_html=True)
+                        m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{len(df_cat)}</div></div>', unsafe_allow_html=True)
+                        m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}h</div></div>', unsafe_allow_html=True)
+                        m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(df_cat["estudos_biblicos"].sum())}</div></div>', unsafe_allow_html=True)
                         st.write("")
                         cols = st.columns(4)
                         for idx, (_, r) in enumerate(df_cat.iterrows()):
@@ -154,34 +148,45 @@ def main():
                                         deletar_relatorio(r['id'])
                                         st.rerun()
 
-    # --- ABA 2: TRIAGEM (ALTERADA PARA ATENDER SEU PEDIDO) ---
     with tab_triagem:
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
         if df_triagem.empty:
             st.success("✨ Nenhum nome pendente de triagem!")
         else:
             st.warning(f"Existem {len(df_triagem)} relatórios com nomes não reconhecidos.")
+            
+            # Lista de nomes que já existem para a função "Fundir"
+            nomes_existentes = sorted(list(membros_db.keys()))
+
             for index, row in df_triagem.iterrows():
                 with st.container():
                     st.markdown(f"""<div class="triagem-box">
                         <b>Nome Digitado:</b> {row['nome']} | <b>Horas:</b> {row['horas']} | <b>Obs:</b> {row.get('observacoes', '-')}
                     </div>""", unsafe_allow_html=True)
-                    c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
-                    # Aqui você ajusta o nome antes de validar
-                    nome_para_gravar = c1.text_input("Ajustar para Nome Oficial:", value=row['nome'], key=f"tri_n_{row['id']}")
-                    cat_nova = c2.selectbox("Categoria:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], key=f"tri_c_{row['id']}")
                     
-                    if c3.button("✅ VALIDAR", key=f"btn_v_{row['id']}", use_container_width=True):
-                        # Chamada da nova função: Grava no banco E atualiza o relatório
-                        validar_e_gravar_novo_membro(row['id'], nome_para_gravar, cat_nova)
+                    c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
+                    
+                    # OPÇÃO A: AJUSTAR/NOVO NOME (Seu código original)
+                    nome_final = c1.text_input("Ajustar/Novo Nome:", value=row['nome'], key=f"tri_n_{row['id']}")
+                    
+                    # OPÇÃO B: SELECIONAR EXISTENTE (Lógica de Fundir)
+                    nome_selecionado = c2.selectbox("Ou Fundir com Existente:", ["-- Selecionar Membro --"] + nomes_existentes, key=f"fundir_{row['id']}")
+                    
+                    cat_nova = st.selectbox("Categoria Final:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], key=f"tri_c_{row['id']}")
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    
+                    if col_btn1.button("✅ FUNDIR / VALIDAR", key=f"btn_v_{row['id']}", use_container_width=True):
+                        # Se escolheu um nome na lista, usa ele. Se não, usa o que foi digitado no input.
+                        nome_para_salvar = nome_selecionado if nome_selecionado != "-- Selecionar Membro --" else nome_final
+                        validar_e_gravar_novo_membro(row['id'], nome_para_salvar, cat_nova)
                         st.rerun()
                     
-                    if c4.button("🗑️ RECUSAR", key=f"btn_r_{row['id']}", use_container_width=True):
+                    if col_btn2.button("🗑️ RECUSAR", key=f"btn_r_{row['id']}", use_container_width=True):
                         deletar_relatorio(row['id'])
                         st.rerun()
                 st.markdown("---")
 
-    # --- ABA 3: PENDÊNCIAS (Mantida Integralmente) ---
     with tab_pendencias:
         entregaram = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]['nome_oficial'].unique() if not df_mes.empty else []
         cats_pend = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
@@ -198,7 +203,6 @@ def main():
                         atualizar_membro(p_nome, nova_cat)
                         st.rerun()
 
-    # --- ABA 4: CONFIGURAÇÃO (Mantida Integralmente) ---
     with tab_config:
         st.write(f"Total de Membros no Banco: {len(membros_db)}")
         for m_nome in sorted(membros_db.keys()):
