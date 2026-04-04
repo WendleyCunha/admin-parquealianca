@@ -7,42 +7,7 @@ from google.oauth2 import service_account
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
 
-# --- 1. BASE DE DADOS MESTRA (CONSOLIDADA) ---
-LISTA_MESTRA_NOMES = [
-    # Pioneiros Regulares
-    "Ana Dilma Cardoso", "Cintia Aparecida Travaglin", "Diva Cordeiro de Souza", 
-    "Edna Alves Secundo", "Ivan Rodrigues Vieira da Silva", "Jessica Melo da Silva", 
-    "Joselita Maria dos Santos", "Katia Almeida Nunes Dantas", "Marcia Rocha de Oliveira", 
-    "Maria Dalia Silva Oliveira", "Marilele de Andrade e Melo Silva", "Marilene Lopes Araujo", 
-    "Miriam Silva Oliveira", "Rene Fonseca Cardoso", "Romys Ferreira Primo", 
-    "Ruth Almeida Nunes", "Sirlene Rodrigues Calado", "Thalita Lopes de Oliveira", "Zelia Pereira Santos",
-    # Publicadores (Extraídos das suas listas)
-    "Airton Pereira da Silva", "Anderson de Almeida Silva", "Anderson Vieira Dantas",
-    "Antonia Cordeiro Silva", "Aparecida Cruz dos Santos", "Ariana Rodrigues Calado Oliveira",
-    "Beatriz Dantas dos Santos", "Brenda Vieira Dantas", "Bruno Oliveira da Silva",
-    "Cecilia Geremias Cunha", "Celidalva de Souza Santos", "Clauberto de Oliveira Silva",
-    "Cosme Ferreira Primo", "Dalva Dias de Queiroz", "Deise Santana Nogueira Fernandes",
-    "Doralice Carlos Souza Silva", "Edna Oliveira Sales Gomes", "Edney da Cruz Barbosa",
-    "Eduardo Ferreira Fernandes", "Emerson Vieira Dantas", "Franciele Coelho Barbosa",
-    "Francisco Antonio da Silva Oliveira", "Francisco das Chagas Oliveira", "Francisco de Assis Angelos",
-    "Gabriela Carlos Batista", "Gabriela Pereira Santos", "Giovanna Coelho Barbosa",
-    "Heloisa Eduarda Santana Fernandes", "Hosana de Souza Primo", "Jacqueline Melo da Silva",
-    "Janete Pereira Oliveira", "Jaqueline Freitas de Souza", "Joaquim Antonio Barbosa",
-    "Jose Augusto Silva", "Jose Carlos Alves da Silva", "Jose Claudio de Oliveira Silva",
-    "Jose Pereira da Silva", "Jose Severino", "Josefa Santos Araujo", "Joyce Araujo Campos",
-    "Julia Melo da Silva", "Juliana Gabriel Pereira Primo", "Julio Cesar da Silva Matos",
-    "Kelvin Travaglin Andrade", "Laurinda Cipriano de Souza Oliveira", "Lidiane Maria Rocha Lima",
-    "Lucilene Carlos Silva Batista", "Lucilia Cassimiro da Silva", "Manoel Messias Andrade de Oliveira",
-    "Maria Almeida Nunes Couto", "Maria Aparecida Coelho F Barbosa", "Maria Aparecida Gonçalves Dias",
-    "Maria Elena Oliveira Felipe", "Maria Jussara Vilela Santos", "Maria Lucineide Araujo Silva",
-    "Maria Vilma do Nascimento", "Mateus Jean Silva Oliveira", "Olavo Amanço Batista",
-    "Pedro Vitor de Queiroz Freitas", "Renato Ferreira Primo", "Roberta Vieira Dantas",
-    "Rosemeire Pereira Barauna", "Sebastiao Souza Almeida", "Selma Geremias Cunha",
-    "Tiago da Silva Oliveira", "Valdete Carlene Borges", "Vanuza Rocha Silva",
-    "Vilma Pereira da Silva", "Wendley Leite Cunha"
-]
-
-# --- ESTILIZAÇÃO CSS ---
+# --- ESTILIZAÇÃO ---
 st.markdown("""
     <style>
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
@@ -50,35 +15,24 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE BANCO DE DADOS ---
+# --- FUNÇÕES DE CONEXÃO ---
 def inicializar_db():
     if "db" not in st.session_state:
         try:
             key_dict = json.loads(st.secrets["textkey"])
             creds = service_account.Credentials.from_service_account_info(key_dict)
             st.session_state.db = firestore.Client(credentials=creds, project="wendleydesenvolvimento")
-        except: return None
+        except Exception as e:
+            st.error(f"Erro de conexão: {e}")
+            return None
     return st.session_state.db
 
 def carregar_membros():
     db = inicializar_db()
     if not db: return {}
+    # Busca TODOS os membros cadastrados no banco
     docs = db.collection("membros_v2").stream()
-    membros = {doc.id: doc.to_dict() for doc in docs}
-    
-    # Se o banco estiver vazio, ele popula com os 95+ nomes agora
-    if not membros:
-        with st.status("Configurando Base de Dados inicial..."):
-            for nome in LISTA_MESTRA_NOMES:
-                # Lógica inicial: Se já estava na sua lista de pioneiros, mantém, senão Publicador
-                categoria = "PIONEIRO REGULAR" if nome in LISTA_MESTRA_NOMES[-19:] else "PUBLICADOR"
-                db.collection("membros_v2").document(nome).set({"categoria": categoria})
-                membros[nome] = {"categoria": categoria}
-    return membros
-
-def atualizar_membro(nome, categoria):
-    db = inicializar_db()
-    if db: db.collection("membros_v2").document(nome).set({"categoria": categoria}, merge=True)
+    return {doc.id: doc.to_dict() for doc in docs}
 
 def carregar_relatorios():
     db = inicializar_db()
@@ -86,12 +40,17 @@ def carregar_relatorios():
     docs = db.collection("relatorios_parque_alianca").stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
 
-# --- 3. LÓGICA DE INTELIGÊNCIA DE NOMES (FUZZY SEARCH) ---
-def normalizar_nome_inteligente(nome_digitado, lista_membros):
+def atualizar_membro(nome, categoria):
+    db = inicializar_db()
+    if db:
+        db.collection("membros_v2").document(nome).set({"categoria": categoria}, merge=True)
+
+# --- INTELIGÊNCIA DE BUSCA ---
+def normalizar_nome_no_banco(nome_digitado, lista_membros):
+    """Busca se o que foi digitado existe dentro de algum nome oficial do banco."""
     nome_entrada = str(nome_digitado).strip().lower()
     if not nome_entrada: return None
     
-    # Busca por correspondência parcial (Ex: "Lopes" encontra "Marilene Lopes Araujo")
     for nome_oficial in lista_membros:
         if nome_entrada in nome_oficial.lower():
             return nome_oficial
@@ -99,80 +58,97 @@ def normalizar_nome_inteligente(nome_digitado, lista_membros):
 
 def main():
     st.title("📊 Gestão Parque Aliança")
-    membros_db = carregar_membros()
-    relatorios = carregar_relatorios()
-
-    if not relatorios:
-        st.warning("Nenhum relatório encontrado no banco de dados.")
-        return
-
-    df = pd.DataFrame(relatorios)
     
-    # Aplica a normalização inteligente em todos os envios
-    def processar_envio(row):
-        nome_final = normalizar_nome_inteligente(row['nome'], membros_db.keys())
-        if nome_final:
-            return pd.Series([nome_final, membros_db[nome_final]['categoria'], "OK"])
+    # 1. Carrega dados do Banco (Zero nomes no código)
+    membros_db = carregar_membros()
+    relatorios_brutos = carregar_relatorios()
+
+    if not membros_db:
+        st.warning("⚠️ O Banco de Dados de membros está vazio. Adicione membros na aba 'Gestão'.")
+    
+    if not relatorios_brutos:
+        st.info("Aguardando os primeiros relatórios...")
+        # Mesmo sem relatórios, precisamos processar para mostrar as pendências
+        df = pd.DataFrame(columns=['nome', 'mes_referencia', 'horas'])
+    else:
+        df = pd.DataFrame(relatorios_brutos)
+
+    # 2. Processamento de Identificação
+    # Criamos colunas baseadas na validação contra o banco de dados
+    def validar_envio(row):
+        nome_validado = normalizar_nome_no_banco(row['nome'], membros_db.keys())
+        if nome_validado:
+            return pd.Series([nome_validado, membros_db[nome_validado]['categoria'], "IDENTIFICADO"])
+        return pd.Series([row['nome'], "DESCONHECIDO", "TRIAGEM"])
+
+    if not df.empty:
+        df[['nome_oficial', 'cat_oficial', 'status_validacao']] = df.apply(validar_envio, axis=1)
+
+    # 3. Filtro de Mês
+    meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else ["Março/2026"] # Default caso vazio
+    mes_sel = st.sidebar.selectbox("📅 Selecione o Mês de análise", meses_disponiveis, index=len(meses_disponiveis)-1)
+    
+    df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
+
+    tab_recebidos, tab_pendencias, tab_config = st.tabs(["📋 RELATÓRIOS RECEBIDOS", "⏳ PENDÊNCIAS", "⚙️ CONFIGURAÇÃO"])
+
+    # --- ABA 1: RECEBIDOS (Quem já enviou e foi identificado) ---
+    with tab_recebidos:
+        if df_mes.empty:
+            st.write("Nenhum relatório para este mês.")
         else:
-            return pd.Series([row['nome'], "DESCONHECIDO", "TRIAGEM"])
+            df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
+            sub_tabs = st.tabs(["PUBLICADORES", "PIONEIROS AUXILIARES", "PIONEIROS REGULARES"])
+            map_abas = {"PUBLICADOR": sub_tabs[0], "PIONEIRO AUXILIAR": sub_tabs[1], "PIONEIRO REGULAR": sub_tabs[2]}
+            
+            for cat, aba in map_abas.items():
+                with aba:
+                    df_cat = df_ok[df_ok['cat_oficial'] == cat]
+                    cols = st.columns(4)
+                    for i, (_, r) in enumerate(df_cat.iterrows()):
+                        with cols[i % 4]:
+                            st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div><div style="font-size:0.8rem;">⏱️ {r["horas"]}h</div></div>', unsafe_allow_html=True)
 
-    df[['nome_correto', 'categoria_correta', 'status']] = df.apply(processar_envio, axis=1)
-
-    # Filtro de Mês
-    meses = sorted(df['mes_referencia'].unique())
-    mes_sel = st.sidebar.selectbox("📅 Mês", meses, index=len(meses)-1)
-    df_mes = df[df['mes_referencia'] == mes_sel]
-
-    tab_vis, tab_pend, tab_triagem = st.tabs(["📋 RELATÓRIOS RECEBIDOS", "⏳ PENDÊNCIAS", "⚠️ TRIAGEM"])
-
-    # --- ABA 1: RECEBIDOS ---
-    with tab_vis:
-        df_ok = df_mes[df_mes['status'] == "OK"]
-        s_pub, s_aux, s_reg = st.tabs(["PUBLICADORES", "PIONEIROS AUXILIARES", "PIONEIROS REGULARES"])
-        abas = {"PUBLICADOR": s_pub, "PIONEIRO AUXILIAR": s_aux, "PIONEIRO REGULAR": s_reg}
+    # --- ABA 2: PENDÊNCIAS (A lógica que você pediu) ---
+    with tab_pendencias:
+        st.subheader(f"Não enviaram relatório em: {mes_sel}")
         
-        for cat, aba in abas.items():
-            with aba:
-                df_cat = df_ok[df_ok['categoria_correta'] == cat]
-                cols = st.columns(4)
-                for i, (_, r) in enumerate(df_cat.iterrows()):
-                    with cols[i % 4]:
-                        st.markdown(f'<div class="card"><div class="card-header">{r["nome_correto"]}</div><div style="font-size:0.8rem;">⏱️ {r["horas"]}h | 📖 {r["estudos_biblicos"]} Est.</div></div>', unsafe_allow_html=True)
+        # Quem já entregou este mês (nomes oficiais)
+        entregaram_nomes = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]['nome_oficial'].unique() if not df_mes.empty else []
+        
+        p_tabs = st.tabs(["PUBLICADORES", "PIONEIROS AUXILIARES", "PIONEIROS REGULARES"])
+        map_p_abas = {"PUBLICADOR": p_tabs[0], "PIONEIRO AUXILIAR": p_tabs[1], "PIONEIRO REGULAR": p_tabs[2]}
 
-    # --- ABA 2: PENDÊNCIAS (LÓGICA SOLICITADA) ---
-    with tab_pend:
-        entregaram = df_mes[df_mes['status'] == "OK"]['nome_correto'].unique()
-        p_pub, p_aux, p_reg = st.tabs(["PUBLICADORES", "PIONEIROS AUXILIARES", "PIONEIROS REGULARES"])
-        abas_p = {"PUBLICADOR": p_pub, "PIONEIRO AUXILIAR": p_aux, "PIONEIRO REGULAR": p_reg}
-
-        for cat, aba in abas_p.items():
-            with aba:
-                # Filtra do banco quem é desta categoria e não está na lista de quem entregou
-                membros_da_cat = [n for n, d in membros_db.items() if d['categoria'] == cat]
-                pendentes = [n for n in membros_da_cat if n not in entregaram]
+        for cat_p, aba_p in map_p_abas.items():
+            with aba_p:
+                # Pega todos os membros desta categoria no banco que NÃO estão na lista de quem entregou
+                lista_banco_cat = [nome for nome, dados in membros_db.items() if dados['categoria'] == cat_p]
+                lista_pendentes = [nome for nome in lista_banco_cat if nome not in entregaram_nomes]
                 
-                if not pendentes:
-                    st.success(f"Todos os {cat}s entregaram!")
+                if not lista_pendentes:
+                    st.success(f"✅ Todos os {cat_p} estão em dia!")
                 else:
-                    for p_nome in pendentes:
-                        col1, col2, col3 = st.columns([3, 2, 1])
-                        col1.write(f"❌ {p_nome}")
-                        nova_cat = col2.selectbox("Alterar grupo", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], index=["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"].index(cat), key=f"p_{p_nome}")
-                        if col3.button("Salvar", key=f"btn_{p_nome}"):
-                            atualizar_membro(p_nome, nova_cat)
+                    for nome_p in lista_pendentes:
+                        c1, c2, c3 = st.columns([3, 2, 1])
+                        c1.write(f"⚠️ {nome_p}")
+                        nova_cat = c2.selectbox("Alterar para:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], index=["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"].index(cat_p), key=f"sel_{nome_p}")
+                        if c3.button("Atualizar", key=f"btn_{nome_p}"):
+                            atualizar_membro(nome_p, nova_cat)
                             st.rerun()
 
-    # --- ABA 3: TRIAGEM ---
-    with tab_triagem:
-        df_erro = df_mes[df_mes['status'] == "TRIAGEM"]
-        if df_erro.empty:
-            st.info("Nenhum nome desconhecido este mês.")
-        else:
-            for _, r in df_erro.iterrows():
-                st.warning(f"Nome não reconhecido: {r['nome']}")
-                if st.button(f"Adicionar {r['nome']} como novo Publicador", key=f"add_{r['id']}"):
-                    atualizar_membro(r['nome'], "PUBLICADOR")
-                    st.rerun()
+    # --- ABA 3: CONFIGURAÇÃO (Para você gerenciar o banco) ---
+    with tab_config:
+        st.subheader("Gerenciar Banco de Membros")
+        with st.expander("➕ Adicionar Novo Membro Manualmente"):
+            novo_n = st.text_input("Nome Completo:")
+            nova_c = st.selectbox("Categoria Inicial:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"])
+            if st.button("Cadastrar no Banco"):
+                atualizar_membro(novo_n, nova_c)
+                st.success("Cadastrado!")
+                st.rerun()
+        
+        st.write("---")
+        st.write(f"Total de membros cadastrados no banco: **{len(membros_db)}**")
 
 if __name__ == "__main__":
     main()
