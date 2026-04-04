@@ -10,12 +10,25 @@ st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon=
 # --- ESTILIZAÇÃO ---
 st.markdown("""
     <style>
-    .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
-    .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; }
+    .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; position: relative; }
+    .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; margin-right: 25px; }
     .triagem-box { background-color: #fff4e5; padding: 15px; border-radius: 10px; border: 1px solid #ffa94d; margin-bottom: 10px; }
     .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; }
     .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
     .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
+    /* Estilo para o botão de deletar dentro do card */
+    .stButton>button.del-btn {
+        padding: 0px 5px;
+        height: 25px;
+        width: 25px;
+        min-width: 25px;
+        font-size: 12px;
+        border-radius: 5px;
+        background-color: #fee2e2;
+        color: #ef4444;
+        border: 1px solid #fecaca;
+        float: right;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -52,6 +65,7 @@ def deletar_relatorio(relatorio_id):
     db = inicializar_db()
     if db:
         db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
+        st.toast("Relatório removido com sucesso!")
 
 def editar_nome_membro(nome_antigo, nome_novo, categoria):
     db = inicializar_db()
@@ -74,13 +88,11 @@ def main():
     membros_db = carregar_membros()
     relatorios_brutos = carregar_relatorios()
 
-    # Criação do DataFrame garantindo tipos numéricos para cálculos
     df = pd.DataFrame(relatorios_brutos) if relatorios_brutos else pd.DataFrame(columns=['nome', 'mes_referencia', 'horas', 'id', 'estudos_biblicos'])
     if not df.empty:
         df['horas'] = pd.to_numeric(df['horas'], errors='coerce').fillna(0)
         df['estudos_biblicos'] = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
 
-    # Processamento e Validação
     if not df.empty and 'nome' in df.columns:
         def validar_envio(row):
             nome_oficial = normalizar_nome_no_banco(row['nome'], membros_db.keys())
@@ -91,7 +103,6 @@ def main():
         
         df[['nome_oficial', 'cat_oficial', 'status_validacao']] = df.apply(validar_envio, axis=1)
 
-    # Filtro de Mês
     if not df.empty and 'mes_referencia' in df.columns:
         df['mes_referencia'] = df['mes_referencia'].str.upper()
     
@@ -117,8 +128,8 @@ def main():
                 with sub_tabs[i]:
                     df_cat = df_ok[df_ok['cat_oficial'] == cat]
                     
-                    # --- UPGRADE: SEÇÃO DE TOTAIS ---
                     if not df_cat.empty:
+                        # Métricas Consolidadas
                         t_envios = len(df_cat)
                         t_horas = df_cat['horas'].sum()
                         t_estudos = df_cat['estudos_biblicos'].sum()
@@ -127,18 +138,24 @@ def main():
                         m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{t_envios}</div></div>', unsafe_allow_html=True)
                         m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(t_horas)}h</div></div>', unsafe_allow_html=True)
                         m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(t_estudos)}</div></div>', unsafe_allow_html=True)
-                        st.write("") # Espaçador
+                        st.write("")
                     
-                    # --- CARDS INDIVIDUAIS ---
-                    cols = st.columns(4)
-                    for idx, (_, r) in enumerate(df_cat.iterrows()):
-                        with cols[idx % 4]:
-                            st.markdown(f"""
-                                <div class="card">
-                                    <div class="card-header">{r["nome_oficial"]}</div>
-                                    <div style="font-size:0.8rem;">⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])} est.</div>
-                                </div>
-                            """, unsafe_allow_html=True)
+                        # Cards Individuais com opção de Deletar
+                        cols = st.columns(4)
+                        for idx, (_, r) in enumerate(df_cat.iterrows()):
+                            with cols[idx % 4]:
+                                # Container para o Card
+                                with st.container():
+                                    st.markdown(f"""
+                                        <div class="card">
+                                            <div class="card-header">{r["nome_oficial"]}</div>
+                                            <div style="font-size:0.8rem;">⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])} est.</div>
+                                        </div>
+                                    """, unsafe_allow_html=True)
+                                    # Botão posicionado logo abaixo/dentro para deletar duplicados
+                                    if st.button(f"🗑️ Deletar", key=f"del_ok_{r['id']}", help="Remover este relatório (ex: se for duplicado)", use_container_width=True):
+                                        deletar_relatorio(r['id'])
+                                        st.rerun()
 
     # --- ABA 2: TRIAGEM ---
     with tab_triagem:
@@ -153,11 +170,10 @@ def main():
                         <b>Nome Digitado:</b> {row['nome']} | <b>Horas:</b> {row['horas']} | <b>Obs:</b> {row.get('observacoes', '-')}
                     </div>""", unsafe_allow_html=True)
                     c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
-                    nome_correto = c1.text_input("Nome Oficial para o Banco:", value=row['nome'], key=f"tri_n_{row['id']}")
+                    nome_correto = c1.text_input("Nome Oficial:", value=row['nome'], key=f"tri_n_{row['id']}")
                     cat_nova = c2.selectbox("Categoria:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], key=f"tri_c_{row['id']}")
                     if c3.button("✅ VALIDAR", key=f"btn_v_{row['id']}", use_container_width=True):
                         atualizar_membro(nome_correto, cat_nova)
-                        st.success(f"{nome_correto} cadastrado!")
                         st.rerun()
                     if c4.button("🗑️ RECUSAR", key=f"btn_r_{row['id']}", use_container_width=True):
                         deletar_relatorio(row['id'])
