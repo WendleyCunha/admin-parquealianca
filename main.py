@@ -1,325 +1,190 @@
 import streamlit as st
-
 import pandas as pd
-
 import json
-
 import datetime
-
-import time
-
 from google.cloud import firestore
-
 from google.oauth2 import service_account
 
-
-
 # --- CONFIGURAÇÃO DA PÁGINA ---
-
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
 
-
-
-# --- LISTAS MESTRAS ---
-
-PIONEIROS_REGULARES = [
-
-    "Ana Dilma Cardoso", "Cintia Aparecida Travaglin", "Diva Cordeiro de Souza", 
-
-    "Edna Alves Secundo", "Ivan Rodrigues Vieira da Silva", "Jessica Melo da Silva", 
-
-    "Joselita Maria dos Santos", "Katia Almeida Nunes Dantas", "Marcia Rocha de Oliveira", 
-
-    "Maria Dalia Silva Oliveira", "Marilele de Andrade e Melo Silva", "Marilene Lopes Araujo", 
-
-    "Miriam Silva Oliveira", "Rene Fonseca Cardoso", "Romys Ferreira Primo", 
-
-    "Ruth Almeida Nunes", "Sirlene Rodrigues Calado", "Thalita Lopes de Oliveira", "Zelia Pereira Santos"
-
-]
-
-
-
-TODOS_PUBLICADORES = [
-
-    "Airton Pereira da Silva", "Anderson de Almeida Silva", "Anderson Vieira Dantas",
-
-    "Antonia Cordeiro Silva", "Aparecida Cruz dos Santos", "Ariana Rodrigues Calado Oliveira",
-
-    "Beatriz Dantas dos Santos", "Brenda Vieira Dantas", "Bruno Oliveira da Silva",
-
-    "Cecilia Geremias Cunha", "Celidalva de Souza Santos", "Clauberto de Oliveira Silva",
-
-    "Cosme Ferreira Primo", "Dalva Dias de Queiroz", "Deise Santana Nogueira Fernandes",
-
-    "Doralice Carlos Souza Silva", "Edna Olibeira Sales Gomes", "Edney da Cruz Barbosa",
-
-    "Eduardo Ferreira Fernandes", "Emerson Vieira Dantas", "Franciele Coelho Barbosa",
-
-    "Francisco Antonio da Silva Oliveira", "Francisco das Chagas Oliveira", "Francisco de Assis Angelos",
-
-    "Gabriela Carlos Batista", "Gabriela Pereira Santos", "Giovanna Coelho Barbosa",
-
-    "Heloisa Eduarda Santana Fernandes", "Hosana de Souza Primo", "Jacqueline Melo da Silva",
-
-    "Janete Pereira Oliveira", "Jaqueline Freitas de Souza", "Joaquim Antonio Barbosa",
-
-    "Jose Augusto Silva", "Jose Carlos Alves da Silva", "Jose Claudio de Oliveira Silva",
-
-    "Jose Pereira da Silva", "Jose Severino", "Josefa Santos Araujo", "Joyce Araujo Campos",
-
-    "Julia Melo da Silva", "Juliana Gabriel Pereira Primo", "Julio Cesar da Silva Matos",
-
-    "Kelvin Travaglin Andrade", "Laurinda Cipriano de Souza Oliveira", "Lidiane Maria Rocha Lima",
-
-    "Lucilene Carlos Silva Batista", "Lucilia Cassimiro da Silva", "Manoel Messias Andrade de Oliveira",
-
-    "Maria Almeida Nunes Couto", "Maria Aparecida Coelho F Barbosa", "Maria Aparecida Gonçalves Dias",
-
-    "Maria Elena Oliveira Felipe", "Maria Jussara Vilela Santos", "Maria Lucineide Araujo Silva",
-
-    "Maria Vilma do Nascimento", "Mateus Jean Silva Oliveira", "Olavo Amanço Batista",
-
-    "Pedro Vitor de Queiroz Freitas", "Renato Ferreira Primo", "Roberta Vieira Dantas",
-
-    "Rosemeire Pereira Barauna", "Sebastiao Souza Almeida", "Selma Geremias Cunha",
-
-    "Tiago da Silva Oliveira", "Valdete Carlene Borges", "Vanuza Rocha Silva",
-
-    "Vilma Pereira da Silva", "Wendley Leite Cunha"
-
-]
-
-
+# --- ESTILIZAÇÃO CSS PARA CARDS QUADRADOS ---
+st.markdown("""
+    <style>
+    .stMetric {
+        background-color: #f8fafc;
+        padding: 10px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .custom-card {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 10px;
+        height: 100%;
+    }
+    .card-header {
+        font-weight: bold;
+        color: #1e293b;
+        border-bottom: 2px solid #f1f5f9;
+        margin-bottom: 10px;
+        padding-bottom: 5px;
+        font-size: 1.1rem;
+    }
+    .card-body { font-size: 0.9rem; color: #475569; }
+    .status-label { font-weight: bold; text-transform: uppercase; font-size: 0.7rem; color: #64748b; }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- FUNÇÕES DE BANCO DE DADOS ---
-
 def inicializar_db():
-
     if "db" not in st.session_state:
-
         try:
-
             key_dict = json.loads(st.secrets["textkey"])
-
             creds = service_account.Credentials.from_service_account_info(key_dict)
-
             st.session_state.db = firestore.Client(credentials=creds, project="wendleydesenvolvimento")
-
         except Exception as e:
-
             st.error(f"Erro de conexão: {e}")
-
             return None
-
     return st.session_state.db
 
-
-
-def carregar_dados():
-
+def carregar_membros():
     db = inicializar_db()
-
     if db:
+        docs = db.collection("membros_parque_alianca").stream()
+        return {doc.id: doc.to_dict() for doc in docs}
+    return {}
 
+def atualizar_membro(nome, categoria):
+    db = inicializar_db()
+    if db:
+        db.collection("membros_parque_alianca").document(nome).set({"categoria": categoria})
+
+def carregar_relatorios():
+    db = inicializar_db()
+    if db:
         docs = db.collection("relatorios_parque_alianca").stream()
-
         return [{"id": doc.id, **doc.to_dict()} for doc in docs]
-
     return []
 
-
-
-def processar_registro(row):
-
-    nome_original = str(row['nome']).strip().lower()
-
-    nome_oficial = row['nome']
-
-    
-
-    # Busca automática na lista oficial
-
-    for n in (PIONEIROS_REGULARES + TODOS_PUBLICADORES):
-
-        if nome_original in n.lower():
-
-            nome_oficial = n
-
-            break
-
-            
-
-    # Classificação Automática (Ponto 1)
-
-    if nome_oficial in PIONEIROS_REGULARES:
-
-        categoria = "PIONEIRO REGULAR"
-
-    else:
-
-        categoria = row.get('categoria', "PUBLICADOR")
-
-        
-
-    return nome_oficial, categoria
-
-
-
 def main():
+    st.title("📊 Gestão Parque Aliança")
 
-    st.title("📊 Painel Administrativo - Parque Aliança")
-
+    # 1. CARREGAR DADOS
+    membros_db = carregar_membros()
+    relatorios = carregar_relatorios()
     
-
-    dados_brutos = carregar_dados()
-
-    if not dados_brutos:
-
-        st.info("Aguardando primeiros relatórios...")
-
+    if not relatorios:
+        st.info("Aguardando dados...")
         return
 
-
-
-    df = pd.DataFrame(dados_brutos)
-
-    df[['nome', 'categoria']] = df.apply(lambda x: pd.Series(processar_registro(x)), axis=1)
-
-
-
-    # --- FILTRO POR MÊS (Ponto 2) ---
-
-    meses_disponiveis = sorted(df['mes_referencia'].unique())
-
-    mes_selecionado = st.selectbox("📅 Selecione o Mês para Visualizar:", meses_disponiveis, index=len(meses_disponiveis)-1)
-
+    df = pd.DataFrame(relatorios)
     
-
-    df_mes = df[df['mes_referencia'] == mes_selecionado]
-
-
-
-    # --- STATUS DE ENTREGA ---
-
-    st.divider()
-
-    entregaram = df_mes['nome'].unique()
-
-    lista_total = list(set(PIONEIROS_REGULARES + TODOS_PUBLICADORES))
-
-    pendentes = [n for n in lista_total if n not in entregaram]
-
-
-
-    c1, c2, c3 = st.columns(3)
-
-    c1.metric("Entregues", len(entregaram))
-
-    c2.metric("Pendentes", len(pendentes))
-
-    c3.metric("Mês Filtrado", mes_selecionado)
-
-
-
-    if st.checkbox("Ver lista de nomes pendentes"):
-
-        st.warning(f"Total de {len(pendentes)} pessoas ainda não enviaram o relatório em {mes_selecionado}:")
-
-        st.write(", ".join(pendentes))
-
-
-
-    st.divider()
-
-
-
-    # --- 3 ABAS POR CATEGORIA (Ponto 1 e 2) ---
-
-    aba_pub, aba_aux, aba_reg = st.tabs(["👥 PUBLICADORES", "🏃 PIONEIROS AUXILIARES", "⭐ PIONEIROS REGULARES"])
-
-
-
-    categorias_map = {
-
-        "PUBLICADOR": aba_pub,
-
-        "PIONEIRO AUXILIAR": aba_aux,
-
-        "PIONEIRO REGULAR": aba_reg
-
-    }
-
-
-
-    for cat, aba in categorias_map.items():
-
-        with aba:
-
-            df_cat = df_mes[df_mes['categoria'] == cat]
-
-            
-
-            # Totais do Grupo (Ponto 4 do pedido anterior mantido)
-
-            col_t1, col_t2, col_t3 = st.columns(3)
-
-            col_t1.metric("Total Relatórios", len(df_cat))
-
-            col_t2.metric("Soma Horas", int(df_cat['horas'].sum()))
-
-            col_t3.metric("Soma Estudos", int(df_cat['estudos_biblicos'].sum()))
-
-            
-
-            st.markdown("---")
-
-
-
-            if df_cat.empty:
-
-                st.info(f"Nenhum relatório de {cat} para o mês de {mes_selecionado}.")
-
-            else:
-
-                # Cada um "dentro do seu quadrado" (Cards Individuais)
-
-                for _, row in df_cat.iterrows():
-
-                    with st.expander(f"📋 {row['nome']}"):
-
-                        col_a, col_b = st.columns(2)
-
-                        with col_a:
-
-                            st.write(f"**Participou:** {'Sim' if row['participou_ministerio'] else 'Não'}")
-
-                            st.write(f"**Horas:** {row['horas']}")
-
-                        with col_b:
-
-                            st.write(f"**Estudos:** {row['estudos_biblicos']}")
-
-                            st.write(f"**Data Envio:** {row['data_envio'].strftime('%d/%m/%Y %H:%M') if hasattr(row['data_envio'], 'strftime') else row['data_envio']}")
-
-                        
-
-                        if row['observacoes']:
-
-                            st.info(f"**Obs:** {row['observacoes']}")
-
-                        
-
-                        if st.button("🖨️ Gerar PDF S-4-T", key=f"pdf_{row['id']}"):
-
-                            st.write("Em breve: Preenchimento automático do arquivo...")
-
-
-
-    st.caption("Sistema de Gestão S-4-T | Parque Aliança")
-
-
+    # Vincular categoria do Banco de Membros ao Relatório
+    def get_cat(nome):
+        return membros_db.get(nome, {}).get('categoria', 'PUBLICADOR')
+    
+    df['categoria'] = df['nome'].apply(get_cat)
+
+    # 2. FILTRO DE MÊS
+    meses = sorted(df['mes_referencia'].unique())
+    mes_sel = st.sidebar.selectbox("📅 Mês de Referência", meses, index=len(meses)-1)
+    df_mes = df[df['mes_referencia'] == mes_sel]
+
+    # 3. ABAS PRINCIPAIS
+    tab_relatorios, tab_pendentes, tab_inativos = st.tabs([
+        "📝 RELATÓRIOS RECEBIDOS", 
+        "⏳ PENDENTES / CLASSIFICAÇÃO", 
+        "💤 INATIVOS"
+    ])
+
+    # --- ABA 1: RELATÓRIOS RECEBIDOS (CARDS LADO A LADO) ---
+    with tab_relatorios:
+        sub_tab_pub, sub_tab_aux, sub_tab_reg = st.tabs(["PUBLICADORES", "PIONEIROS AUXILIARES", "PIONEIROS REGULARES"])
+        
+        cat_map = {
+            "PUBLICADOR": sub_tab_pub,
+            "PIONEIRO AUXILIAR": sub_tab_aux,
+            "PIONEIRO REGULAR": sub_tab_reg
+        }
+
+        for cat_nome, aba in cat_map.items():
+            with aba:
+                df_cat = df_mes[df_mes['categoria'] == cat_nome]
+                if df_cat.empty:
+                    st.info(f"Nenhum relatório nesta categoria em {mes_sel}.")
+                else:
+                    # GRID DE 4 COLUNAS
+                    cols = st.columns(4)
+                    for i, (_, row) in enumerate(df_cat.iterrows()):
+                        with cols[i % 4]:
+                            st.markdown(f"""
+                                <div class="custom-card">
+                                    <div class="card-header">{row['nome']}</div>
+                                    <div class="card-body">
+                                        ⏱️ <b>Horas:</b> {row['horas']}<br>
+                                        📖 <b>Estudos:</b> {row['estudos_biblicos']}<br>
+                                        ✅ <b>Participou:</b> {'Sim' if row['participou_ministerio'] else 'Não'}<br>
+                                        <small>{row['observacoes'] if row['observacoes'] else ''}</small>
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            st.button("📄 PDF", key=f"pdf_{row['id']}")
+
+    # --- ABA 2: PENDENTES E CLASSIFICAÇÃO ---
+    with tab_pendentes:
+        st.subheader(f"Quem ainda não enviou em {mes_sel}")
+        
+        entregaram = df_mes['nome'].unique()
+        # Consideramos todos os que estão no banco e não são inativos
+        lista_gestao = [n for n, d in membros_db.items() if d.get('categoria') != 'INATIVO']
+        pendentes = [n for n in lista_gestao if n not in entregaram]
+
+        if not pendentes:
+            st.success("Tudo em dia!")
+        else:
+            for p_nome in pendentes:
+                c1, c2, c3 = st.columns([2, 2, 1])
+                c1.write(f"**{p_nome}**")
+                
+                # Opção de Reclassificar
+                nova_cat = c2.selectbox(
+                    "Mudar Categoria", 
+                    ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"],
+                    key=f"sel_{p_nome}",
+                    index=["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"].index(get_cat(p_nome))
+                )
+                
+                if c3.button("Salvar", key=f"btn_{p_nome}"):
+                    atualizar_membro(p_nome, nova_cat)
+                    st.toast(f"{p_nome} atualizado!")
+                    st.rerun()
+
+    # --- ABA 3: INATIVOS ---
+    with tab_inativos:
+        inativos = [n for n, d in membros_db.items() if d.get('categoria') == 'INATIVO']
+        if not inativos:
+            st.info("Nenhum membro marcado como inativo.")
+        else:
+            cols_in = st.columns(4)
+            for i, n_inativo in enumerate(inativos):
+                with cols_in[i % 4]:
+                    st.markdown(f"""
+                        <div class="custom-card" style="border-left: 5px solid #cbd5e1;">
+                            <div class="card-header" style="color: #94a3b8;">{n_inativo}</div>
+                            <div class="status-label">STATUS: INATIVO</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    if st.button("Reativar", key=f"re_{n_inativo}"):
+                        atualizar_membro(n_inativo, "PUBLICADOR")
+                        st.rerun()
+
+    st.sidebar.divider()
+    if st.sidebar.button("🔄 Atualizar Dados"):
+        st.rerun()
 
 if __name__ == "__main__":
-
     main()
