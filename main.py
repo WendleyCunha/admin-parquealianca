@@ -64,89 +64,100 @@ def carregar_dados():
         return [{"id": doc.id, **doc.to_dict()} for doc in docs]
     return []
 
-# --- LÓGICA DE CATEGORIA E NOME ---
 def processar_registro(row):
-    nome_original = row['nome'].strip().lower()
-    
-    # Busca o nome oficial
+    nome_original = str(row['nome']).strip().lower()
     nome_oficial = row['nome']
+    
+    # Busca automática na lista oficial
     for n in (PIONEIROS_REGULARES + TODOS_PUBLICADORES):
         if nome_original in n.lower():
             nome_oficial = n
             break
             
-    # Atribui Categoria Automática (Item 1)
+    # Classificação Automática (Ponto 1)
     if nome_oficial in PIONEIROS_REGULARES:
         categoria = "PIONEIRO REGULAR"
     else:
-        # Se não estiver no banco como algo específico, assume Publicador ou mantém a salva
         categoria = row.get('categoria', "PUBLICADOR")
         
     return nome_oficial, categoria
 
 def main():
-    st.title("📊 Gestão e Totais - Parque Aliança")
+    st.title("📊 Painel Administrativo - Parque Aliança")
     
     dados_brutos = carregar_dados()
     if not dados_brutos:
         st.info("Aguardando primeiros relatórios...")
         return
 
-    df_recebidos = pd.DataFrame(dados_brutos)
-    
-    # Aplica processamento automático de nomes e categorias
-    df_recebidos[['nome', 'categoria']] = df_recebidos.apply(
-        lambda x: pd.Series(processar_registro(x)), axis=1
-    )
+    df = pd.DataFrame(dados_brutos)
+    df[['nome', 'categoria']] = df.apply(lambda x: pd.Series(processar_registro(x)), axis=1)
 
-    # --- 1. PAINEL DE PENDÊNCIAS (Item 2) ---
-    st.header("📋 Status de Entrega do Mês")
-    nomes_que_entregaram = df_recebidos['nome'].unique()
-    lista_completa = list(set(PIONEIROS_REGULARES + TODOS_PUBLICADORES))
+    # --- FILTRO POR MÊS (Ponto 2) ---
+    meses_disponiveis = sorted(df['mes_referencia'].unique())
+    mes_selecionado = st.selectbox("📅 Selecione o Mês para Visualizar:", meses_disponiveis, index=len(meses_disponiveis)-1)
     
-    pendentes = [n for n in lista_completa if n not in nomes_que_entregaram]
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        st.success(f"✅ Entregues: {len(nomes_que_entregaram)}")
-    with c2:
-        st.error(f"⏳ Pendentes: {len(pendentes)}")
-    
-    if st.checkbox("Ver lista de quem ainda não enviou"):
-        st.write(pendentes)
+    df_mes = df[df['mes_referencia'] == mes_selecionado]
+
+    # --- STATUS DE ENTREGA ---
+    st.divider()
+    entregaram = df_mes['nome'].unique()
+    lista_total = list(set(PIONEIROS_REGULARES + TODOS_PUBLICADORES))
+    pendentes = [n for n in lista_total if n not in entregaram]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Entregues", len(entregaram))
+    c2.metric("Pendentes", len(pendentes))
+    c3.metric("Mês Filtrado", mes_selecionado)
+
+    if st.checkbox("Ver lista de nomes pendentes"):
+        st.warning(f"Total de {len(pendentes)} pessoas ainda não enviaram o relatório em {mes_selecionado}:")
+        st.write(", ".join(pendentes))
 
     st.divider()
 
-    # --- 2. SOMA DE ATIVIDADES POR GRUPO (Item 4) ---
-    st.header("📈 Resumo por Categoria")
-    grupos = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
-    cols = st.columns(3)
-    
-    for i, g in enumerate(grupos):
-        df_g = df_recebidos[df_recebidos['categoria'] == g]
-        with cols[i]:
-            st.subheader(g)
-            st.metric("Relatórios", len(df_g))
-            st.metric("Total Horas", int(df_g['horas'].sum()))
-            st.metric("Total Estudos", int(df_g['estudos_biblicos'].sum()))
+    # --- 3 ABAS POR CATEGORIA (Ponto 1 e 2) ---
+    aba_pub, aba_aux, aba_reg = st.tabs(["👥 PUBLICADORES", "🏃 PIONEIROS AUXILIARES", "⭐ PIONEIROS REGULARES"])
 
-    st.divider()
+    categorias_map = {
+        "PUBLICADOR": aba_pub,
+        "PIONEIRO AUXILIAR": aba_aux,
+        "PIONEIRO REGULAR": aba_reg
+    }
 
-    # --- 3. RESUMO INDIVIDUAL (Item 3) ---
-    st.header("📄 Resumo dos Relatórios")
-    for idx, row in df_recebidos.iterrows():
-        with st.expander(f"📝 {row['nome']} - {row['mes_referencia']}"):
-            st.markdown(f"""
-            **Categoria:** {row['categoria']} | **Part. Ministério:** {'Sim' if row['participou_ministerio'] else 'Não'}
+    for cat, aba in categorias_map.items():
+        with aba:
+            df_cat = df_mes[df_mes['categoria'] == cat]
             
-            - **Estudos Bíblicos:** {row['estudos_biblicos']}
-            - **Horas:** {row['horas']}
-            - **Observações:** {row['observacoes'] if row['observacoes'] else 'Nenhuma'}
-            """)
+            # Totais do Grupo (Ponto 4 do pedido anterior mantido)
+            col_t1, col_t2, col_t3 = st.columns(3)
+            col_t1.metric("Total Relatórios", len(df_cat))
+            col_t2.metric("Soma Horas", int(df_cat['horas'].sum()))
+            col_t3.metric("Soma Estudos", int(df_cat['estudos_biblicos'].sum()))
             
-            # Aqui no futuro entrará o botão de Gerar PDF (Item 5)
-            if st.button("🖨️ Preparar PDF (S-4-T)", key=f"pdf_{row['id']}"):
-                st.info("Conectando ao modelo S-4-T para preenchimento...")
+            st.markdown("---")
+
+            if df_cat.empty:
+                st.info(f"Nenhum relatório de {cat} para o mês de {mes_selecionado}.")
+            else:
+                # Cada um "dentro do seu quadrado" (Cards Individuais)
+                for _, row in df_cat.iterrows():
+                    with st.expander(f"📋 {row['nome']}"):
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            st.write(f"**Participou:** {'Sim' if row['participou_ministerio'] else 'Não'}")
+                            st.write(f"**Horas:** {row['horas']}")
+                        with col_b:
+                            st.write(f"**Estudos:** {row['estudos_biblicos']}")
+                            st.write(f"**Data Envio:** {row['data_envio'].strftime('%d/%m/%Y %H:%M') if hasattr(row['data_envio'], 'strftime') else row['data_envio']}")
+                        
+                        if row['observacoes']:
+                            st.info(f"**Obs:** {row['observacoes']}")
+                        
+                        if st.button("🖨️ Gerar PDF S-4-T", key=f"pdf_{row['id']}"):
+                            st.write("Em breve: Preenchimento automático do arquivo...")
+
+    st.caption("Sistema de Gestão S-4-T | Parque Aliança")
 
 if __name__ == "__main__":
     main()
