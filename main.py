@@ -15,7 +15,7 @@ def inicializar_db():
             # Certifique-se de configurar a Secret 'textkey' também neste novo App no Streamlit Cloud
             key_dict = json.loads(st.secrets["textkey"])
             creds = service_account.Credentials.from_service_account_info(key_dict)
-            st.session_state.db = firestore.Client(credentials=creds, project="bancowendley")
+            st.session_state.db = firestore.Client(credentials=creds, project="wendleydesenvolvimento")
         except Exception as e:
             st.error(f"Erro ao conectar ao banco de dados: {e}")
             return None
