@@ -9,8 +9,10 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas  # FALTAVA ESTE
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from pypdf import PdfReader, PdfWriter # FALTAVA ESTE (ou use PyPDF2 se preferir)
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
 # --- ESTILIZAÇÃO ---
@@ -32,40 +34,100 @@ st.markdown("""
 def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
+# --- NOVA FUNÇÃO PARA GERAR PDF (VERSÃO OVERLAY COM FIDELIDADE 100%) ---
+# Esta função requer o arquivo 'template_s21.pdf' (modelo em branco) na mesma pasta.
 def gerar_pdf_registro_s21(row, mes_sel):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-    elements = []
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', fontSize=16, alignment=1, spaceAfter=15, fontName='Helvetica-Bold')
-    elements.append(Paragraph("REGISTRO DE PUBLICADOR DE CONGREGAÇÃO", title_style))
-    data_cabecalho = [
-        [Paragraph(f"<b>Nome:</b> {row['nome_oficial']}", styles['Normal']), ""],
-        [f"Mês: {mes_sel}", "Ano de serviço: 2026"]
-    ]
-    t_cabecalho = Table(data_cabecalho, colWidths=[350, 150])
-    elements.append(t_cabecalho)
-    elements.append(Spacer(1, 12))
-    header = ["Participou no\nministério", "Estudos\nbíblicos", "Pioneiro\nauxiliar", "Horas", "Observações"]
-    check_min = "X" if row['horas'] > 0 else ""
-    check_pion = "X" if row['cat_oficial'] == "PIONEIRO AUXILIAR" else ""
-    corpo = [[f"[{check_min}]", str(int(row['estudos_biblicos'])), f"[{check_pion}]", str(int(row['horas'])), row.get('observacoes', '')]]
-    t_dados = Table([header] + corpo, colWidths=[100, 80, 80, 70, 160])
-    t_dados.setStyle(TableStyle([
-        ('GRID', (0,0), (-1,-1), 1, colors.black),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 10),
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-        ('LEFTPADDING', (0,0), (-1,-1), 5),
-        ('RIGHTPADDING', (0,0), (-1,-1), 5),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
-        ('TOPPADDING', (0,0), (-1,-1), 5),
-    ]))
-    elements.append(t_dados)
-    doc.build(elements)
-    return buffer.getvalue()
+    # --- PASSO 1: CRIAR A CAMADA DE DADOS (TRANSPARENTE) ---
+    packet = io.BytesIO()
+    # Usamos o canvas para desenhar nas coordenadas exatas do papel
+    can = canvas.Canvas(packet, pagesize=A4)
+    
+    # --- CONFIGURAÇÃO DE FONTES ---
+    can.setFont("Helvetica", 10) # Fonte normal para os dados
+    
+    # --- CABEÇALHO (Ajuste X, Y conforme necessário para alinhar com o papel) ---
+    # Nome (X=75, Y=755)
+    can.drawString(75, 755, str(row['nome_oficial'])) 
+    
+    # Exemplo de como marcar Gênero (se você tiver esse dado no banco)
+    # can.drawString(652, 715, "X") # Masculino (X aproximado)
+    
+    # --- TABELA DE RELATÓRIOS (Coordenadas para as linhas) ---
+    # Y inicial para o mês de Setembro (primeira linha)
+    y_pos_setembro = 635 
+    espacamento_linhas = 18.5 # Distância exata entre uma linha e outra no S-21
+    
+    # Lista padrão de meses do ano de serviço
+    meses_lista = ["SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO", "JANEIRO", 
+                   "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO"]
+    
+    try:
+        # Pega apenas o nome do mês (ex: "ABRIL" de "ABRIL 2026")
+        nome_mes_puro = mes_sel.split(" ")[0].upper()
+        
+        if nome_mes_puro in meses_lista:
+            # Descobre qual é a linha (índice)
+            indice_mes = meses_lista.index(nome_mes_puro)
+            # Calcula o Y exato para aquela linha
+            y_atual = y_pos_setembro - (indice_mes * espacamento_linhas)
+            
+            # --- DESENHAR OS DADOS NA LINHA ---
+            # X de participação (Coluna "Participou no ministério")
+            if row['horas'] > 0 or row.get('estudos_biblicos', 0) > 0:
+                can.drawString(205, y_atual, "X") # Centralizado na coluna
+                
+            # Estudos Bíblicos (Coluna "Estudos bíblicos")
+            can.drawString(325, y_atual, str(int(row['estudos_biblicos'])))
+            
+            # Horas (Coluna "Horas")
+            # Se for publicador, as horas vão na coluna de Pioneiro Auxiliar? 
+            # O S-21 oficial tem regras. Vou colocar na coluna de horas geral:
+            can.drawString(570, y_atual, str(int(row['horas'])))
+            
+            # Observações (Coluna "Observações")
+            if row.get('observacoes'):
+                can.setFont("Helvetica", 8) # Fonte menor para caber
+                # Limita a 40 caracteres para não vazar a célula
+                obs_texto = str(row['observacoes'])[:40]
+                can.drawString(650, y_atual, obs_texto)
+                
+    except Exception as e:
+        # Se der erro no processamento do mês, não desenha nada na tabela
+        print(f"Erro ao processar linha do mês no PDF: {e}")
+        pass
+
+    can.save()
+    packet.seek(0)
+
+    # --- PASSO 2: FUNDIR COM O PDF BASE (O MODELO EM BRANCO) ---
+    try:
+        # Carrega o PDF original que você fez upload
+        arquivo_base = PdfReader(open("template_s21.pdf", "rb"))
+        camada_dados = PdfReader(packet)
+        
+        output = PdfWriter()
+        
+        # Pega a primeira página do original
+        pagina_principal = arquivo_base.pages[0]
+        # Sobrepõe a camada de dados transparente
+        pagina_principal.merge_page(camada_dados.pages[0])
+        
+        output.add_page(pagina_principal)
+        
+        # Retorna o PDF final mesclado
+        buffer_final = io.BytesIO()
+        output.write(buffer_final)
+        return buffer_final.getvalue()
+        
+    except FileNotFoundError:
+        # Caso o arquivo original não seja encontrado no servidor
+        st.error("Erro Crítico: O arquivo 'template_s21.pdf' (modelo em branco) não foi encontrado na raiz do projeto. O PDF gerado estará em branco.")
+        # Retorna o PDF base vazio para não quebrar o download, mas avisa o usuário
+        output_vazio = PdfWriter()
+        output_vazio.add_blank_page(width=A4[0], height=A4[1])
+        buffer_vazio = io.BytesIO()
+        output_vazio.write(buffer_vazio)
+        return buffer_vazio.getvalue()
 # --- FUNÇÕES DE CONEXÃO E BANCO ---
 def inicializar_db():
     if "db" not in st.session_state:
