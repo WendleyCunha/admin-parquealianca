@@ -4,6 +4,7 @@ import json
 import io
 import zipfile
 import unicodedata
+import base64
 from difflib import SequenceMatcher
 from google.cloud import firestore
 from google.oauth2 import service_account
