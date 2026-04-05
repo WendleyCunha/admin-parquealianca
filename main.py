@@ -32,13 +32,12 @@ st.markdown("""
 def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
-# --- FUNÇÃO PARA GERAR PDF ---
 def gerar_pdf_registro_s21(row, mes_sel):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     elements = []
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', fontSize=16, alignment=1, spaceAfter=20, fontName='Helvetica-Bold')
+    title_style = ParagraphStyle('Title', fontSize=16, alignment=1, spaceAfter=15, fontName='Helvetica-Bold')
     elements.append(Paragraph("REGISTRO DE PUBLICADOR DE CONGREGAÇÃO", title_style))
     data_cabecalho = [
         [Paragraph(f"<b>Nome:</b> {row['nome_oficial']}", styles['Normal']), ""],
@@ -46,16 +45,23 @@ def gerar_pdf_registro_s21(row, mes_sel):
     ]
     t_cabecalho = Table(data_cabecalho, colWidths=[350, 150])
     elements.append(t_cabecalho)
-    elements.append(Spacer(1, 15))
+    elements.append(Spacer(1, 12))
     header = ["Participou no\nministério", "Estudos\nbíblicos", "Pioneiro\nauxiliar", "Horas", "Observações"]
     check_min = "X" if row['horas'] > 0 else ""
     check_pion = "X" if row['cat_oficial'] == "PIONEIRO AUXILIAR" else ""
     corpo = [[f"[{check_min}]", str(int(row['estudos_biblicos'])), f"[{check_pion}]", str(int(row['horas'])), row.get('observacoes', '')]]
     t_dados = Table([header] + corpo, colWidths=[100, 80, 80, 70, 160])
     t_dados.setStyle(TableStyle([
-        ('GRID', (0,0), (-1,-1), 1, colors.black), ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 10), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 10),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('LEFTPADDING', (0,0), (-1,-1), 5),
+        ('RIGHTPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('TOPPADDING', (0,0), (-1,-1), 5),
     ]))
     elements.append(t_dados)
     doc.build(elements)
