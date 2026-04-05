@@ -3,7 +3,8 @@ import pandas as pd
 import json
 import io
 import zipfile
-import unicodedata # Adicionado para robustez de acentuação
+import unicodedata 
+from difflib import SequenceMatcher
 from google.cloud import firestore
 from google.oauth2 import service_account
 from reportlab.lib import colors
@@ -112,10 +113,35 @@ def validar_e_gravar_novo_membro(relatorio_id, nome_correto, categoria):
 
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
     entrada_norm = normalizar_texto(nome_recebido)
-    if not entrada_norm: return None
+    if not entrada_norm or len(entrada_norm) < 3: 
+        return None
+    
+    melhor_match = None
+    maior_score = 0
+    
     for nome_oficial in lista_membros:
-        if entrada_norm == normalizar_texto(nome_oficial):
+        oficial_norm = normalizar_texto(nome_oficial)
+        
+        # 1. Match Exato
+        if entrada_norm == oficial_norm:
             return nome_oficial
+            
+        # 2. Verificação de Pertencimento (Resolve o caso "Cunha")
+        # Se "cunha" está dentro de "wendley cunha"
+        if entrada_norm in oficial_norm or oficial_norm in entrada_norm:
+            score = 0.90 # Score alto por conter o nome
+        else:
+            # 3. Fuzzy Match (Para erros de digitação tipo "Wandley")
+            score = SequenceMatcher(None, entrada_norm, oficial_norm).ratio()
+        
+        if score > maior_score:
+            maior_score = score
+            melhor_match = nome_oficial
+
+    # Se a similaridade for maior que 80%, aceita automaticamente
+    if maior_score >= 0.80:
+        return melhor_match
+        
     return None
 
 def main():
@@ -170,21 +196,45 @@ def main():
 
     with tabs[1]: # TRIAGEM (Nomes desconhecidos)
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
-        if df_triagem.empty: st.success("✨ Triagem limpa!")
+        if df_triagem.empty: 
+            st.success("✨ Triagem limpa!")
         else:
             nomes_existentes = sorted(list(membros_db.keys()))
             for _, row in df_triagem.iterrows():
                 with st.container():
                     st.markdown(f'<div class="triagem-box"><b>Digitado:</b> {row["nome"]} | <b>Horas:</b> {row["horas"]}</div>', unsafe_allow_html=True)
+                    
+                    # --- LÓGICA DE PRÉ-SELEÇÃO INTELIGENTE ---
+                    sugestao = normalizar_nome_no_banco(row['nome'], nomes_existentes)
+                    idx_pre_selecao = 0  # Começa no "-- Selecionar --"
+                    
+                    if sugestao and sugestao in nomes_existentes:
+                        # Encontra a posição da sugestão na lista (somamos 1 por causa do "-- Selecionar --")
+                        idx_pre_selecao = nomes_existentes.index(sugestao) + 1
+                    
                     c1, c2 = st.columns(2)
                     n_f = c1.text_input("Ajustar Nome:", value=row['nome'], key=f"tri_n_{row['id']}")
-                    n_s = c2.selectbox("Fundir com:", ["-- Selecionar --"] + nomes_existentes, key=f"fundir_{row['id']}")
+                    
+                    # O selectbox agora usa o 'index' calculado acima
+                    n_s = c2.selectbox(
+                        "Fundir com:", 
+                        ["-- Selecionar --"] + nomes_existentes, 
+                        index=idx_pre_selecao, 
+                        key=f"fundir_{row['id']}"
+                    )
+                    
                     cat_n = st.selectbox("Categoria:", ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "INATIVO"], key=f"tri_c_{row['id']}")
+                    
                     b1, b2 = st.columns(2)
                     if b1.button("✅ VALIDAR", key=f"btn_v_{row['id']}", use_container_width=True):
-                        validar_e_gravar_novo_membro(row['id'], n_s if n_s != "-- Selecionar --" else n_f, cat_n); st.rerun()
+                        # Se o seletor estiver preenchido (pelo sistema ou por você), usa ele. Caso contrário, usa o texto digitado.
+                        nome_final = n_s if n_s != "-- Selecionar --" else n_f
+                        validar_e_gravar_novo_membro(row['id'], nome_final, cat_n)
+                        st.rerun()
+                        
                     if b2.button("🗑️ RECUSAR", key=f"btn_r_{row['id']}", use_container_width=True):
-                        deletar_relatorio(row['id']); st.rerun()
+                        deletar_relatorio(row['id'])
+                        st.rerun()
 
     with tabs[2]: # PENDÊNCIAS (Com botão RECEBIDO)
         entregaram = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]['nome_oficial'].unique() if not df_mes.empty else []
