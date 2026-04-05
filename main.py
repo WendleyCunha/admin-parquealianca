@@ -9,10 +9,6 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import AnnotationBuilder
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
@@ -30,57 +26,65 @@ st.markdown("""
 
 # --- FUNÇÃO MESTRE: PREENCHIMENTO DE PDF ORIGINAL (S-21) ---
 def preencher_s21_original(pdf_template, dados_row, mes_sel):
-    """Preenche o PDF original S-21 baseado em coordenadas."""
-    reader = PdfReader(pdf_template)
-    writer = PdfWriter()
-    page = reader.pages[0]
-    
-    # Coordenadas Y para cada mês no modelo S-21 (Ajustado para o grid da imagem)
-    coords_y = {
-        "SETEMBRO": 532, "OUTUBRO": 512, "NOVEMBRO": 492, "DEZEMBRO": 472,
-        "JANEIRO": 452, "FEVEREIRO": 432, "MARÇO": 412, "ABRIL": 392,
-        "MAIO": 372, "JUNHO": 352, "JULHO": 332, "AGOSTO": 312
-    }
-    
-    mes_puro = mes_sel.split()[0].upper()
-    y_base = coords_y.get(mes_puro, 412) # Março como fallback
+    """Preenche o PDF original S-21 baseado em coordenadas precisas."""
+    try:
+        # Importante: resetar o ponteiro do arquivo para leitura repetida
+        pdf_template.seek(0)
+        reader = PdfReader(pdf_template)
+        writer = PdfWriter()
+        
+        # Pega a primeira página e adiciona ao writer primeiro (Evita IndexError)
+        page = reader.pages[0]
+        new_page = writer.add_page(page)
+        
+        # Coordenadas Y para cada mês (Grid S-21-T 11/23)
+        coords_y = {
+            "SETEMBRO": 532, "OUTUBRO": 512, "NOVEMBRO": 492, "DEZEMBRO": 472,
+            "JANEIRO": 452, "FEVEREIRO": 432, "MARÇO": 412, "ABRIL": 392,
+            "MAIO": 372, "JUNHO": 352, "JULHO": 332, "AGOSTO": 312
+        }
+        
+        # Normaliza o mês de referência
+        mes_puro = str(mes_sel).split()[0].upper()
+        y_base = coords_y.get(mes_puro, 412)
 
-    # 1. Nome (Topo)
-    anon_nome = AnnotationBuilder.free_text(
-        dados_row['nome_oficial'],
-        rect=(55, 718, 400, 735), font="Helvetica-Bold", font_size=11
-    )
-    
-    # 2. Participou no Ministério (X)
-    # No seu código, se horas > 0, ele participou.
-    if dados_row['horas'] > 0 or dados_row.get('estudos_biblicos', 0) > 0:
-        anon_check = AnnotationBuilder.free_text(
-            "X", rect=(188, y_base, 205, y_base + 12), font_size=12
+        # 1. Inserir Nome do Publicador
+        nome_txt = str(dados_row.get('nome_oficial', ''))
+        anon_nome = AnnotationBuilder.free_text(
+            nome_txt,
+            rect=(55, 718, 400, 735), font="Helvetica-Bold", font_size=11
         )
-        writer.add_annotation(page_number=0, annotation=anon_check)
+        writer.add_annotation(page_number=0, annotation=anon_nome)
+        
+        # 2. Marcação de Participou no Ministério (X)
+        if dados_row['horas'] > 0 or dados_row.get('estudos_biblicos', 0) > 0:
+            anon_check = AnnotationBuilder.free_text(
+                "X", rect=(188, y_base, 205, y_base + 12), font_size=12
+            )
+            writer.add_annotation(page_number=0, annotation=anon_check)
 
-    # 3. Estudos Bíblicos
-    if dados_row['estudos_biblicos'] > 0:
-        anon_estudos = AnnotationBuilder.free_text(
-            str(int(dados_row['estudos_biblicos'])),
-            rect=(265, y_base, 305, y_base + 12), font_size=10
-        )
-        writer.add_annotation(page_number=0, annotation=anon_estudos)
+        # 3. Inserir Estudos Bíblicos
+        if dados_row['estudos_biblicos'] > 0:
+            anon_estudos = AnnotationBuilder.free_text(
+                str(int(dados_row['estudos_biblicos'])),
+                rect=(265, y_base, 305, y_base + 12), font_size=10
+            )
+            writer.add_annotation(page_number=0, annotation=anon_estudos)
 
-    # 4. Horas (Apenas se houver ou se for pioneiro)
-    if dados_row['horas'] > 0:
-        anon_horas = AnnotationBuilder.free_text(
-            str(int(dados_row['horas'])),
-            rect=(510, y_base, 560, y_base + 12), font_size=10
-        )
-        writer.add_annotation(page_number=0, annotation=anon_horas)
+        # 4. Inserir Horas
+        if dados_row['horas'] > 0:
+            anon_horas = AnnotationBuilder.free_text(
+                str(int(dados_row['horas'])),
+                rect=(510, y_base, 560, y_base + 12), font_size=10
+            )
+            writer.add_annotation(page_number=0, annotation=anon_horas)
 
-    writer.add_page(page)
-    writer.add_annotation(page_number=0, annotation=anon_nome)
-    
-    output = io.BytesIO()
-    writer.write(output)
-    return output.getvalue()
+        output = io.BytesIO()
+        writer.write(output)
+        return output.getvalue()
+    except Exception as e:
+        st.error(f"Erro ao processar PDF: {e}")
+        return None
 
 # --- FUNÇÕES DE APOIO ---
 def normalizar_texto(texto):
@@ -165,7 +169,6 @@ def main():
 
     tabs_principal = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "⚙️ CONFIGURAÇÃO"])
 
-    # --- ABA 0: RELATÓRIOS ---
     with tabs_principal[0]:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
         entregaram = df_ok['nome_oficial'].unique() if not df_ok.empty else []
@@ -190,7 +193,7 @@ def main():
                             if st.button(f"🗑️ Deletar", key=f"del_rel_{r['id']}"):
                                 deletar_relatorio(r['id']); st.rerun()
 
-        with sub_tabs_rel[3]: # Pendências
+        with sub_tabs_rel[3]:
             for cat in categorias_lista:
                 membros_cat = [n for n, d in membros_db.items() if d.get('categoria') == cat]
                 pendentes = sorted([n for n in membros_cat if n not in entregaram])
@@ -204,7 +207,6 @@ def main():
                             inicializar_db().collection("relatorios_parque_alianca").add({"nome": p_nome, "mes_referencia": mes_sel, "horas": 0, "estudos_biblicos": 0, "observacoes": "Baixa manual"})
                             st.rerun()
 
-    # --- ABA 1: TRIAGEM ---
     with tabs_principal[1]:
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
         if df_triagem.empty: st.success("✨ Triagem limpa!")
@@ -222,33 +224,32 @@ def main():
                         validar_e_gravar_novo_membro(row['id'], n_s if n_s != "-- Selecionar --" else n_f, "PUBLICADOR")
                         st.rerun()
 
-    # --- ABA 2: CONFIGURAÇÃO ---
     with tabs_principal[2]:
         sub_cfg = st.tabs(["📂 REGISTROS TOTAIS (S-21)", "👤 GESTÃO DE MEMBROS"])
         
         with sub_cfg[0]:
             st.subheader("Gerador de Cartão S-21 Oficial")
-            # Upload do PDF Original
             modelo_upload = st.file_uploader("1. Faça upload do modelo S21.pdf original", type=["pdf"])
             
             if modelo_upload and not df_ok.empty:
                 st.success("Modelo pronto para preenchimento!")
                 
-                # Botão ZIP
                 zip_off = io.BytesIO()
                 with zipfile.ZipFile(zip_off, "a", zipfile.ZIP_DEFLATED, False) as zf:
                     for _, r in df_ok.iterrows():
-                        zf.writestr(f"S21_{r['nome_oficial']}.pdf", preencher_s21_original(modelo_upload, r, mes_sel))
+                        pdf_data = preencher_s21_original(modelo_upload, r, mes_sel)
+                        if pdf_data:
+                            zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf_data)
                 
                 st.download_button("📥 BAIXAR TODOS EM ZIP", zip_off.getvalue(), f"S21_{mes_sel}.zip", "application/zip", use_container_width=True)
                 
                 st.write("---")
-                # Downloads Individuais
                 for _, r in df_ok.sort_values('nome_oficial').iterrows():
                     ca, cb = st.columns([4, 1])
                     ca.write(f"📄 {r['nome_oficial']}")
-                    cb.download_button("Baixar S-21", preencher_s21_original(modelo_upload, r, mes_sel), 
-                                     f"S21_{r['nome_oficial']}.pdf", key=f"pdf_ind_{r['id']}")
+                    pdf_ind = preencher_s21_original(modelo_upload, r, mes_sel)
+                    if pdf_ind:
+                        cb.download_button("Baixar S-21", pdf_ind, f"S21_{r['nome_oficial']}.pdf", key=f"pdf_ind_{r['id']}")
             else:
                 st.info("Suba o arquivo S21.pdf para gerar os documentos automáticos.")
 
