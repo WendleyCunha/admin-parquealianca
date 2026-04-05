@@ -10,6 +10,8 @@ import zipfile
 
 import unicodedata 
 
+from pypdf import PdfReader, PdfWriter
+
 from difflib import SequenceMatcher
 
 from google.cloud import firestore
@@ -77,58 +79,80 @@ def normalizar_texto(texto):
 # --- FUNÇÃO PARA GERAR PDF (Mantida 100%) ---
 
 def gerar_pdf_registro_s21(row, mes_sel):
+    # --- PASSO 1: CRIAR A CAMADA DE TEXTO (TRANSPARENTE) ---
+    packet = io.BytesIO()
+    # Criamos um canvas do ReportLab para desenhar nas coordenadas exatas
+    can = canvas.Canvas(packet, pagesize=A4)
+    
+    # Exemplo de coordenadas (Você precisará ajustar X e Y para bater com os buraquinhos do papel)
+    # Coordenadas em pontos (A4 é aproximadamente 595x842)
+    
+    # Nome
+    can.setFont("Helvetica-Bold", 11)
+    can.drawString(70, 755, str(row['nome_oficial'])) 
+    
+    # Mês e Dados (Exemplo de posicionamento na tabela)
+    can.setFont("Helvetica", 10)
+    
+    # Lógica para marcar o "X" no mês correto
+    # Se o formulário original começa em Setembro na primeira linha:
+    y_pos_setembro = 635 
+    espacamento_linhas = 18.5 # Distância entre uma linha de mês e outra
+    
+    meses_lista = ["SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO", "JANEIRO", 
+                   "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO"]
+    
+    try:
+        nome_mes_puro = mes_sel.split(" ")[0].upper()
+        indice_mes = meses_lista.index(nome_mes_puro)
+        y_atual = y_pos_setembro - (indice_mes * espacamento_linhas)
+        
+        # Desenha o "X" de participação
+        if row['horas'] > 0 or row.get('estudos_biblicos', 0) > 0:
+            can.drawString(205, y_atual, "X")
+            
+        # Desenha as Horas
+        can.drawString(340, y_atual, str(int(row['horas'])))
+        
+        # Desenha Estudos
+        can.drawString(265, y_atual, str(int(row['estudos_biblicos'])))
+        
+        # Observações
+        if row.get('observacoes'):
+            can.setFont("Helvetica", 8)
+            can.drawString(410, y_atual, str(row['observacoes'])[:40])
+            
+    except:
+        pass # Mês não encontrado na lista padrão
 
-    buffer = io.BytesIO()
+    can.save()
+    packet.seek(0)
 
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-
-    elements = []
-
-    styles = getSampleStyleSheet()
-
-    title_style = ParagraphStyle('Title', fontSize=16, alignment=1, spaceAfter=20, fontName='Helvetica-Bold')
-
-    elements.append(Paragraph("REGISTRO DE PUBLICADOR DE CONGREGAÇÃO", title_style))
-
-    data_cabecalho = [
-
-        [Paragraph(f"<b>Nome:</b> {row['nome_oficial']}", styles['Normal']), ""],
-
-        [f"Mês: {mes_sel}", "Ano de serviço: 2026"]
-
-    ]
-
-    t_cabecalho = Table(data_cabecalho, colWidths=[350, 150])
-
-    elements.append(t_cabecalho)
-
-    elements.append(Spacer(1, 15))
-
-    header = ["Participou no\nministério", "Estudos\nbíblicos", "Pioneiro\nauxiliar", "Horas", "Observações"]
-
-    check_min = "X" if row['horas'] > 0 else ""
-
-    check_pion = "X" if row['cat_oficial'] == "PIONEIRO AUXILIAR" else ""
-
-    corpo = [[f"[{check_min}]", str(int(row['estudos_biblicos'])), f"[{check_pion}]", str(int(row['horas'])), row.get('observacoes', '')]]
-
-    t_dados = Table([header] + corpo, colWidths=[100, 80, 80, 70, 160])
-
-    t_dados.setStyle(TableStyle([
-
-        ('GRID', (0,0), (-1,-1), 1, colors.black), ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-
-        ('FONTSIZE', (0,0), (-1,-1), 10), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-
-    ]))
-
-    elements.append(t_dados)
-
-    doc.build(elements)
-
-    return buffer.getvalue()
+    # --- PASSO 2: FUNDIR COM O PDF ORIGINAL ---
+    try:
+        # Aqui você deve carregar o PDF que você quer usar de fundo.
+        # Você pode subir ele no GitHub junto com o código ou carregar via st.secrets
+        # Exemplo: assumindo que o arquivo 'template_s21.pdf' está na mesma pasta
+        arquivo_base = PdfReader(open("template_s21.pdf", "rb"))
+        camada_dados = PdfReader(packet)
+        
+        output = PdfWriter()
+        
+        # Pega a primeira página do original
+        pagina_principal = arquivo_base.pages[0]
+        # Sobrepõe a camada de dados
+        pagina_principal.merge_page(camada_dados.pages[0])
+        
+        output.add_page(pagina_principal)
+        
+        # Retorna o PDF final para o Streamlit
+        buffer_final = io.BytesIO()
+        output.write(buffer_final)
+        return buffer_final.getvalue()
+        
+    except Exception as e:
+        # Caso o arquivo original não seja encontrado, ele avisa (importante para não travar o app)
+        return f"Erro: Certifique-se de que o arquivo template_s21.pdf está no servidor. {e}".encode()
 
 
 
