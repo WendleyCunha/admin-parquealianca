@@ -6,3 +6,4 @@ pdfrw
 reportlab
 pypdf
 pypdf==4.0.1
+base64
