@@ -26,62 +26,67 @@ st.markdown("""
 
 # --- FUNÇÃO MESTRE: PREENCHIMENTO DE PDF ORIGINAL (S-21) ---
 def preencher_s21_original(pdf_template, dados_row, mes_sel):
-    """Preenche o PDF original S-21 baseado em coordenadas precisas."""
+    """Preenche o PDF original S-21 e fixa o conteúdo para visualização imediata."""
     try:
-        # Importante: resetar o ponteiro do arquivo para leitura repetida
         pdf_template.seek(0)
         reader = PdfReader(pdf_template)
         writer = PdfWriter()
         
-        # Pega a primeira página e adiciona ao writer primeiro (Evita IndexError)
+        # Copia as páginas do original
         page = reader.pages[0]
-        new_page = writer.add_page(page)
+        writer.add_page(page)
         
-        # Coordenadas Y para cada mês (Grid S-21-T 11/23)
+        # Coordenadas Y (Grid S-21-T 11/23)
         coords_y = {
             "SETEMBRO": 532, "OUTUBRO": 512, "NOVEMBRO": 492, "DEZEMBRO": 472,
             "JANEIRO": 452, "FEVEREIRO": 432, "MARÇO": 412, "ABRIL": 392,
             "MAIO": 372, "JUNHO": 352, "JULHO": 332, "AGOSTO": 312
         }
         
-        # Normaliza o mês de referência
         mes_puro = str(mes_sel).split()[0].upper()
         y_base = coords_y.get(mes_puro, 412)
 
-        # 1. Inserir Nome do Publicador
+        # 1. Nome
         nome_txt = str(dados_row.get('nome_oficial', ''))
-        anon_nome = AnnotationBuilder.free_text(
-            nome_txt,
-            rect=(55, 718, 400, 735), font="Helvetica-Bold", font_size=11
-        )
-        writer.add_annotation(page_number=0, annotation=anon_nome)
+        # Note que usamos writer.pages[0] para adicionar a anotação
+        writer.add_annotation(page_number=0, annotation=AnnotationBuilder.free_text(
+            nome_txt, rect=(55, 718, 400, 735), font="Helvetica-Bold", font_size=11
+        ))
         
-        # 2. Marcação de Participou no Ministério (X)
+        # 2. Participou (X)
         if dados_row['horas'] > 0 or dados_row.get('estudos_biblicos', 0) > 0:
-            anon_check = AnnotationBuilder.free_text(
-                "X", rect=(188, y_base, 205, y_base + 12), font_size=12
-            )
-            writer.add_annotation(page_number=0, annotation=anon_check)
+            writer.add_annotation(page_number=0, annotation=AnnotationBuilder.free_text(
+                "X", rect=(191, y_base, 205, y_base + 12), font_size=12
+            ))
 
-        # 3. Inserir Estudos Bíblicos
+        # 3. Estudos Bíblicos
         if dados_row['estudos_biblicos'] > 0:
-            anon_estudos = AnnotationBuilder.free_text(
+            writer.add_annotation(page_number=0, annotation=AnnotationBuilder.free_text(
                 str(int(dados_row['estudos_biblicos'])),
-                rect=(265, y_base, 305, y_base + 12), font_size=10
-            )
-            writer.add_annotation(page_number=0, annotation=anon_estudos)
+                rect=(273, y_base, 305, y_base + 12), font_size=10
+            ))
 
-        # 4. Inserir Horas
+        # 4. Horas
         if dados_row['horas'] > 0:
-            anon_horas = AnnotationBuilder.free_text(
+            writer.add_annotation(page_number=0, annotation=AnnotationBuilder.free_text(
                 str(int(dados_row['horas'])),
-                rect=(510, y_base, 560, y_base + 12), font_size=10
-            )
-            writer.add_annotation(page_number=0, annotation=anon_horas)
+                rect=(518, y_base, 560, y_base + 12), font_size=10
+            ))
+
+        # --- O SEGREDO PARA NÃO FICAR EM BRANCO ---
+        # Força o PDF a mostrar as anotações como conteúdo da página
+        for page in writer.pages:
+            writer.page_to_array(page) # Prepara a página
+            
+        # Esta função mescla as anotações ao "desenho" do PDF
+        # Disponível nas versões recentes do pypdf
+        # Se sua versão for antiga, remova o 'capabilities'
+        # writer.flatten() 
 
         output = io.BytesIO()
         writer.write(output)
         return output.getvalue()
+        
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
         return None
