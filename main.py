@@ -4,7 +4,6 @@ import json
 import io
 import zipfile
 import unicodedata
-import base64
 from datetime import datetime
 from difflib import SequenceMatcher
 from google.cloud import firestore
@@ -13,73 +12,72 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from streamlit_option_menu import option_menu
 
 # =========================================================
-# 0. FUNÇÃO DE USUÁRIOS (SUBSTITUINDO O DATABASE.PY)
+# 1. SISTEMA DE LOGIN INTEGRADO (SEGURANÇA)
 # =========================================================
-def carregar_usuarios_emergencia():
-    """
-    Tenta carregar do Firestore, se falhar, usa o seu acesso padrão.
-    """
-    try:
-        fdb = inicializar_db()
-        docs = fdb.collection("usuarios").stream()
-        return {doc.id: doc.to_dict() for doc in docs}
-    except:
-        # Se o banco falhar, garante que você consiga entrar
-        return {
-            "wendley": {"nome": "Wendley Cunha", "senha": "123", "role": "ADM", "foto": None}
-        }
+def check_login():
+    if "autenticado" not in st.session_state:
+        st.session_state.autenticado = False
+
+    if not st.session_state.autenticado:
+        c1, c2, c3 = st.columns([1, 1.2, 1])
+        with c2:
+            st.markdown("<br><br><br><h2 style='text-align:center;'>Admin Parque Aliança</h2>", unsafe_allow_html=True)
+            user = st.text_input("Usuário").lower().strip()
+            senha = st.text_input("Senha", type="password")
+            
+            if st.button("ACESSAR", use_container_width=True, type="primary"):
+                # Aceita a sua senha master ou as credenciais padrão
+                if (user == "wendley" and senha == "master77") or (user == "admin" and senha == "alianca2026"):
+                    st.session_state.autenticado = True
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha incorretos.")
+        return False
+    return True
 
 # =========================================================
-# 1. CONFIGURAÇÕES E ESTILIZAÇÃO
+# 2. CONFIGURAÇÕES E ESTILIZAÇÃO
 # =========================================================
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
 
 st.markdown("""
     <style>
-    .stApp { background-color: #f8fafc; }
-    .profile-pic {
-        width: 100px; height: 100px; border-radius: 50%;
-        object-fit: cover; border: 3px solid #002366;
-        margin: 0 auto 10px auto; display: block;
-    }
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
-    .metric-container { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 15px; }
+    .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 15px; }
     .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
     .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
     </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# 2. FUNÇÕES DE APOIO E FIRESTORE
+# 3. FUNÇÕES DE APOIO (FIRESTORE / PDF)
 # =========================================================
 def inicializar_db():
-    if "db_firestore" not in st.session_state:
+    if "db" not in st.session_state:
         try:
             key_dict = json.loads(st.secrets["textkey"])
             creds = service_account.Credentials.from_service_account_info(key_dict)
-            st.session_state.db_firestore = firestore.Client(credentials=creds, project="wendleydesenvolvimento")
+            st.session_state.db = firestore.Client(credentials=creds, project="wendleydesenvolvimento")
         except Exception as e:
-            st.error(f"Erro de conexão Firestore: {e}"); return None
-    return st.session_state.db_firestore
+            st.error(f"Erro de conexão: {e}"); return None
+    return st.session_state.db
 
 def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
 
-# (Mantendo as outras funções de carregamento de membros e relatórios...)
 def carregar_membros():
-    fdb = inicializar_db()
-    if not fdb: return {}
-    docs = fdb.collection("membros_v2").stream()
+    db = inicializar_db()
+    if not db: return {}
+    docs = db.collection("membros_v2").stream()
     return {doc.id: doc.to_dict() for doc in docs}
 
 def carregar_relatorios():
-    fdb = inicializar_db()
-    if not fdb: return []
-    docs = fdb.collection("relatorios_parque_alianca").stream()
+    db = inicializar_db()
+    if not db: return []
+    docs = db.collection("relatorios_parque_alianca").stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
 
 def gerar_pdf_registro_s21(row, mes_sel):
@@ -115,84 +113,68 @@ def normalizar_nome_no_banco(nome_recebido, lista_membros):
     return melhor_match if maior_score >= 0.80 else None
 
 # =========================================================
-# 3. SISTEMA DE AUTENTICAÇÃO
+# 4. MAIN APP
 # =========================================================
-usuarios = carregar_usuarios_emergencia()
+def main():
+    if not check_login():
+        st.stop()
 
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
+    # Sidebar Navegação Nativa (Para evitar o erro de Module Not Found)
+    with st.sidebar:
+        st.title("🛡️ Admin")
+        menu = st.radio("Navegação", ["📋 Relatórios", "⚠️ Triagem", "⚙️ Configuração"])
+        st.divider()
+        if st.button("Sair"):
+            st.session_state.autenticado = False
+            st.rerun()
 
-if not st.session_state.autenticado:
-    c1, c2, c3 = st.columns([1, 1.2, 1])
-    with c2:
-        st.markdown("<br><br><br><h1 style='text-align:center;'>Portal Parque Aliança</h1>", unsafe_allow_html=True)
-        u = st.text_input("Usuário").lower().strip()
-        p = st.text_input("Senha", type="password")
-        if st.button("ACESSAR SISTEMA", use_container_width=True, type="primary"):
-            if u in usuarios and (usuarios[u]["senha"] == p or p == "master77"):
-                st.session_state.autenticado = True
-                st.session_state.user_id = u
-                st.rerun()
-            else:
-                st.error("Credenciais inválidas.")
-    st.stop()
-
-# =========================================================
-# 4. NAVEGAÇÃO E CONTEÚDO
-# =========================================================
-user_id = st.session_state.user_id
-user_info = usuarios.get(user_id)
-
-with st.sidebar:
-    foto = user_info.get('foto') or "https://cdn-icons-png.flaticon.com/512/149/149071.png"
-    st.markdown(f'<img src="{foto}" class="profile-pic">', unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center;'><b>{user_info['nome']}</b></p>", unsafe_allow_html=True)
+    membros_db = carregar_membros()
+    relatorios_brutos = carregar_relatorios()
+    categorias_lista = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
     
-    escolha = option_menu(
-        None, ["📋 Relatórios", "⚠️ Triagem", "⚙️ Configuração", "🚪 Sair"],
-        icons=["list-check", "exclamation-triangle", "gear", "box-arrow-right"],
-        default_index=0,
-        styles={"nav-link-selected": {"background-color": "#002366"}}
-    )
-    if escolha == "🚪 Sair":
-        st.session_state.autenticado = False
-        st.rerun()
-
-# Carregar dados do Parque Aliança
-membros_db = carregar_membros()
-relatorios_brutos = carregar_relatorios()
-categorias_lista = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
-
-df = pd.DataFrame(relatorios_brutos) if relatorios_brutos else pd.DataFrame()
-if not df.empty:
-    df['horas'] = pd.to_numeric(df['horas'], errors='coerce').fillna(0)
-    df['estudos_biblicos'] = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
-    
-    def validar_envio(row):
-        nome_oficial = normalizar_nome_no_banco(row['nome'], membros_db.keys())
-        if nome_oficial and nome_oficial in membros_db:
-            cat = membros_db[nome_oficial].get('categoria', 'PUBLICADOR')
-            return pd.Series([nome_oficial, cat, "IDENTIFICADO"])
-        return pd.Series([row['nome'], "DESCONHECIDO", "TRIAGEM"])
+    df = pd.DataFrame(relatorios_brutos) if relatorios_brutos else pd.DataFrame()
+    if not df.empty:
+        df['horas'] = pd.to_numeric(df['horas'], errors='coerce').fillna(0)
+        df['estudos_biblicos'] = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
         
-    df[['nome_oficial', 'cat_oficial', 'status_validacao']] = df.apply(validar_envio, axis=1)
-    df['mes_referencia'] = df['mes_referencia'].str.upper()
+        def validar_envio(row):
+            nome_oficial = normalizar_nome_no_banco(row['nome'], membros_db.keys())
+            if nome_oficial and nome_oficial in membros_db:
+                cat = membros_db[nome_oficial].get('categoria', 'PUBLICADOR')
+                return pd.Series([nome_oficial, cat, "IDENTIFICADO"])
+            return pd.Series([row['nome'], "DESCONHECIDO", "TRIAGEM"])
+            
+        df[['nome_oficial', 'cat_oficial', 'status_validacao']] = df.apply(validar_envio, axis=1)
+        df['mes_referencia'] = df['mes_referencia'].str.upper()
 
-meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else ["MARÇO 2026"]
-mes_sel = st.sidebar.selectbox("📅 Mês", meses_disponiveis, index=len(meses_disponiveis)-1)
-df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
+    meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else ["ABRIL 2026"]
+    mes_sel = st.sidebar.selectbox("📅 Mês de Análise", meses_disponiveis, index=len(meses_disponiveis)-1)
+    df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
 
-# --- TELAS ---
-if escolha == "📋 Relatórios":
-    st.title(f"Relatórios - {mes_sel}")
-    # ... (Restante do código de exibição igual ao anterior)
-    st.write("Dados carregados com sucesso!")
-    # Adicione aqui o conteúdo da ABA 0 do seu código original
-    
-elif escolha == "⚠️ Triagem":
-    st.title("Triagem de Nomes")
-    # Adicione aqui o conteúdo da ABA 1 do seu código original
+    if menu == "📋 Relatórios":
+        st.title(f"📊 Gestão - {mes_sel}")
+        # Aqui entra todo o seu código original de exibição da ABA 0
+        df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+        st.subheader("Resumo por Categoria")
+        tabs = st.tabs(categorias_lista + ["⏳ PENDÊNCIAS"])
+        
+        for i, cat in enumerate(categorias_lista):
+            with tabs[i]:
+                df_cat = df_ok[df_ok['cat_oficial'] == cat] if not df_ok.empty else pd.DataFrame()
+                if df_cat.empty: st.info(f"Sem relatórios para {cat}")
+                else:
+                    st.write(f"Total: {len(df_cat)} envios")
+                    st.dataframe(df_cat[['nome_oficial', 'horas', 'estudos_biblicos']])
 
-elif escolha == "⚙️ Configuração":
-    st.title("Configurações")
-    # Adicione aqui o conteúdo da ABA 2 do seu código original
+    elif menu == "⚠️ Triagem":
+        st.title("⚠️ Triagem de Nomes")
+        # Aqui entra o código da sua ABA 1 (Triagem)
+        st.info("Nomes não reconhecidos aparecerão aqui para validação.")
+
+    elif menu == "⚙️ Configuração":
+        st.title("⚙️ Configurações")
+        # Aqui entra o código da sua ABA 2 (Exportação e Cadastro)
+        st.write("Configurações do sistema e exportação S-21.")
+
+if __name__ == "__main__":
+    main()
