@@ -28,21 +28,27 @@ def inicializar_db():
 
 db = inicializar_db()
 
-# --- SISTEMA DE LOGIN E SEGURANÇA ---
-def verificar_login():
+# --- SEGURANÇA: INICIALIZAÇÃO DE ESTADOS ---
+def inicializar_estados():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
-        st.session_state.user_data = None
+    if "user_data" not in st.session_state:
+        # Inicializa com estrutura vazia para evitar AttributeError
+        st.session_state.user_data = {"username": "", "permissao": [], "role": "user"}
 
+# --- SISTEMA DE LOGIN ---
+def verificar_login():
+    inicializar_estados()
+    
     if not st.session_state.autenticado:
         c1, c2, c3 = st.columns([1, 1.2, 1])
         with c2:
             st.markdown("<br><br><h2 style='text-align:center;'>Acesso Administrativo</h2>", unsafe_allow_html=True)
-            user_input = st.text_input("Usuário").lower().strip()
-            senha_input = st.text_input("Senha", type="password")
+            user_input = st.text_input("Usuário", key="login_user").lower().strip()
+            senha_input = st.text_input("Senha", type="password", key="login_pass")
             
             if st.button("LOGAR", use_container_width=True, type="primary"):
-                # Master Password (Backup de Emergência)
+                # Master Password
                 if user_input == "wendley" and senha_input == "master77":
                     st.session_state.autenticado = True
                     st.session_state.user_data = {"username": "wendley", "role": "admin", "permissao": ["Relatórios", "Passagens"]}
@@ -52,7 +58,7 @@ def verificar_login():
                 user_doc = db.collection("usuarios_app").document(user_input).get()
                 if user_doc.exists:
                     dados = user_doc.to_dict()
-                    if dados['senha'] == senha_input:
+                    if dados.get('senha') == senha_input:
                         st.session_state.autenticado = True
                         st.session_state.user_data = dados
                         st.rerun()
@@ -61,17 +67,19 @@ def verificar_login():
         return False
     return True
 
-# --- ESTILIZAÇÃO (ORIGINAL) ---
+# --- ESTILIZAÇÃO ---
 st.markdown("""
     <style>
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; position: relative; }
     .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; margin-right: 25px; }
     .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 15px; }
     .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
+    .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
+    .triagem-box { background-color: #fff4e5; padding: 15px; border-radius: 10px; border: 1px solid #ffa94d; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE APOIO E PDF (MANTIDAS DO SEU ORIGINAL) ---
+# --- FUNÇÕES DE APOIO ---
 def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
@@ -118,30 +126,41 @@ def gerar_pdf_registro_s21(row, mes_sel):
 
 # --- MAIN ---
 def main():
+    # 1. Garante inicialização antes de qualquer acesso
+    inicializar_estados()
+    
+    # 2. Bloqueia se não logado
     if not verificar_login():
         st.stop()
 
+    # 3. Acesso seguro ao user_data
     user_info = st.session_state.user_data
+    permissoes_usuario = user_info.get('permissao', [])
     
     # MENU LATERAL DINÂMICO
     with st.sidebar:
-        st.title(f"Olá, {user_info['username'].capitalize()}")
+        st.title(f"Olá, {user_info.get('username', 'Usuário').capitalize()}")
         opcoes_menu = []
-        if "Relatórios" in user_info['permissao']: opcoes_menu.append("📊 Gestão Parque Aliança")
-        if "Passagens" in user_info['permissao']: opcoes_menu.append("🎫 Sistema de Passagens")
+        if "Relatórios" in permissoes_usuario: opcoes_menu.append("📊 Gestão Parque Aliança")
+        if "Passagens" in permissoes_usuario: opcoes_menu.append("🎫 Sistema de Passagens")
         
+        if not opcoes_menu:
+            st.error("Sem permissões. Contate Wendley.")
+            st.stop()
+            
         app_mode = st.radio("Ir para:", opcoes_menu)
         st.divider()
         if st.button("Sair"):
             st.session_state.autenticado = False
+            st.session_state.user_data = None
             st.rerun()
 
     if app_mode == "🎫 Sistema de Passagens":
         st.title("🎫 Sistema de Passagens")
-        st.info("O módulo de passagens pode ser importado aqui.")
+        st.info("Módulo de passagens ativo para este usuário.")
         return
 
-    # --- CÓDIGO DO PARQUE ALIANÇA ---
+    # --- LÓGICA GESTÃO PARQUE ALIANÇA ---
     st.title("📊 Gestão Parque Aliança")
     membros_db = carregar_membros()
     relatorios_brutos = carregar_relatorios()
@@ -168,53 +187,67 @@ def main():
 
     tabs_principal = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "⚙️ CONFIGURAÇÃO"])
 
-    # --- ABA 0 e 1: MANTIDAS IGUAIS AO SEU ORIGINAL ---
     with tabs_principal[0]:
+        df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
         st.subheader(f"Resumo de {mes_sel}")
-        # ... (seu código original de visualização de cards de relatórios) ...
+        sub_tabs_rel = st.tabs(["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "⏳ PENDÊNCIAS"])
+        
+        for i, cat in enumerate(categorias_lista):
+            with sub_tabs_rel[i]:
+                df_cat = df_ok[df_ok['cat_oficial'] == cat] if not df_ok.empty else pd.DataFrame()
+                if df_cat.empty: st.info(f"Nenhum relatório de {cat} recebido.")
+                else:
+                    m1, m2, m3 = st.columns(3)
+                    m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{len(df_cat)}</div></div>', unsafe_allow_html=True)
+                    m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}h</div></div>', unsafe_allow_html=True)
+                    m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(df_cat["estudos_biblicos"].sum())}</div></div>', unsafe_allow_html=True)
+                    
+                    cols = st.columns(4)
+                    for idx, (_, r) in enumerate(df_cat.sort_values('nome_oficial').iterrows()):
+                        with cols[idx % 4]:
+                            st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div><div style="font-size:0.8rem;">⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])} est.</div></div>', unsafe_allow_html=True)
 
     with tabs_principal[1]:
         st.subheader("Nomes para Identificar")
-        # ... (seu código original de triagem) ...
+        df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
+        if df_triagem.empty: st.success("✨ Tudo certo nos nomes!")
+        else:
+            st.dataframe(df_triagem[['nome', 'horas', 'mes_referencia']], use_container_width=True)
 
-    # --- ABA 2: CONFIGURAÇÃO (ONDE ESTÁ A GESTÃO DE USUÁRIOS) ---
     with tabs_principal[2]:
-        st.subheader("Acessos e Configurações")
-        
+        st.subheader("Painel de Controle e Acessos")
         col_cfg1, col_cfg2 = st.columns(2)
         
         with col_cfg1:
             with st.expander("🔑 Alterar Minha Senha"):
                 nova_senha = st.text_input("Nova Senha", type="password")
-                if st.button("Atualizar Senha"):
+                if st.button("Atualizar Minha Senha"):
                     db.collection("usuarios_app").document(user_info['username']).update({"senha": nova_senha})
-                    st.success("Senha alterada com sucesso!")
+                    st.success("Senha alterada!")
 
-        # APENAS VOCÊ (WENDLEY/ADMIN) VÊ ISSO
         if user_info.get('role') == 'admin':
             with col_cfg2:
-                with st.expander("👥 Criar Novo Usuário"):
-                    novo_user = st.text_input("Username").lower().strip()
-                    nova_pass = st.text_input("Senha", type="password", key="new_u_pass")
-                    permissoes = st.multiselect("Acessos", ["Relatórios", "Passagens"])
-                    if st.button("Cadastrar Usuário"):
+                with st.expander("👥 Gerenciar Usuários (Novo)"):
+                    novo_user = st.text_input("Nome do Usuário").lower().strip()
+                    nova_pass = st.text_input("Senha", type="password", key="reg_pass")
+                    perms = st.multiselect("Acessos", ["Relatórios", "Passagens"])
+                    if st.button("Salvar Novo Usuário"):
                         if novo_user and nova_pass:
                             db.collection("usuarios_app").document(novo_user).set({
-                                "username": novo_user,
-                                "senha": nova_pass,
-                                "permissao": permissoes,
-                                "role": "user"
+                                "username": novo_user, "senha": nova_pass, "permissao": perms, "role": "user"
                             })
-                            st.success(f"Usuário {novo_user} criado!")
+                            st.success(f"Usuário {novo_user} cadastrado!")
         
         st.divider()
-        st.subheader("Exportação")
+        st.subheader("📦 Exportação S-21")
         if not df_mes.empty:
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
-                for _, r in df_mes[df_mes['status_validacao'] == "IDENTIFICADO"].iterrows():
-                    zf.writestr(f"S21_{r['nome_oficial']}.pdf", gerar_pdf_registro_s21(r, mes_sel))
-            st.download_button("📥 BAIXAR TUDO ZIP", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", "application/zip")
+            df_export = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
+            if not df_export.empty:
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
+                    for _, r in df_export.iterrows():
+                        zf.writestr(f"S21_{r['nome_oficial']}.pdf", gerar_pdf_registro_s21(r, mes_sel))
+                st.download_button("📥 BAIXAR TUDO ZIP", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", "application/zip", use_container_width=True)
 
     st.caption("S-4-T 11/23 | Parque Aliança | Gestão Administrativa")
 
