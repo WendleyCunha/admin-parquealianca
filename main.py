@@ -4,7 +4,6 @@ import json
 import io
 import zipfile
 import unicodedata
-import base64
 from difflib import SequenceMatcher
 from google.cloud import firestore
 from google.oauth2 import service_account
@@ -12,6 +11,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from pypdf import PdfReader, PdfWriter
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
@@ -87,19 +87,6 @@ def deletar_relatorio(relatorio_id):
         db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
         st.toast("Relatório removido!")
 
-def editar_nome_membro(nome_antigo, nome_novo, categoria):
-    db = inicializar_db()
-    if db and nome_antigo != nome_novo:
-        db.collection("membros_v2").document(nome_novo).set({"categoria": categoria})
-        db.collection("membros_v2").document(nome_antigo).delete()
-
-def validar_e_gravar_novo_membro(relatorio_id, nome_correto, categoria):
-    db = inicializar_db()
-    if db:
-        db.collection("membros_v2").document(nome_correto).set({"categoria": categoria}, merge=True)
-        db.collection("relatorios_parque_alianca").document(relatorio_id).update({"nome": nome_correto})
-        st.toast(f"✅ {nome_correto} validado!")
-
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
     entrada_norm = normalizar_texto(nome_recebido)
     if not entrada_norm or len(entrada_norm) < 3: return None
@@ -116,6 +103,7 @@ def main():
     st.title("📊 Gestão Parque Aliança")
     membros_db = carregar_membros()
     relatorios_brutos = carregar_relatorios()
+    categorias_lista = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
     
     df = pd.DataFrame(relatorios_brutos) if relatorios_brutos else pd.DataFrame()
     if not df.empty:
@@ -138,14 +126,12 @@ def main():
 
     tabs_principal = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "⚙️ CONFIGURAÇÃO"])
 
+    # --- ABA 0: RELATÓRIOS ---
     with tabs_principal[0]:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
         entregaram = df_ok['nome_oficial'].unique() if not df_ok.empty else []
-        
         st.subheader(f"Resumo de {mes_sel}")
         sub_tabs_rel = st.tabs(["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "⏳ PENDÊNCIAS"])
-        
-        categorias_lista = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
         
         for i, cat in enumerate(categorias_lista):
             with sub_tabs_rel[i]:
@@ -180,6 +166,7 @@ def main():
                             inicializar_db().collection("relatorios_parque_alianca").add({"nome": p_nome, "mes_referencia": mes_sel, "horas": 0, "estudos_biblicos": 0, "observacoes": "Baixa manual"})
                             st.rerun()
 
+    # --- ABA 1: TRIAGEM ---
     with tabs_principal[1]:
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
         if df_triagem.empty: st.success("✨ Tudo certo nos nomes!")
@@ -198,6 +185,7 @@ def main():
                         validar_e_gravar_novo_membro(row['id'], n_s if n_s != "-- Selecionar --" else n_f, cat_n)
                         st.rerun()
 
+    # --- ABA 2: CONFIGURAÇÃO ---
     with tabs_principal[2]:
         sub_tabs_cfg = st.tabs(["👤 MEMBROS", "📂 REGISTROS TOTAIS (PDF/ZIP)"])
         
@@ -208,42 +196,52 @@ def main():
             new_c = c2.selectbox("Categoria", categorias_lista, key="new_mem_c")
             if c3.button("Cadastrar", use_container_width=True):
                 if new_n: atualizar_membro(new_n, new_c); st.rerun()
-            
-            st.write("---")
-            st.subheader("Lista de Membros")
-            for m_nome in sorted(membros_db.keys()):
-                with st.expander(f"👤 {m_nome} ({membros_db[m_nome].get('categoria')})"):
-                    ca, cb = st.columns(2)
-                    e_n = ca.text_input("Editar Nome:", value=m_nome, key=f"ed_n_{m_nome}")
-                    e_c = ca.selectbox("Categoria:", categorias_lista + ["INATIVO"], 
-                                      index=(categorias_lista + ["INATIVO"]).index(membros_db[m_nome].get('categoria', 'PUBLICADOR')), 
-                                      key=f"ed_c_{m_nome}")
-                    if ca.button("Salvar Alterações", key=f"ed_s_{m_nome}"):
-                        if e_n != m_nome: editar_nome_membro(m_nome, e_n, e_c)
-                        else: atualizar_membro(e_n, e_c)
-                        st.rerun()
-                    if cb.button("Excluir Membro", key=f"ed_d_{m_nome}"):
-                        inicializar_db().collection("membros_v2").document(m_nome).delete(); st.rerun()
 
         with sub_tabs_cfg[1]:
-            st.subheader(f"Exportação de Arquivos - {mes_sel}")
-            df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
-            if df_ok.empty: st.info("Sem dados para exportar.")
-            else:
-                df_ok = df_ok.sort_values('nome_oficial')
+            st.subheader("📁 Gestão de Pastas e Upload")
+            col_p1, col_p2 = st.columns([1, 2])
+            with col_p1:
+                nova_pasta = st.text_input("📁 Criar Nova Pasta")
+                if st.button("Criar Pasta"):
+                    if nova_pasta:
+                        inicializar_db().collection("pastas_arquivos").document(nova_pasta).set({"criado_em": firestore.SERVER_TIMESTAMP})
+                        st.rerun()
+            
+            pastas_docs = inicializar_db().collection("pastas_arquivos").stream()
+            lista_pastas = [doc.id for doc in pastas_docs]
+            if lista_pastas:
+                pasta_sel = st.selectbox("Selecione a pasta", lista_pastas)
+                uploaded_files = st.file_uploader(f"Upload para: {pasta_sel}", accept_multiple_files=True)
+                if uploaded_files: st.success(f"{len(uploaded_files)} arquivos enviados para {pasta_sel}!")
+
+            st.divider()
+            st.subheader(f"📦 Exportação S-21 - {mes_sel}")
+            
+            df_export = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+            
+            if not df_export.empty:
+                # 3. DOWNLOAD ZIP GERAL
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
-                    for _, r in df_ok.iterrows():
-                        zf.writestr(f"Registro_{r['nome_oficial']}.pdf", gerar_pdf_registro_s21(r, mes_sel))
+                    for _, r in df_export.iterrows():
+                        zf.writestr(f"S21_{r['nome_oficial']}.pdf", gerar_pdf_registro_s21(r, mes_sel))
                 
-                st.download_button("📥 BAIXAR TODOS OS REGISTROS (ZIP)", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", "application/zip", use_container_width=True)
+                st.download_button("📥 BAIXAR TUDO ZIP (100%)", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", "application/zip", use_container_width=True)
                 
                 st.write("---")
-                st.write("#### Registros Individuais")
-                for _, r in df_ok.iterrows():
-                    c1, c2 = st.columns([4, 1])
-                    c1.write(f"📄 {r['nome_oficial']}")
-                    c2.download_button("PDF", gerar_pdf_registro_s21(r, mes_sel), f"S21_{r['nome_oficial']}.pdf", key=f"pdf_btn_{r['id']}")
+                # 2 e 4. EDIÇÃO E IMPRESSÃO INDIVIDUAL
+                for _, r in df_export.sort_values('nome_oficial').iterrows():
+                    with st.expander(f"📄 {r['nome_oficial']}"):
+                        ce1, ce2 = st.columns([3, 1])
+                        with ce1:
+                            new_h = st.number_input("Editar Horas", value=int(r['horas']), key=f"edit_h_{r['id']}")
+                            new_e = st.number_input("Editar Estudos", value=int(r['estudos_biblicos']), key=f"edit_e_{r['id']}")
+                            if st.button("Salvar Alterações", key=f"save_ed_{r['id']}"):
+                                inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({"horas": new_h, "estudos_biblicos": new_e})
+                                st.rerun()
+                        with ce2:
+                            pdf_data = gerar_pdf_registro_s21(r, mes_sel)
+                            st.download_button("Gerar PDF", pdf_data, f"S21_{r['nome_oficial']}.pdf", key=f"pdf_ind_{r['id']}")
 
     st.caption("S-4-T 11/23 | Parque Aliança | Gestão Administrativa")
 
