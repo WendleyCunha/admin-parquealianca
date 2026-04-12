@@ -14,22 +14,62 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Admin Parque Aliança Pro", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="Gestão Parque Aliança Pro", layout="wide", page_icon="📊")
 
-# --- ESTILIZAÇÃO CUSTOMIZADA ---
+# --- ESTILIZAÇÃO PROFISSIONAL ---
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    div[data-testid="stMetricValue"] { font-size: 1.8rem; color: #002366; }
-    .stButton>button { border-radius: 5px; height: 3em; width: 100%; }
-    .status-card { 
-        padding: 20px; border-radius: 10px; border-left: 5px solid #002366; 
-        background: white; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
-    }
+    .main { background-color: #f1f5f9; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
+    .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; }
+    .sidebar-info { font-size: 0.85rem; color: #64748b; margin-top: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE NÚCLEO (DB & LOGIC) ---
+# --- FUNÇÕES DE APOIO ---
+def normalizar_texto(texto):
+    if not texto: return ""
+    return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
+
+def gerar_pdf_registro_s21(row, mes_sel):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Título
+    title_style = ParagraphStyle('Title', fontSize=16, alignment=1, spaceAfter=20, fontName='Helvetica-Bold')
+    elements.append(Paragraph("REGISTRO DE PUBLICADOR DE CONGREGAÇÃO", title_style))
+    
+    # Cabeçalho
+    data_cabecalho = [
+        [Paragraph(f"<b>Nome:</b> {row['nome_oficial']}", styles['Normal']), ""],
+        [f"Mês: {mes_sel}", "Ano de serviço: 2026"]
+    ]
+    t_cabecalho = Table(data_cabecalho, colWidths=[350, 150])
+    elements.append(t_cabecalho)
+    elements.append(Spacer(1, 15))
+    
+    # Tabela de Dados (Layout S-21)
+    header = ["Participou no\nministério", "Estudos\nbíblicos", "Pioneiro\nauxiliar", "Horas", "Observações"]
+    check_min = "X" if row['horas'] > 0 else ""
+    check_pion = "X" if row['cat_oficial'] == "PIONEIRO AUXILIAR" else ""
+    corpo = [[f"[{check_min}]", str(int(row['estudos_biblicos'])), f"[{check_pion}]", str(int(row['horas'])), row.get('observacoes', '')]]
+    
+    t_dados = Table([header] + corpo, colWidths=[100, 80, 80, 70, 160])
+    t_dados.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)
+    ]))
+    elements.append(t_dados)
+    doc.build(elements)
+    return buffer.getvalue()
+
+# --- FUNÇÕES DE BANCO (CONECTIVIDADE) ---
 def inicializar_db():
     if "db" not in st.session_state:
         try:
@@ -37,7 +77,8 @@ def inicializar_db():
             creds = service_account.Credentials.from_service_account_info(key_dict)
             st.session_state.db = firestore.Client(credentials=creds, project="wendleydesenvolvimento")
         except Exception as e:
-            st.error("Erro na conexão com o Banco de Dados."); return None
+            st.error(f"Erro Crítico de Conexão: {e}")
+            return None
     return st.session_state.db
 
 def carregar_membros():
@@ -52,164 +93,145 @@ def carregar_relatorios():
     docs = db.collection("relatorios_parque_alianca").stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
 
-def normalizar_texto(texto):
-    if not texto: return ""
-    return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
+def atualizar_membro(nome, categoria):
+    db = inicializar_db()
+    if db: db.collection("membros_v2").document(nome).set({"categoria": categoria}, merge=True)
+
+def validar_e_gravar_novo_membro(relatorio_id, nome_correto, categoria):
+    db = inicializar_db()
+    if db:
+        db.collection("membros_v2").document(nome_correto).set({"categoria": categoria}, merge=True)
+        db.collection("relatorios_parque_alianca").document(relatorio_id).update({"nome": nome_correto})
+        st.toast(f"✅ {nome_correto} validado!")
 
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
     entrada_norm = normalizar_texto(nome_recebido)
-    if not entrada_norm: return None
+    if not entrada_norm or len(entrada_norm) < 3: return None
     melhor_match, maior_score = None, 0
     for nome_oficial in lista_membros:
         oficial_norm = normalizar_texto(nome_oficial)
+        if entrada_norm == oficial_norm: return nome_oficial
         score = SequenceMatcher(None, entrada_norm, oficial_norm).ratio()
         if score > maior_score: maior_score, melhor_match = score, nome_oficial
-    return melhor_match if maior_score >= 0.85 else None
+    return melhor_match if maior_score >= 0.82 else None
 
-# --- GERADOR DE PDF (S-21 PROFESSIONAL) ---
-def gerar_pdf_s21(row, mes_sel):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=30, bottomMargin=30)
-    elements = []
-    styles = getSampleStyleSheet()
-    
-    # Cabeçalho Estilizado
-    elements.append(Paragraph("REGISTRO DE PUBLICADOR DE CONGREGAÇÃO", styles['Title']))
-    elements.append(Spacer(1, 12))
-    
-    data_info = [
-        [Paragraph(f"<b>Nome:</b> {row['nome_oficial'].upper()}", styles['Normal']), ""],
-        [f"Mês de Referência: {mes_sel}", "Ano de Serviço: 2026"]
-    ]
-    elements.append(Table(data_info, colWidths=[350, 150]))
-    elements.append(Spacer(1, 20))
-    
-    # Tabela de Dados
-    headers = ["Participou", "Estudos", "Pioneiro Aux.", "Horas", "Observações"]
-    part = "Sim" if row['horas'] > 0 else "Não"
-    pion = "X" if row['cat_oficial'] == "PIONEIRO AUXILIAR" else ""
-    
-    data_tabela = [headers, [part, str(int(row['estudos_biblicos'])), pion, str(int(row['horas'])), row.get('observacoes', '')]]
-    
-    t = Table(data_tabela, colWidths=[80, 70, 80, 60, 180])
-    t.setStyle(TableStyle([
-        ('GRID', (0,0), (-1,-1), 1, colors.black),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-        ('FONTSIZE', (0,0), (-1,-1), 10),
-    ]))
-    elements.append(t)
-    doc.build(elements)
-    return buffer.getvalue()
-
-# --- INTERFACE PRINCIPAL ---
+# --- MAIN ---
 def main():
-    st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3208/3208726.png", width=100)
-    st.sidebar.title("Painel de Controle")
+    st.title("🚀 Gestão Parque Aliança Pro")
     
     membros_db = carregar_membros()
-    relatorios_raw = carregar_relatorios()
+    relatorios_brutos = carregar_relatorios()
     
-    # Processamento de DF
-    if relatorios_raw:
-        df = pd.DataFrame(relatorios_raw)
+    # Processamento Robusto de Dados
+    df = pd.DataFrame(relatorios_brutos) if relatorios_brutos else pd.DataFrame()
+    
+    if not df.empty:
         df['horas'] = pd.to_numeric(df['horas'], errors='coerce').fillna(0)
         df['estudos_biblicos'] = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
-        df['mes_referencia'] = df['mes_referencia'].str.upper()
-    else:
-        df = pd.DataFrame(columns=['nome', 'horas', 'estudos_biblicos', 'mes_referencia'])
-
-    meses = sorted(df['mes_referencia'].unique()) if not df.empty else ["MARÇO 2026"]
-    mes_sel = st.sidebar.selectbox("Selecionar Mês", meses)
-
-    # Identificação de nomes
-    if not df.empty:
-        df['nome_oficial'] = df['nome'].apply(lambda x: normalizar_nome_no_banco(x, membros_db.keys()))
-        df['cat_oficial'] = df['nome_oficial'].apply(lambda x: membros_db[x].get('categoria', 'PUBLICADOR') if x else 'TRIAGEM')
-        df_mes = df[df['mes_referencia'] == mes_sel]
-    else:
-        df_mes = pd.DataFrame()
-
-    # ABAS
-    t1, t2, t3, t4 = st.tabs(["📈 DASHBOARD", "📑 RELATÓRIOS", "👥 MEMBROS / INATIVOS", "🔍 TRIAGEM"])
-
-    with t1:
-        if not df_mes.empty:
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Total Horas", f"{int(df_mes['horas'].sum())}h")
-            c2.metric("Total Estudos", int(df_mes['estudos_biblicos'].sum()))
-            c3.metric("Relatórios", len(df_mes))
-            
-            entregaram = df_mes['nome_oficial'].dropna().unique()
-            faltam = [n for n in membros_db.keys() if n not in entregaram and membros_db[n].get('categoria') != "INATIVO"]
-            c4.metric("Pendentes", len(faltam))
-
-            st.write("### Quem ainda não entregou:")
-            if faltam:
-                cols = st.columns(3)
-                for i, p in enumerate(faltam):
-                    cols[i%3].warning(f"⚠️ {p}")
-            else:
-                st.success("Todos os relatórios foram entregues!")
-
-    with t2:
-        st.subheader(f"Gerenciamento de Documentos - {mes_sel}")
-        df_ok = df_mes[df_mes['cat_oficial'] != 'TRIAGEM']
         
+        # Correção do KeyError com verificação segura (get)
+        def validar_envio(row):
+            nome_oficial = normalizar_nome_no_banco(row['nome'], membros_db.keys())
+            if nome_oficial and nome_oficial in membros_db:
+                cat = membros_db[nome_oficial].get('categoria', 'PUBLICADOR')
+                return pd.Series([nome_oficial, cat, "IDENTIFICADO"])
+            return pd.Series([row['nome'], "DESCONHECIDO", "TRIAGEM"])
+        
+        df[['nome_oficial', 'cat_oficial', 'status_validacao']] = df.apply(validar_envio, axis=1)
+        df['mes_referencia'] = df['mes_referencia'].str.upper()
+
+    # Sidebar: Controle de Mês
+    meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else ["MARÇO 2026"]
+    mes_sel = st.sidebar.selectbox("📅 Mês de Análise", meses_disponiveis, index=len(meses_disponiveis)-1)
+    df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
+
+    # ABAS PRINCIPAIS
+    tab_rel, tab_triage, tab_inat, tab_cfg = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "💤 INATIVOS", "⚙️ CONFIGURAÇÃO"])
+
+    with tab_rel:
+        df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+        
+        # Totais Mágicos
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total de Relatórios", len(df_ok))
+        c2.metric("Horas Totais", f"{int(df_ok['horas'].sum() if not df_ok.empty else 0)}h")
+        c3.metric("Estudos Bíblicos", int(df_ok['estudos_biblicos'].sum() if not df_ok.empty else 0))
+
+        st.divider()
+        
+        sub_rel = st.tabs(["PUBLICADOR", "PIONEIROS", "⏳ PENDÊNCIAS"])
+        
+        with sub_rel[0]:
+            df_pub = df_ok[df_ok['cat_oficial'] == "PUBLICADOR"]
+            if df_pub.empty: st.info("Nenhum relatório.")
+            else:
+                for _, r in df_pub.iterrows():
+                    with st.container(border=True):
+                        col1, col2 = st.columns([4, 1])
+                        col1.write(f"**{r['nome_oficial']}** | ⏱️ {int(r['horas'])}h | 📚 {int(r['estudos_biblicos'])}")
+                        col2.download_button("PDF", gerar_pdf_registro_s21(r, mes_sel), f"S21_{r['nome_oficial']}.pdf", key=f"p_{r['id']}")
+
+        with sub_rel[1]:
+            df_pion = df_ok[df_ok['cat_oficial'].str.contains("PIONEIRO", na=False)]
+            if df_pion.empty: st.info("Nenhum pioneiro entregou ainda.")
+            else:
+                for _, r in df_pion.iterrows():
+                    with st.container(border=True):
+                        col1, col2 = st.columns([4, 1])
+                        col1.write(f"**{r['nome_oficial']}** ({r['cat_oficial']}) | ⏱️ {int(r['horas'])}h")
+                        col2.download_button("PDF", gerar_pdf_registro_s21(r, mes_sel), f"S21_{r['nome_oficial']}.pdf", key=f"pi_{r['id']}")
+
+        with sub_rel[2]:
+            entregaram = df_ok['nome_oficial'].unique() if not df_ok.empty else []
+            ativos = [n for n, d in membros_db.items() if d.get('categoria') != "INATIVO"]
+            faltantes = sorted([n for n in ativos if n not in entregaram])
+            
+            if faltantes:
+                st.warning(f"Existem {len(faltantes)} pessoas que ainda não entregaram.")
+                for p in faltantes:
+                    c1, c2 = st.columns([3, 1])
+                    c1.write(f"• {p}")
+                    if c2.button("Inativar", key=f"ina_{p}"):
+                        atualizar_membro(p, "INATIVO"); st.rerun()
+            else:
+                st.success("Tudo em dia! 100% de entrega.")
+
+    with tab_triage:
+        df_tri = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
+        if df_tri.empty: st.success("Nenhum nome para triagem.")
+        else:
+            for _, r in df_tri.iterrows():
+                with st.container(border=True):
+                    st.write(f"Digitado: `{r['nome']}`")
+                    sel_nome = st.selectbox("Quem é?", ["-- Novo Cadastro --"] + sorted(list(membros_db.keys())), key=f"t_{r['id']}")
+                    if st.button("Confirmar", key=f"b_{r['id']}"):
+                        validar_e_gravar_novo_membro(r['id'], r['nome'] if sel_nome == "-- Novo Cadastro --" else sel_nome, "PUBLICADOR")
+                        st.rerun()
+
+    with tab_inat:
+        st.subheader("Publicadores Inativos")
+        inativos = [n for n, d in membros_db.items() if d.get('categoria') == "INATIVO"]
+        if not inativos: st.info("Não há inativos.")
+        else:
+            for n in sorted(inativos):
+                c1, c2 = st.columns([4, 1])
+                c1.write(f"👤 {n}")
+                if c2.button("Reativar", key=f"re_{n}"):
+                    atualizar_membro(n, "PUBLICADOR"); st.rerun()
+
+    with tab_cfg:
+        # Espaço para exportação massiva e gestão de nomes
+        st.subheader("Ferramentas Administrativas")
         if not df_ok.empty:
-            # Botão de Exportação Massiva (Mágico)
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "a") as zf:
                 for _, r in df_ok.iterrows():
-                    zf.writestr(f"S21_{r['nome_oficial']}.pdf", gerar_pdf_s21(r, mes_sel))
-            
-            st.download_button("📥 BAIXAR TODOS OS PDFs (ZIP)", zip_buffer.getvalue(), f"Relatorios_{mes_sel}.zip", use_container_width=True)
-            
-            st.divider()
-            for _, r in df_ok.iterrows():
-                with st.expander(f"📄 {r['nome_oficial']} ({r['cat_oficial']})"):
-                    col_a, col_b = st.columns([2,1])
-                    pdf_bytes = gerar_pdf_s21(r, mes_sel)
-                    col_a.write(f"Horas: {r['horas']} | Estudos: {r['estudos_biblicos']}")
-                    col_b.download_button("Baixar PDF", pdf_bytes, f"S21_{r['nome_oficial']}.pdf", key=f"btn_{r['id']}")
+                    zf.writestr(f"S21_{r['nome_oficial']}.pdf", gerar_pdf_registro_s21(r, mes_sel))
+            st.download_button("📥 BAIXAR TUDO EM ZIP", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", use_container_width=True)
 
-    with t3:
-        col_m1, col_m2 = st.columns(2)
-        with col_m1:
-            st.subheader("Ativos")
-            for n, d in membros_db.items():
-                if d.get('categoria') != "INATIVO":
-                    with st.container(border=True):
-                        st.write(f"**{n}** - {d.get('categoria')}")
-                        if st.button("Mover para Inativo", key=f"to_ina_{n}"):
-                            inicializar_db().collection("membros_v2").document(n).update({"categoria": "INATIVO"})
-                            st.rerun()
-        with col_m2:
-            st.subheader("Inativos")
-            for n, d in membros_db.items():
-                if d.get('categoria') == "INATIVO":
-                    with st.container(border=True):
-                        st.write(f"❌ {n}")
-                        if st.button("Reativar", key=f"re_act_{n}"):
-                            inicializar_db().collection("membros_v2").document(n).update({"categoria": "PUBLICADOR"})
-                            st.rerun()
-
-    with t4:
-        st.subheader("Nomes não reconhecidos")
-        df_triagem = df_mes[df_mes['cat_oficial'] == 'TRIAGEM'] if not df_mes.empty else pd.DataFrame()
-        if df_triagem.empty:
-            st.success("Nenhum nome pendente de triagem.")
-        else:
-            for _, r in df_triagem.iterrows():
-                with st.container(border=True):
-                    st.write(f"Digitado: **{r['nome']}**")
-                    nome_correto = st.selectbox("Corrigir para:", ["-- Selecione --"] + list(membros_db.keys()), key=f"sel_{r['id']}")
-                    if st.button("Confirmar Correção", key=f"conf_{r['id']}"):
-                        if nome_correto != "-- Selecione --":
-                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({"nome": nome_correto})
-                            st.rerun()
+    st.sidebar.markdown(f"---")
+    st.sidebar.markdown(f"**Membros Cadastrados:** {len(membros_db)}")
+    st.sidebar.caption("Parque Aliança - Gestão v3.0")
 
 if __name__ == "__main__":
     main()
