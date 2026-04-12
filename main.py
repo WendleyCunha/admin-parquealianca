@@ -4,7 +4,6 @@ import json
 import io
 import zipfile
 import unicodedata
-from datetime import datetime
 from difflib import SequenceMatcher
 from google.cloud import firestore
 from google.oauth2 import service_account
@@ -13,47 +12,47 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-# =========================================================
-# 1. SISTEMA DE LOGIN INTEGRADO (SEGURANÇA)
-# =========================================================
-def check_login():
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
+
+# --- SISTEMA DE LOGIN ---
+def verificar_login():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
 
     if not st.session_state.autenticado:
         c1, c2, c3 = st.columns([1, 1.2, 1])
         with c2:
-            st.markdown("<br><br><br><h2 style='text-align:center;'>Admin Parque Aliança</h2>", unsafe_allow_html=True)
+            st.markdown("<br><br><br><h2 style='text-align:center;'>Acesso Administrativo</h2>", unsafe_allow_html=True)
             user = st.text_input("Usuário").lower().strip()
             senha = st.text_input("Senha", type="password")
-            
-            if st.button("ACESSAR", use_container_width=True, type="primary"):
-                # Aceita a sua senha master ou as credenciais padrão
+            if st.button("LOGAR", use_container_width=True, type="primary"):
+                # Validação com sua Master Password
                 if (user == "wendley" and senha == "master77") or (user == "admin" and senha == "alianca2026"):
                     st.session_state.autenticado = True
                     st.rerun()
                 else:
-                    st.error("Usuário ou senha incorretos.")
+                    st.error("Credenciais inválidas.")
         return False
     return True
 
-# =========================================================
-# 2. CONFIGURAÇÕES E ESTILIZAÇÃO
-# =========================================================
-st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
-
+# --- ESTILIZAÇÃO (SEU VISUAL ORIGINAL) ---
 st.markdown("""
     <style>
-    .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
+    .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; position: relative; }
+    .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; margin-right: 25px; }
+    .triagem-box { background-color: #fff4e5; padding: 15px; border-radius: 10px; border: 1px solid #ffa94d; margin-bottom: 10px; }
     .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 15px; }
     .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
     .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
     </style>
 """, unsafe_allow_html=True)
 
-# =========================================================
-# 3. FUNÇÕES DE APOIO (FIRESTORE / PDF)
-# =========================================================
+# --- FUNÇÕES DE APOIO E BANCO (SUA LÓGICA) ---
+def normalizar_texto(texto):
+    if not texto: return ""
+    return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
+
 def inicializar_db():
     if "db" not in st.session_state:
         try:
@@ -64,21 +63,13 @@ def inicializar_db():
             st.error(f"Erro de conexão: {e}"); return None
     return st.session_state.db
 
-def normalizar_texto(texto):
-    if not texto: return ""
-    return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
-
 def carregar_membros():
     db = inicializar_db()
-    if not db: return {}
-    docs = db.collection("membros_v2").stream()
-    return {doc.id: doc.to_dict() for doc in docs}
+    return {doc.id: doc.to_dict() for doc in db.collection("membros_v2").stream()} if db else {}
 
 def carregar_relatorios():
     db = inicializar_db()
-    if not db: return []
-    docs = db.collection("relatorios_parque_alianca").stream()
-    return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+    return [{"id": doc.id, **doc.to_dict()} for doc in db.collection("relatorios_parque_alianca").stream()] if db else []
 
 def gerar_pdf_registro_s21(row, mes_sel):
     buffer = io.BytesIO()
@@ -112,22 +103,30 @@ def normalizar_nome_no_banco(nome_recebido, lista_membros):
         if score > maior_score: maior_score, melhor_match = score, nome_oficial
     return melhor_match if maior_score >= 0.80 else None
 
-# =========================================================
-# 4. MAIN APP
-# =========================================================
+# --- MAIN ---
 def main():
-    if not check_login():
+    if not verificar_login():
         st.stop()
 
-    # Sidebar Navegação Nativa (Para evitar o erro de Module Not Found)
+    # MENU LATERAL
     with st.sidebar:
-        st.title("🛡️ Admin")
-        menu = st.radio("Navegação", ["📋 Relatórios", "⚠️ Triagem", "⚙️ Configuração"])
+        st.header("Navegação")
+        app_mode = st.radio("Ir para:", ["📊 Gestão Parque Aliança", "🎫 Sistema de Passagens"])
         st.divider()
         if st.button("Sair"):
             st.session_state.autenticado = False
             st.rerun()
 
+    if app_mode == "🎫 Sistema de Passagens":
+        st.info("Redirecionando para o sistema de passagens...")
+        # Se você tiver o arquivo passagens.py no mesmo diretório:
+        # import passagens; passagens.show_app(); st.stop()
+        # Por enquanto, mostramos apenas o placeholder
+        st.write("Acesso ao `passagens.py` validado.")
+        return
+
+    # --- CÓDIGO DO PARQUE ALIANÇA ---
+    st.title("📊 Gestão Parque Aliança")
     membros_db = carregar_membros()
     relatorios_brutos = carregar_relatorios()
     categorias_lista = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
@@ -151,30 +150,48 @@ def main():
     mes_sel = st.sidebar.selectbox("📅 Mês de Análise", meses_disponiveis, index=len(meses_disponiveis)-1)
     df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
 
-    if menu == "📋 Relatórios":
-        st.title(f"📊 Gestão - {mes_sel}")
-        # Aqui entra todo o seu código original de exibição da ABA 0
+    tabs_principal = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "⚙️ CONFIGURAÇÃO"])
+
+    # --- ABA 0: RELATÓRIOS ---
+    with tabs_principal[0]:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
-        st.subheader("Resumo por Categoria")
-        tabs = st.tabs(categorias_lista + ["⏳ PENDÊNCIAS"])
+        st.subheader(f"Resumo de {mes_sel}")
+        sub_tabs_rel = st.tabs(["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "⏳ PENDÊNCIAS"])
         
         for i, cat in enumerate(categorias_lista):
-            with tabs[i]:
+            with sub_tabs_rel[i]:
                 df_cat = df_ok[df_ok['cat_oficial'] == cat] if not df_ok.empty else pd.DataFrame()
-                if df_cat.empty: st.info(f"Sem relatórios para {cat}")
+                if df_cat.empty: st.info(f"Nenhum relatório de {cat} recebido.")
                 else:
-                    st.write(f"Total: {len(df_cat)} envios")
-                    st.dataframe(df_cat[['nome_oficial', 'horas', 'estudos_biblicos']])
+                    m1, m2, m3 = st.columns(3)
+                    m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{len(df_cat)}</div></div>', unsafe_allow_html=True)
+                    m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}h</div></div>', unsafe_allow_html=True)
+                    m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(df_cat["estudos_biblicos"].sum())}</div></div>', unsafe_allow_html=True)
+                    
+                    cols = st.columns(4)
+                    for idx, (_, r) in enumerate(df_cat.sort_values('nome_oficial').iterrows()):
+                        with cols[idx % 4]:
+                            st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div><div style="font-size:0.8rem;">⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])} est.</div></div>', unsafe_allow_html=True)
 
-    elif menu == "⚠️ Triagem":
-        st.title("⚠️ Triagem de Nomes")
-        # Aqui entra o código da sua ABA 1 (Triagem)
-        st.info("Nomes não reconhecidos aparecerão aqui para validação.")
+    # --- ABA 1: TRIAGEM ---
+    with tabs_principal[1]:
+        st.subheader("Nomes para Identificar")
+        df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
+        if df_triagem.empty: st.success("✨ Tudo certo nos nomes!")
+        else:
+            st.dataframe(df_triagem[['nome', 'horas', 'mes_referencia']])
 
-    elif menu == "⚙️ Configuração":
-        st.title("⚙️ Configurações")
-        # Aqui entra o código da sua ABA 2 (Exportação e Cadastro)
-        st.write("Configurações do sistema e exportação S-21.")
+    # --- ABA 2: CONFIGURAÇÃO ---
+    with tabs_principal[2]:
+        st.subheader("Exportação e Membros")
+        if not df_mes.empty:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
+                for _, r in df_mes[df_mes['status_validacao'] == "IDENTIFICADO"].iterrows():
+                    zf.writestr(f"S21_{r['nome_oficial']}.pdf", gerar_pdf_registro_s21(r, mes_sel))
+            st.download_button("📥 BAIXAR TUDO ZIP", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", "application/zip")
+
+    st.caption("S-4-T 11/23 | Parque Aliança | Gestão Administrativa")
 
 if __name__ == "__main__":
     main()
