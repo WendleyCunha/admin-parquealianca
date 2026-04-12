@@ -28,7 +28,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE APOIO ---
+def mostrar_painel_passagens():
+    st.header("🚌 Gestão de Passagens VGP")
+    
 def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
