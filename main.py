@@ -214,15 +214,57 @@ def main():
             if c3.button("Cadastrar", use_container_width=True):
                 if new_n: atualizar_membro(new_n, new_c); st.rerun()
 
-        with sub_tabs_cfg[1]:
-            st.subheader("📁 Gestão de Pastas e Upload")
-            col_p1, col_p2 = st.columns([1, 2])
-            with col_p1:
-                nova_pasta = st.text_input("📁 Criar Nova Pasta")
-                if st.button("Criar Pasta"):
-                    if nova_pasta:
-                        inicializar_db().collection("pastas_arquivos").document(nova_pasta).set({"criado_em": firestore.SERVER_TIMESTAMP})
-                        st.rerun()
+      with sub_tabs_cfg[1]:
+            st.subheader(f"📦 Exportação S-21 - {mes_sel}")
+            
+            df_export = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+            
+            if not df_export.empty:
+                # 1. Botão de Download ZIP (Geral)
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
+                    for _, r in df_export.iterrows():
+                        zf.writestr(f"S21_{r['nome_oficial']}.pdf", gerar_pdf_registro_s21(r, mes_sel))
+                
+                st.download_button("📥 BAIXAR TUDO ZIP", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", "application/zip", use_container_width=True)
+                
+                st.divider()
+                st.write("### ✏️ Edição Rápida e PDF Individual")
+                
+                # 2. Lista de Membros para Ajuste de Categoria e Dados
+                for _, r in df_export.sort_values('nome_oficial').iterrows():
+                    with st.expander(f"👤 {r['nome_oficial']} ({r['cat_oficial']})"):
+                        c_ed1, c_ed2, c_ed3 = st.columns([2, 1, 1])
+                        
+                        # Campo para trocar a Categoria (Isso move a pessoa para a soma correta)
+                        nova_cat = c_ed1.selectbox(
+                            "Alterar Categoria", 
+                            categorias_lista, 
+                            index=categorias_lista.index(r['cat_oficial']), 
+                            key=f"edit_cat_{r['id']}"
+                        )
+                        
+                        new_h = c_ed2.number_input("Horas", value=int(r['horas']), key=f"edit_h_{r['id']}")
+                        new_e = c_ed3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"edit_e_{r['id']}")
+                        
+                        btn_col1, btn_col2 = st.columns(2)
+                        
+                        if btn_col1.button("💾 Salvar Alterações", key=f"save_ed_{r['id']}", use_container_width=True):
+                            # Atualiza o relatório específico (para somas do mês)
+                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({
+                                "horas": new_h, 
+                                "estudos_biblicos": new_e
+                                # Nota: O status IDENTIFICADO usa a categoria do cadastro do membro
+                            })
+                            
+                            # Atualiza o cadastro principal do membro (para futuras consultas)
+                            atualizar_membro(r['nome_oficial'], nova_cat)
+                            
+                            st.success("Dados atualizados!")
+                            st.rerun()
+                            
+                        pdf_data = gerar_pdf_registro_s21(r, mes_sel)
+                        btn_col2.download_button("📄 Gerar PDF", pdf_data, f"S21_{r['nome_oficial']}.pdf", key=f"pdf_ind_{r['id']}", use_container_width=True)
             
             pastas_docs = inicializar_db().collection("pastas_arquivos").stream()
             lista_pastas = [doc.id for doc in pastas_docs]
