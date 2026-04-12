@@ -28,50 +28,43 @@ def inicializar_db():
 
 db = inicializar_db()
 
-# --- SEGURANÇA: INICIALIZAÇÃO DE ESTADOS ---
+# --- SEGURANÇA E ESTADOS ---
 def inicializar_estados():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
     if "user_data" not in st.session_state:
-        # Inicializa com estrutura vazia para evitar AttributeError
         st.session_state.user_data = {"username": "", "permissao": [], "role": "user"}
 
-# --- SISTEMA DE LOGIN ---
 def verificar_login():
     inicializar_estados()
-    
     if not st.session_state.autenticado:
         c1, c2, c3 = st.columns([1, 1.2, 1])
         with c2:
             st.markdown("<br><br><h2 style='text-align:center;'>Acesso Administrativo</h2>", unsafe_allow_html=True)
-            user_input = st.text_input("Usuário", key="login_user").lower().strip()
-            senha_input = st.text_input("Senha", type="password", key="login_pass")
-            
+            u = st.text_input("Usuário", key="l_user").lower().strip()
+            p = st.text_input("Senha", type="password", key="l_pass")
             if st.button("LOGAR", use_container_width=True, type="primary"):
-                # Master Password
-                if user_input == "wendley" and senha_input == "master77":
+                if u == "wendley" and p == "master77":
                     st.session_state.autenticado = True
                     st.session_state.user_data = {"username": "wendley", "role": "admin", "permissao": ["Relatórios", "Passagens"]}
                     st.rerun()
-                
-                # Busca no Firestore
-                user_doc = db.collection("usuarios_app").document(user_input).get()
+                user_doc = db.collection("usuarios_app").document(u).get()
                 if user_doc.exists:
                     dados = user_doc.to_dict()
-                    if dados.get('senha') == senha_input:
+                    if dados.get('senha') == p:
                         st.session_state.autenticado = True
                         st.session_state.user_data = dados
                         st.rerun()
                     else: st.error("Senha incorreta.")
-                else: st.error("Usuário não encontrado.")
+                else: st.error("Usuário não cadastrado.")
         return False
     return True
 
 # --- ESTILIZAÇÃO ---
 st.markdown("""
     <style>
-    .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; position: relative; }
-    .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; margin-right: 25px; }
+    .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
+    .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; }
     .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 15px; }
     .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
     .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
@@ -91,6 +84,13 @@ def carregar_membros():
 def carregar_relatorios():
     docs = db.collection("relatorios_parque_alianca").stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+
+def atualizar_membro(nome, categoria):
+    db.collection("membros_v2").document(nome).set({"categoria": categoria}, merge=True)
+
+def deletar_relatorio(relatorio_id):
+    db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
+    st.toast("Relatório removido!")
 
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
     entrada_norm = normalizar_texto(nome_recebido)
@@ -126,27 +126,20 @@ def gerar_pdf_registro_s21(row, mes_sel):
 
 # --- MAIN ---
 def main():
-    # 1. Garante inicialização antes de qualquer acesso
     inicializar_estados()
-    
-    # 2. Bloqueia se não logado
-    if not verificar_login():
-        st.stop()
+    if not verificar_login(): st.stop()
 
-    # 3. Acesso seguro ao user_data
     user_info = st.session_state.user_data
-    permissoes_usuario = user_info.get('permissao', [])
+    permissoes = user_info.get("permissao", [])
     
-    # MENU LATERAL DINÂMICO
     with st.sidebar:
         st.title(f"Olá, {user_info.get('username', 'Usuário').capitalize()}")
         opcoes_menu = []
-        if "Relatórios" in permissoes_usuario: opcoes_menu.append("📊 Gestão Parque Aliança")
-        if "Passagens" in permissoes_usuario: opcoes_menu.append("🎫 Sistema de Passagens")
+        if "Relatórios" in permissoes: opcoes_menu.append("📊 Gestão Parque Aliança")
+        if "Passagens" in permissoes: opcoes_menu.append("🎫 Sistema de Passagens")
         
         if not opcoes_menu:
-            st.error("Sem permissões. Contate Wendley.")
-            st.stop()
+            st.warning("Sem permissões."); st.stop()
             
         app_mode = st.radio("Ir para:", opcoes_menu)
         st.divider()
@@ -156,11 +149,9 @@ def main():
             st.rerun()
 
     if app_mode == "🎫 Sistema de Passagens":
-        st.title("🎫 Sistema de Passagens")
-        st.info("Módulo de passagens ativo para este usuário.")
-        return
+        st.title("🎫 Sistema de Passagens"); st.info("Módulo em desenvolvimento."); return
 
-    # --- LÓGICA GESTÃO PARQUE ALIANÇA ---
+    # --- LÓGICA PARQUE ALIANÇA ---
     st.title("📊 Gestão Parque Aliança")
     membros_db = carregar_membros()
     relatorios_brutos = carregar_relatorios()
@@ -189,67 +180,92 @@ def main():
 
     with tabs_principal[0]:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+        entregaram = df_ok['nome_oficial'].unique() if not df_ok.empty else []
+        
         st.subheader(f"Resumo de {mes_sel}")
         sub_tabs_rel = st.tabs(["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "⏳ PENDÊNCIAS"])
         
         for i, cat in enumerate(categorias_lista):
             with sub_tabs_rel[i]:
                 df_cat = df_ok[df_ok['cat_oficial'] == cat] if not df_ok.empty else pd.DataFrame()
-                if df_cat.empty: st.info(f"Nenhum relatório de {cat} recebido.")
+                if df_cat.empty: st.info(f"Nenhum relatório de {cat}.")
                 else:
                     m1, m2, m3 = st.columns(3)
                     m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{len(df_cat)}</div></div>', unsafe_allow_html=True)
-                    m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}h</div></div>', unsafe_allow_html=True)
-                    m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(df_cat["estudos_biblicos"].sum())}</div></div>', unsafe_allow_html=True)
+                    m2.markdown(f'<div class="metric-container"><div class="metric-label">Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}h</div></div>', unsafe_allow_html=True)
+                    m3.markdown(f'<div class="metric-container"><div class="metric-label">Estudos</div><div class="metric-value">{int(df_cat["estudos_biblicos"].sum())}</div></div>', unsafe_allow_html=True)
                     
                     cols = st.columns(4)
                     for idx, (_, r) in enumerate(df_cat.sort_values('nome_oficial').iterrows()):
                         with cols[idx % 4]:
-                            st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div><div style="font-size:0.8rem;">⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])} est.</div></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div>⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])}</div>', unsafe_allow_html=True)
+                            if st.button("🗑️", key=f"del_{r['id']}"):
+                                deletar_relatorio(r['id']); st.rerun()
+
+        with sub_tabs_rel[3]:
+            st.write(f"### Pendentes em {mes_sel}")
+            for cat in categorias_lista:
+                membros_cat = [n for n, d in membros_db.items() if d.get('categoria') == cat]
+                pendentes = sorted([n for n in membros_cat if n not in entregaram])
+                if pendentes:
+                    st.warning(f"**{cat}** ({len(pendentes)})")
+                    for p_nome in pendentes:
+                        c1, c2, c3 = st.columns([3, 1, 1])
+                        c1.write(f"• {p_nome}")
+                        if c2.button("Inativo", key=f"inat_{p_nome}"):
+                            atualizar_membro(p_nome, "INATIVO"); st.rerun()
+                        if c3.button("Baixa", key=f"bx_{p_nome}"):
+                            db.collection("relatorios_parque_alianca").add({"nome": p_nome, "mes_referencia": mes_sel, "horas": 0, "estudos_biblicos": 0, "observacoes": "Baixa manual"})
+                            st.rerun()
 
     with tabs_principal[1]:
-        st.subheader("Nomes para Identificar")
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
-        if df_triagem.empty: st.success("✨ Tudo certo nos nomes!")
+        if df_triagem.empty: st.success("✨ Tudo limpo!")
         else:
-            st.dataframe(df_triagem[['nome', 'horas', 'mes_referencia']], use_container_width=True)
+            nomes_ex = sorted(list(membros_db.keys()))
+            for _, row in df_triagem.iterrows():
+                with st.container(border=True):
+                    st.markdown(f"**Digitado:** {row['nome']} | **Horas:** {row['horas']}")
+                    sug = normalizar_nome_no_banco(row['nome'], nomes_ex)
+                    idx_s = nomes_ex.index(sug) + 1 if sug else 0
+                    c1, c2 = st.columns(2)
+                    sel_n = c1.selectbox("Corresponder a:", ["-- Selecionar --"] + nomes_ex, index=idx_s, key=f"tr_s_{row['id']}")
+                    if st.button("✅ Confirmar", key=f"tr_b_{row['id']}", use_container_width=True):
+                        if sel_n != "-- Selecionar --":
+                            db.collection("relatorios_parque_alianca").document(row['id']).update({"nome": sel_n})
+                            st.rerun()
 
     with tabs_principal[2]:
-        st.subheader("Painel de Controle e Acessos")
-        col_cfg1, col_cfg2 = st.columns(2)
+        c_a, c_b = st.columns(2)
+        with c_a:
+            st.subheader("Novo Membro")
+            n_n = st.text_input("Nome")
+            n_c = st.selectbox("Cat", categorias_lista)
+            if st.button("Salvar"):
+                if n_n: atualizar_membro(n_n, n_c); st.rerun()
         
-        with col_cfg1:
-            with st.expander("🔑 Alterar Minha Senha"):
-                nova_senha = st.text_input("Nova Senha", type="password")
-                if st.button("Atualizar Minha Senha"):
-                    db.collection("usuarios_app").document(user_info['username']).update({"senha": nova_senha})
-                    st.success("Senha alterada!")
+        with c_b:
+            st.subheader("Novo Usuário App")
+            if user_info.get('role') == 'admin':
+                u_n = st.text_input("Login")
+                u_p = st.text_input("Senha Usuário", type="password")
+                u_perm = st.multiselect("Permissões", ["Relatórios", "Passagens"])
+                if st.button("Criar Acesso"):
+                    db.collection("usuarios_app").document(u_n).set({"username": u_n, "senha": u_p, "permissao": u_perm, "role": "user"})
+                    st.success("Criado!")
 
-        if user_info.get('role') == 'admin':
-            with col_cfg2:
-                with st.expander("👥 Gerenciar Usuários (Novo)"):
-                    novo_user = st.text_input("Nome do Usuário").lower().strip()
-                    nova_pass = st.text_input("Senha", type="password", key="reg_pass")
-                    perms = st.multiselect("Acessos", ["Relatórios", "Passagens"])
-                    if st.button("Salvar Novo Usuário"):
-                        if novo_user and nova_pass:
-                            db.collection("usuarios_app").document(novo_user).set({
-                                "username": novo_user, "senha": nova_pass, "permissao": perms, "role": "user"
-                            })
-                            st.success(f"Usuário {novo_user} cadastrado!")
-        
         st.divider()
-        st.subheader("📦 Exportação S-21")
+        st.subheader("Exportação")
         if not df_mes.empty:
-            df_export = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
-            if not df_export.empty:
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
-                    for _, r in df_export.iterrows():
+            df_exp = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
+            if not df_exp.empty:
+                zip_b = io.BytesIO()
+                with zipfile.ZipFile(zip_b, "a", zipfile.ZIP_DEFLATED) as zf:
+                    for _, r in df_exp.iterrows():
                         zf.writestr(f"S21_{r['nome_oficial']}.pdf", gerar_pdf_registro_s21(r, mes_sel))
-                st.download_button("📥 BAIXAR TUDO ZIP", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", "application/zip", use_container_width=True)
+                st.download_button("📥 BAIXAR ZIP", zip_b.getvalue(), f"S21_{mes_sel}.zip", use_container_width=True)
 
-    st.caption("S-4-T 11/23 | Parque Aliança | Gestão Administrativa")
+    st.caption("S-4-T 11/23 | Parque Aliança")
 
 if __name__ == "__main__":
     main()
