@@ -42,20 +42,24 @@ def normalizar_texto(texto):
 
 # --- FUNÇÃO S-21 (PREENCHIMENTO COM COORDENADAS AJUSTADAS) ---
 def gerar_pdf_registro_s21(row, mes_sel):
-    path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
+    # Tenta localizar o arquivo na raiz do repositório
+    path_original = "s21.pdf"
     
-    # Fallback caso o arquivo base não exista
     if not os.path.exists(path_original):
+        # Se não encontrar, tenta o caminho absoluto baseado no script
+        path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
+
+    if not os.path.exists(path_original):
+        st.error(f"Arquivo base s21.pdf não encontrado no caminho: {path_original}")
         return gerar_pdf_s21_fallback(row, mes_sel)
 
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=A4)
     
-    # Nome do Publicador (Ajustado para 263.5mm para subir na linha correta)
+    # --- Desenho dos dados (Coordenadas mantidas) ---
     can.setFont("Helvetica-Bold", 11)
     can.drawString(24*mm, 263.5*mm, str(row['nome_oficial']).upper())
     
-    # Mapeamento de Posição por Mês (Eixo Y ajustado para centralizar nos campos)
     y_map = {
         "SETEMBRO": 208.5, "OUTUBRO": 200.5, "NOVEMBRO": 192.5, "DEZEMBRO": 184.5,
         "JANEIRO": 176.5, "FEVEREIRO": 168.5, "MARÇO": 160.5, "ABRIL": 152.5,
@@ -64,24 +68,18 @@ def gerar_pdf_registro_s21(row, mes_sel):
     
     mes_nome = str(mes_sel).split()[0].upper()
     y_pos = y_map.get(mes_nome, 152.5) * mm
-    
     can.setFont("Helvetica-Bold", 10)
 
-    # Participou no ministério (X)
-    if int(row['horas']) > 0 or int(row['estudos_biblicos'] > 0):
+    if int(row['horas']) > 0 or int(row['estudos_biblicos']) > 0:
         can.drawCentredString(53.5*mm, y_pos, "X")
     
-    # Estudos Bíblicos
     can.drawCentredString(80.5*mm, y_pos, str(int(row['estudos_biblicos'])))
     
-    # Pioneiro Auxiliar (X)
     if row['cat_oficial'] == "PIONEIRO AUXILIAR":
         can.drawCentredString(97.5*mm, y_pos, "X")
         
-    # Horas
     can.drawCentredString(116.5*mm, y_pos, str(int(row['horas'])))
     
-    # Observações
     obs = str(row.get('observacoes', ''))[:40]
     if obs:
         can.setFont("Helvetica", 7)
@@ -90,20 +88,32 @@ def gerar_pdf_registro_s21(row, mes_sel):
     can.save()
     packet.seek(0)
 
+    # --- Processo de Merge (Onde o PDF oficial é "olhado") ---
+    output = io.BytesIO()
     try:
-        reader_original = PdfReader(open(path_original, "rb"))
-        writer = PdfWriter()
-        pagina_base = reader_original.pages[0]
-        overlay_pdf = PdfReader(packet)
-        pagina_base.merge_page(overlay_pdf.pages[0])
-        writer.add_page(pagina_base)
-        
-        output = io.BytesIO()
-        writer.write(output)
+        # Abrimos o PDF original em modo leitura binária
+        with open(path_original, "rb") as f_pdf:
+            reader_original = PdfReader(f_pdf)
+            writer = PdfWriter()
+            
+            # Pegamos a primeira página do S-21 oficial
+            pagina_base = reader_original.pages[0]
+            
+            # Lemos o que acabamos de desenhar (overlay)
+            overlay_pdf = PdfReader(packet)
+            
+            # Sobrepomos o desenho em cima da página oficial
+            pagina_base.merge_page(overlay_pdf.pages[0])
+            
+            # Adicionamos essa página mesclada ao resultado final
+            writer.add_page(pagina_base)
+            writer.write(output)
+            
         return output.getvalue()
-    except:
+    except Exception as e:
+        st.error(f"Erro ao processar merge do PDF: {e}")
         return gerar_pdf_s21_fallback(row, mes_sel)
-
+        
 def gerar_pdf_s21_fallback(row, mes_sel):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
