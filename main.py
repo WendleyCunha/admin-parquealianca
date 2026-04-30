@@ -2,28 +2,21 @@ import streamlit as st
 import pandas as pd
 import json
 import io
-import os
 import zipfile
 import unicodedata
+import os # Adicionado para garantir caminhos de arquivo no Linux
 from difflib import SequenceMatcher
 from google.cloud import firestore
 from google.oauth2 import service_account
-
-# Bibliotecas para manipulação do PDF S-21 Oficial (Exigem instalação via requirements.txt)
-from PyPDF2 import PdfReader, PdfWriter
-from reportlab.pdfgen import canvas
+from pypdf import PdfReader, PdfWriter # Novo: Necessário para manipular o PDF original
+from reportlab.pdfgen import canvas # Novo: Para desenhar o texto por cima
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
-
-# Bibliotecas para PDFs Consolidados (Sua estrutura original)
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
 
-# --- ESTILIZAÇÃO ---
+# --- ESTILIZAÇÃO (Mantida conforme seu original) ---
 st.markdown("""
     <style>
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; position: relative; }
@@ -40,111 +33,75 @@ def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
 
-# --- FUNÇÃO S-21 (PREENCHIMENTO COM COORDENADAS AJUSTADAS) ---
+# --- NOVA FUNÇÃO MESTRA: PREENCHER PDF S-21 OFICIAL ---
 def gerar_pdf_registro_s21(row, mes_sel):
-    # Tenta localizar o arquivo na raiz do repositório
-    path_original = "s21.pdf"
+    # Localiza o arquivo s21.pdf na raiz do projeto (mesma pasta do main.py)
+    path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
     
     if not os.path.exists(path_original):
-        # Se não encontrar, tenta o caminho absoluto baseado no script
-        path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
+        return None # O Streamlit tratará isso no download_button
 
-    if not os.path.exists(path_original):
-        st.error(f"Arquivo base s21.pdf não encontrado no caminho: {path_original}")
-        return gerar_pdf_s21_fallback(row, mes_sel)
-
+    # 1. Criar o "overlay" (camada de texto transparente)
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=A4)
+    can.setFont("Helvetica-Bold", 10)
     
-    # --- Desenho dos dados (Coordenadas mantidas) ---
-    can.setFont("Helvetica-Bold", 11)
-    can.drawString(24*mm, 263.5*mm, str(row['nome_oficial']).upper())
+    # --- Coordenadas de preenchimento (Ajustadas para o s21.pdf) ---
+    # Nome do Publicador
+    can.drawString(24*mm, 258*mm, str(row['nome_oficial']).upper())
     
+    # Mapeamento do Eixo Y por Mês (Ano de Serviço começa em Setembro)
     y_map = {
-        "SETEMBRO": 208.5, "OUTUBRO": 200.5, "NOVEMBRO": 192.5, "DEZEMBRO": 184.5,
-        "JANEIRO": 176.5, "FEVEREIRO": 168.5, "MARÇO": 160.5, "ABRIL": 152.5,
-        "MAIO": 144.5, "JUNHO": 136.5, "JULHO": 128.5, "AGOSTO": 120.5
+        "SETEMBRO": 204.5, "OUTUBRO": 196.5, "NOVEMBRO": 188.5, "DEZEMBRO": 180.5,
+        "JANEIRO": 172.5, "FEVEREIRO": 164.5, "MARÇO": 156.5, "ABRIL": 148.5,
+        "MAIO": 140.5, "JUNHO": 132.5, "JULHO": 124.5, "AGOSTO": 116.5
     }
     
-    mes_nome = str(mes_sel).split()[0].upper()
-    y_pos = y_map.get(mes_nome, 152.5) * mm
-    can.setFont("Helvetica-Bold", 10)
-
+    mes_nome = mes_sel.split()[0].upper()
+    y_pos = y_map.get(mes_nome, 148.5) * mm
+    
+    # Participou no ministério (X)
     if int(row['horas']) > 0 or int(row['estudos_biblicos']) > 0:
         can.drawCentredString(53.5*mm, y_pos, "X")
     
+    # Estudos Bíblicos
     can.drawCentredString(80.5*mm, y_pos, str(int(row['estudos_biblicos'])))
     
+    # Pioneiro Auxiliar (X)
     if row['cat_oficial'] == "PIONEIRO AUXILIAR":
         can.drawCentredString(97.5*mm, y_pos, "X")
         
+    # Horas
     can.drawCentredString(116.5*mm, y_pos, str(int(row['horas'])))
     
-    obs = str(row.get('observacoes', ''))[:40]
+    # Observações (limitado a 30 caracteres para não vazar a célula)
+    obs = str(row.get('observacoes', ''))[:30]
     if obs:
-        can.setFont("Helvetica", 7)
+        can.setFont("Helvetica", 8)
         can.drawString(133*mm, y_pos, obs)
     
     can.save()
     packet.seek(0)
 
-    # --- Processo de Merge (Onde o PDF oficial é "olhado") ---
-    output = io.BytesIO()
+    # 2. Mesclar o original com o novo texto
     try:
-        # Abrimos o PDF original em modo leitura binária
-        with open(path_original, "rb") as f_pdf:
-            reader_original = PdfReader(f_pdf)
-            writer = PdfWriter()
-            
-            # Pegamos a primeira página do S-21 oficial
-            pagina_base = reader_original.pages[0]
-            
-            # Lemos o que acabamos de desenhar (overlay)
-            overlay_pdf = PdfReader(packet)
-            
-            # Sobrepomos o desenho em cima da página oficial
-            pagina_base.merge_page(overlay_pdf.pages[0])
-            
-            # Adicionamos essa página mesclada ao resultado final
-            writer.add_page(pagina_base)
-            writer.write(output)
-            
+        reader_original = PdfReader(open(path_original, "rb"))
+        writer = PdfWriter()
+        
+        pagina_base = reader_original.pages[0]
+        overlay_pdf = PdfReader(packet)
+        
+        pagina_base.merge_page(overlay_pdf.pages[0])
+        writer.add_page(pagina_base)
+        
+        output = io.BytesIO()
+        writer.write(output)
         return output.getvalue()
     except Exception as e:
-        st.error(f"Erro ao processar merge do PDF: {e}")
-        return gerar_pdf_s21_fallback(row, mes_sel)
-        
-def gerar_pdf_s21_fallback(row, mes_sel):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    elements = [Paragraph(f"Registro: {row['nome_oficial']} - {mes_sel}", getSampleStyleSheet()['Title'])]
-    doc.build(elements)
-    return buffer.getvalue()
+        st.error(f"Erro ao processar PDF: {e}")
+        return None
 
-# Função para PDF Consolidado (Original)
-def gerar_pdf_consolidado_geral(df_dados, titulo_principal, subtitulo, label_entidade, valor_entidade):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-    elements = []
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', fontSize=16, alignment=1, spaceAfter=20, fontName='Helvetica-Bold')
-    
-    elements.append(Paragraph(titulo_principal, title_style))
-    data_cabecalho = [[Paragraph(f"<b>{label_entidade}:</b> {valor_entidade}", styles['Normal']), ""], [f"{subtitulo}", ""]]
-    t_cabecalho = Table(data_cabecalho, colWidths=[350, 150])
-    elements.append(t_cabecalho)
-    elements.append(Spacer(1, 15))
-
-    header = ["Mês", "Estudos", "Horas"]
-    corpo = [[str(row['Mês']), str(int(row['Estudos'])), str(int(row['Horas']))] for _, row in df_dados.iterrows()]
-    
-    t_dados = Table([header] + corpo, colWidths=[200, 100, 100])
-    t_dados.setStyle(TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey)]))
-    elements.append(t_dados)
-    doc.build(elements)
-    return buffer.getvalue()
-
-# --- FUNÇÕES DE BANCO ---
+# --- FUNÇÕES DE BANCO (Mantidas do seu código) ---
 def inicializar_db():
     if "db" not in st.session_state:
         try:
@@ -221,12 +178,11 @@ def main():
     mes_sel = st.sidebar.selectbox("📅 Mês de Análise", meses_disponiveis, index=len(meses_disponiveis)-1)
     df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
 
-    tabs_principal = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "📈 CONSOLIDADO", "⚙️ CONFIGURAÇÃO"])
+    tabs_principal = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "⚙️ CONFIGURAÇÃO"])
 
     with tabs_principal[0]:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
         entregaram = df_ok['nome_oficial'].unique() if not df_ok.empty else []
-        st.subheader(f"Resumo de {mes_sel}")
         sub_tabs_rel = st.tabs(["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "⏳ PENDÊNCIAS"])
         
         for i, cat in enumerate(categorias_lista):
@@ -236,7 +192,7 @@ def main():
                 else:
                     m1, m2, m3 = st.columns(3)
                     m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{len(df_cat)}</div></div>', unsafe_allow_html=True)
-                    m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}h</div></div>', unsafe_allow_html=True)
+                    m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}</div></div>', unsafe_allow_html=True)
                     m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(df_cat["estudos_biblicos"].sum())}</div></div>', unsafe_allow_html=True)
                     
                     cols = st.columns(4)
@@ -281,47 +237,7 @@ def main():
                         st.rerun()
 
     with tabs_principal[2]:
-        sub_tabs_cons_master = st.tabs(["📊 POR CATEGORIA", "👤 POR PESSOA"])
-        with sub_tabs_cons_master[0]:
-            if df.empty: st.info("Aguardando dados.")
-            else:
-                df_cons = df[df['status_validacao'] == "IDENTIFICADO"]
-                label_map = {"PUBLICADOR": "PUBLICADORES", "PIONEIRO AUXILIAR": "AUXILIARES", "PIONEIRO REGULAR": "REGULARES"}
-                sub_tabs_cat = st.tabs([label_map[c] for c in categorias_lista])
-                for i, cat in enumerate(categorias_lista):
-                    with sub_tabs_cat[i]:
-                        df_cat_total = df_cons[df_cons['cat_oficial'] == cat]
-                        if df_cat_total.empty: st.write("Sem dados.")
-                        else:
-                            resumo = df_cat_total.groupby('mes_referencia').agg({'estudos_biblicos': 'sum', 'horas': 'sum', 'nome_oficial': 'count'}).reset_index()
-                            resumo.columns = ['Mês', 'Estudos', 'Horas', 'Relatórios']
-                            st.dataframe(resumo, use_container_width=True, hide_index=True)
-                            pdf_cat = gerar_pdf_consolidado_geral(resumo, "CONSOLIDADO DE CATEGORIA", "Ano de serviço: 2026", "Categoria", label_map[cat])
-                            st.download_button(f"📥 PDF {label_map[cat]}", pdf_cat, f"Consolidado_{cat}.pdf", key=f"pdf_cat_{cat}")
-
-        with sub_tabs_cons_master[1]:
-            st.subheader("Histórico Individual do Publicador")
-            if not membros_db: st.warning("Nenhum membro cadastrado.")
-            else:
-                lista_membros_alfabetica = sorted(list(membros_db.keys()))
-                membro_sel = st.selectbox("Selecione o Publicador", lista_membros_alfabetica)
-                if membro_sel:
-                    df_pessoal = df[(df['nome_oficial'] == membro_sel) & (df['status_validacao'] == "IDENTIFICADO")]
-                    if df_pessoal.empty: st.info(f"Nenhum relatório encontrado para {membro_sel}.")
-                    else:
-                        cat_atual = membros_db[membro_sel].get('categoria', 'PUBLICADOR')
-                        st.markdown(f"**Categoria Atual:** `{cat_atual}`")
-                        resumo_pessoal = df_pessoal.sort_values('mes_referencia')[['mes_referencia', 'estudos_biblicos', 'horas']]
-                        resumo_pessoal.columns = ['Mês', 'Estudos', 'Horas']
-                        st.table(resumo_pessoal)
-                        c1, c2 = st.columns(2)
-                        c1.metric("Total de Horas no Ano", f"{int(resumo_pessoal['Horas'].sum())}h")
-                        c2.metric("Média de Estudos", f"{resumo_pessoal['Estudos'].mean():.1f}")
-                        pdf_pessoal = gerar_pdf_consolidado_geral(resumo_pessoal, "CARTÃO DE REGISTRO HISTÓRICO", "Ano de serviço: 2026", "Publicador", membro_sel)
-                        st.download_button(f"📥 Baixar Histórico de {membro_sel} (PDF)", pdf_pessoal, f"Historico_{membro_sel}.pdf", mime="application/pdf")
-
-    with tabs_principal[3]:
-        sub_tabs_cfg = st.tabs(["👤 MEMBROS", "📂 REGISTROS TOTAIS (PDF/ZIP)"])
+        sub_tabs_cfg = st.tabs(["👤 MEMBROS", "📂 EXPORTAR S-21 (MODELO)"])
         with sub_tabs_cfg[0]:
             st.subheader("Cadastrar Novo Membro")
             c1, c2, c3 = st.columns([2, 1, 1])
@@ -339,24 +255,19 @@ def main():
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
                     for _, r in df_export.iterrows():
-                        zf.writestr(f"S21_{r['nome_oficial']}.pdf", gerar_pdf_registro_s21(r, mes_sel))
-                st.download_button("📥 BAIXAR TUDO ZIP (S-21)", zip_buffer.getvalue(), f"Registros_{mes_sel}.zip", "application/zip", use_container_width=True)
+                        pdf_preenchido = gerar_pdf_registro_s21(r, mes_sel)
+                        if pdf_preenchido:
+                            zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf_preenchido)
+                st.download_button("📥 BAIXAR TUDO ZIP (OFICIAL)", zip_buffer.getvalue(), f"S21_{mes_sel}.zip", "application/zip", use_container_width=True)
+                
                 st.divider()
-                st.write("### ✏️ Ajuste de Dados e Categoria")
                 for _, r in df_export.sort_values('nome_oficial').iterrows():
-                    with st.expander(f"📄 {r['nome_oficial']} ({r['cat_oficial']})"):
-                        ce1, ce2, ce3 = st.columns([2, 1, 1])
-                        nova_cat = ce1.selectbox("Mudar Categoria", categorias_lista, index=categorias_lista.index(r['cat_oficial']) if r['cat_oficial'] in categorias_lista else 0, key=f"edit_cat_{r['id']}")
-                        new_h = ce2.number_input("Horas", value=int(r['horas']), key=f"edit_h_{r['id']}")
-                        new_e = ce3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"edit_e_{r['id']}")
-                        b_col1, b_col2 = st.columns(2)
-                        if b_col1.button("💾 Salvar", key=f"save_ed_{r['id']}", use_container_width=True):
-                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({"horas": new_h, "estudos_biblicos": new_e})
-                            atualizar_membro(r['nome_oficial'], nova_cat)
-                            st.success("Atualizado!"); st.rerun()
-                        b_col2.download_button("📥 PDF Individual", gerar_pdf_registro_s21(r, mes_sel), f"S21_{r['nome_oficial']}.pdf", key=f"pdf_ind_{r['id']}", use_container_width=True)
+                    with st.expander(f"📄 {r['nome_oficial']}"):
+                        pdf_ind = gerar_pdf_registro_s21(r, mes_sel)
+                        if pdf_ind:
+                            st.download_button(f"Baixar PDF Individual", pdf_ind, f"S21_{r['nome_oficial']}.pdf", key=f"ind_{r['id']}")
 
-    st.caption("v2.4.0 | Parque Aliança | Gestão Administrativa")
+    st.caption("v2.3.0 | Parque Aliança | Gestão com Modelo S-21 Oficial")
 
 if __name__ == "__main__":
     main()
