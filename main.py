@@ -4,18 +4,19 @@ import json
 import io
 import zipfile
 import unicodedata
+import os # Adicionado para garantir caminhos de arquivo no Linux
 from difflib import SequenceMatcher
 from google.cloud import firestore
 from google.oauth2 import service_account
-from pypdf import PdfReader, PdfWriter # Adicionado
-from reportlab.pdfgen import canvas # Adicionado
+from pypdf import PdfReader, PdfWriter # Novo: Necessário para manipular o PDF original
+from reportlab.pdfgen import canvas # Novo: Para desenhar o texto por cima
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Admin Parque Aliança", layout="wide", page_icon="📊")
 
-# --- ESTILIZAÇÃO ---
+# --- ESTILIZAÇÃO (Mantida conforme seu original) ---
 st.markdown("""
     <style>
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; position: relative; }
@@ -32,14 +33,20 @@ def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
 
-# FUNÇÃO MESTRA: PREENCHER PDF S-21-T ORIGINAL
+# --- NOVA FUNÇÃO MESTRA: PREENCHER PDF S-21 OFICIAL ---
 def gerar_pdf_registro_s21(row, mes_sel):
-    # 1. Criar o "carimbo" (Overlay) em memória
+    # Localiza o arquivo s21.pdf na raiz do projeto (mesma pasta do main.py)
+    path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
+    
+    if not os.path.exists(path_original):
+        return None # O Streamlit tratará isso no download_button
+
+    # 1. Criar o "overlay" (camada de texto transparente)
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=A4)
     can.setFont("Helvetica-Bold", 10)
     
-    # --- Coordenadas Fixas (Ajuste se necessário) ---
+    # --- Coordenadas de preenchimento (Ajustadas para o s21.pdf) ---
     # Nome do Publicador
     can.drawString(24*mm, 258*mm, str(row['nome_oficial']).upper())
     
@@ -53,7 +60,7 @@ def gerar_pdf_registro_s21(row, mes_sel):
     mes_nome = mes_sel.split()[0].upper()
     y_pos = y_map.get(mes_nome, 148.5) * mm
     
-    # Marcar "Participou no ministério" (X)
+    # Participou no ministério (X)
     if int(row['horas']) > 0 or int(row['estudos_biblicos']) > 0:
         can.drawCentredString(53.5*mm, y_pos, "X")
     
@@ -67,7 +74,7 @@ def gerar_pdf_registro_s21(row, mes_sel):
     # Horas
     can.drawCentredString(116.5*mm, y_pos, str(int(row['horas'])))
     
-    # Observações
+    # Observações (limitado a 30 caracteres para não vazar a célula)
     obs = str(row.get('observacoes', ''))[:30]
     if obs:
         can.setFont("Helvetica", 8)
@@ -76,24 +83,25 @@ def gerar_pdf_registro_s21(row, mes_sel):
     can.save()
     packet.seek(0)
 
-    # 2. Mesclar com o PDF Original
+    # 2. Mesclar o original com o novo texto
     try:
-        existing_pdf = PdfReader(open("S-21-T.pdf", "rb"))
-        output = PdfWriter()
-        page = existing_pdf.pages[0]
+        reader_original = PdfReader(open(path_original, "rb"))
+        writer = PdfWriter()
         
-        new_pdf = PdfReader(packet)
-        page.merge_page(new_pdf.pages[0])
-        output.add_page(page)
+        pagina_base = reader_original.pages[0]
+        overlay_pdf = PdfReader(packet)
         
-        final_buffer = io.BytesIO()
-        output.write(final_buffer)
-        return final_buffer.getvalue()
+        pagina_base.merge_page(overlay_pdf.pages[0])
+        writer.add_page(pagina_base)
+        
+        output = io.BytesIO()
+        writer.write(output)
+        return output.getvalue()
     except Exception as e:
         st.error(f"Erro ao processar PDF: {e}")
         return None
 
-# --- FUNÇÕES DE BANCO ---
+# --- FUNÇÕES DE BANCO (Mantidas do seu código) ---
 def inicializar_db():
     if "db" not in st.session_state:
         try:
@@ -172,11 +180,9 @@ def main():
 
     tabs_principal = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "⚙️ CONFIGURAÇÃO"])
 
-    # --- ABA RELATÓRIOS ---
     with tabs_principal[0]:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
         entregaram = df_ok['nome_oficial'].unique() if not df_ok.empty else []
-        
         sub_tabs_rel = st.tabs(["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "⏳ PENDÊNCIAS"])
         
         for i, cat in enumerate(categorias_lista):
@@ -186,7 +192,7 @@ def main():
                 else:
                     m1, m2, m3 = st.columns(3)
                     m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{len(df_cat)}</div></div>', unsafe_allow_html=True)
-                    m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}h</div></div>', unsafe_allow_html=True)
+                    m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}</div></div>', unsafe_allow_html=True)
                     m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(df_cat["estudos_biblicos"].sum())}</div></div>', unsafe_allow_html=True)
                     
                     cols = st.columns(4)
@@ -212,7 +218,6 @@ def main():
                             inicializar_db().collection("relatorios_parque_alianca").add({"nome": p_nome, "mes_referencia": mes_sel, "horas": 0, "estudos_biblicos": 0, "observacoes": "Baixa manual"})
                             st.rerun()
 
-    # --- ABA TRIAGEM ---
     with tabs_principal[1]:
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
         if df_triagem.empty: st.success("✨ Tudo certo nos nomes!")
@@ -231,10 +236,8 @@ def main():
                         validar_e_gravar_novo_membro(row['id'], n_s if n_s != "-- Selecionar --" else n_f, cat_n)
                         st.rerun()
 
-    # --- ABA CONFIGURAÇÃO E EXPORTAÇÃO ---
     with tabs_principal[2]:
-        sub_tabs_cfg = st.tabs(["👤 MEMBROS", "📂 EXPORTAR S-21 (PDF)"])
-        
+        sub_tabs_cfg = st.tabs(["👤 MEMBROS", "📂 EXPORTAR S-21 (MODELO)"])
         with sub_tabs_cfg[0]:
             st.subheader("Cadastrar Novo Membro")
             c1, c2, c3 = st.columns([2, 1, 1])
@@ -248,38 +251,23 @@ def main():
         with sub_tabs_cfg[1]:
             st.subheader(f"📦 Exportação S-21 - {mes_sel}")
             df_export = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
-            
             if not df_export.empty:
-                # Gerar ZIP com todos os PDFs preenchidos
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
                     for _, r in df_export.iterrows():
-                        pdf_data = gerar_pdf_registro_s21(r, mes_sel)
-                        if pdf_data:
-                            zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf_data)
-                
-                st.download_button("📥 BAIXAR TODOS EM ZIP", zip_buffer.getvalue(), f"S21_Parque_Alianca_{mes_sel}.zip", "application/zip", use_container_width=True)
+                        pdf_preenchido = gerar_pdf_registro_s21(r, mes_sel)
+                        if pdf_preenchido:
+                            zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf_preenchido)
+                st.download_button("📥 BAIXAR TUDO ZIP (OFICIAL)", zip_buffer.getvalue(), f"S21_{mes_sel}.zip", "application/zip", use_container_width=True)
                 
                 st.divider()
-                st.write("### ✏️ Edição Rápida e PDFs Individuais")
                 for _, r in df_export.sort_values('nome_oficial').iterrows():
-                    with st.expander(f"📄 {r['nome_oficial']} ({r['cat_oficial']})"):
-                        ce1, ce2, ce3 = st.columns([2, 1, 1])
-                        nova_cat = ce1.selectbox("Mudar Categoria", categorias_lista, index=categorias_lista.index(r['cat_oficial']) if r['cat_oficial'] in categorias_lista else 0, key=f"edit_cat_{r['id']}")
-                        new_h = ce2.number_input("Horas", value=int(r['horas']), key=f"edit_h_{r['id']}")
-                        new_e = ce3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"edit_e_{r['id']}")
-                        
-                        b_col1, b_col2 = st.columns(2)
-                        if b_col1.button("💾 Salvar", key=f"save_ed_{r['id']}", use_container_width=True):
-                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({"horas": new_h, "estudos_biblicos": new_e})
-                            atualizar_membro(r['nome_oficial'], nova_cat)
-                            st.success("Atualizado!"); st.rerun()
-                            
+                    with st.expander(f"📄 {r['nome_oficial']}"):
                         pdf_ind = gerar_pdf_registro_s21(r, mes_sel)
                         if pdf_ind:
-                            b_col2.download_button("📥 Baixar PDF", pdf_ind, f"S21_{r['nome_oficial']}.pdf", key=f"pdf_ind_{r['id']}", use_container_width=True)
+                            st.download_button(f"Baixar PDF Individual", pdf_ind, f"S21_{r['nome_oficial']}.pdf", key=f"ind_{r['id']}")
 
-    st.caption("v2.3.0 | Parque Aliança | Preenchimento Automático S-21-T")
+    st.caption("v2.3.0 | Parque Aliança | Gestão com Modelo S-21 Oficial")
 
 if __name__ == "__main__":
     main()
