@@ -9,13 +9,13 @@ from difflib import SequenceMatcher
 from google.cloud import firestore
 from google.oauth2 import service_account
 
-# Bibliotecas para manipulação do PDF S-21 Oficial
+# Bibliotecas para manipulação do PDF S-21 Oficial (Exigem instalação via requirements.txt)
 from PyPDF2 import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 
-# Bibliotecas para PDFs Consolidados (ReportLab Original)
+# Bibliotecas para PDFs Consolidados (Sua estrutura original)
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -40,22 +40,22 @@ def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
 
-# --- NOVA FUNÇÃO S-21 (SOBREPOSIÇÃO NO PDF OFICIAL) ---
+# --- FUNÇÃO S-21 (PREENCHIMENTO COM COORDENADAS AJUSTADAS) ---
 def gerar_pdf_registro_s21(row, mes_sel):
     path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
     
-    # Se não achar o PDF oficial, ele tenta gerar o simplificado para não quebrar o sistema
+    # Fallback caso o arquivo base não exista
     if not os.path.exists(path_original):
         return gerar_pdf_s21_fallback(row, mes_sel)
 
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=A4)
     
-    # 1. Nome do Publicador
+    # Nome do Publicador (Ajustado para 263.5mm para subir na linha correta)
     can.setFont("Helvetica-Bold", 11)
     can.drawString(24*mm, 263.5*mm, str(row['nome_oficial']).upper())
     
-    # 2. Mapeamento de Posição por Mês (Eixo Y)
+    # Mapeamento de Posição por Mês (Eixo Y ajustado para centralizar nos campos)
     y_map = {
         "SETEMBRO": 208.5, "OUTUBRO": 200.5, "NOVEMBRO": 192.5, "DEZEMBRO": 184.5,
         "JANEIRO": 176.5, "FEVEREIRO": 168.5, "MARÇO": 160.5, "ABRIL": 152.5,
@@ -104,7 +104,6 @@ def gerar_pdf_registro_s21(row, mes_sel):
     except:
         return gerar_pdf_s21_fallback(row, mes_sel)
 
-# Função de segurança caso o arquivo s21.pdf não exista no servidor
 def gerar_pdf_s21_fallback(row, mes_sel):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -112,7 +111,7 @@ def gerar_pdf_s21_fallback(row, mes_sel):
     doc.build(elements)
     return buffer.getvalue()
 
-# Função para PDF Consolidado (Original Mantida)
+# Função para PDF Consolidado (Original)
 def gerar_pdf_consolidado_geral(df_dados, titulo_principal, subtitulo, label_entidade, valor_entidade):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
@@ -135,7 +134,7 @@ def gerar_pdf_consolidado_geral(df_dados, titulo_principal, subtitulo, label_ent
     doc.build(elements)
     return buffer.getvalue()
 
-# --- FUNÇÕES DE BANCO (MANTIDAS) ---
+# --- FUNÇÕES DE BANCO ---
 def inicializar_db():
     if "db" not in st.session_state:
         try:
@@ -347,7 +346,7 @@ def main():
                             st.success("Atualizado!"); st.rerun()
                         b_col2.download_button("📥 PDF Individual", gerar_pdf_registro_s21(r, mes_sel), f"S21_{r['nome_oficial']}.pdf", key=f"pdf_ind_{r['id']}", use_container_width=True)
 
-    st.caption("v2.3.0 | Parque Aliança | Gestão Administrativa")
+    st.caption("v2.4.0 | Parque Aliança | Gestão Administrativa")
 
 if __name__ == "__main__":
     main()
