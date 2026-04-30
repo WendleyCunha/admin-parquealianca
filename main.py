@@ -44,7 +44,7 @@ def gerar_pdf_registro_s21(row, mes_sel):
     elements.append(t_cabecalho)
     elements.append(Spacer(1, 15))
     header = ["Participou no\nministério", "Estudos\nbíblicos", "Pioneiro\nauxiliar", "Horas", "Observações"]
-    check_min = "X" if row['horas'] > 0 else ""
+    check_min = "X" if row['horas'] > 0 or row['estudos_biblicos'] > 0 else ""
     check_pion = "X" if row['cat_oficial'] == "PIONEIRO AUXILIAR" else ""
     corpo = [[f"[{check_min}]", str(int(row['estudos_biblicos'])), f"[{check_pion}]", str(int(row['horas'])), row.get('observacoes', '')]]
     t_dados = Table([header] + corpo, colWidths=[100, 80, 80, 70, 160])
@@ -53,34 +53,35 @@ def gerar_pdf_registro_s21(row, mes_sel):
     doc.build(elements)
     return buffer.getvalue()
 
-def gerar_pdf_consolidado_categoria(df_categoria, nome_categoria, mes_sel):
-    """Gera um PDF somatizando todas as atividades de uma categoria específica"""
+def gerar_pdf_consolidado_categoria(df_meses, nome_categoria, ano="2026"):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     elements = []
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('Title', fontSize=16, alignment=1, spaceAfter=20, fontName='Helvetica-Bold')
     
-    elements.append(Paragraph("REGISTRO DE PUBLICADOR DE CONGREGAÇÃO", title_style))
+    elements.append(Paragraph("REGISTRO CONSOLIDADO DE ATIVIDADES", title_style))
     
-    # Cabeçalho adaptado para o Grupo
     data_cabecalho = [
-        [Paragraph(f"<b>Grupo:</b> {nome_categoria}", styles['Normal']), ""],
-        [f"Mês: {mes_sel}", "Ano de serviço: 2026"]
+        [Paragraph(f"<b>Categoria:</b> {nome_categoria}", styles['Normal']), ""],
+        [f"Ano de serviço: {ano}", ""]
     ]
     t_cabecalho = Table(data_cabecalho, colWidths=[350, 150])
     elements.append(t_cabecalho)
     elements.append(Spacer(1, 15))
 
-    header = ["Total de\nPublicadores", "Estudos\nbíblicos", "Soma de\nHoras", "Observações"]
+    header = ["Mês", "Estudos\nBíblicos", "Total de\nHoras", "Total de\nRelatórios"]
     
-    total_pessoas = len(df_categoria)
-    total_estudos = int(df_categoria['estudos_biblicos'].sum())
-    total_horas = int(df_categoria['horas'].sum())
+    corpo = []
+    for _, row in df_meses.iterrows():
+        corpo.append([
+            str(row['Mês']), 
+            str(int(row['Estudos'])), 
+            str(int(row['Horas'])), 
+            str(int(row['Relatórios']))
+        ])
     
-    corpo = [[str(total_pessoas), str(total_estudos), str(total_horas), f"Consolidado de {nome_categoria}"]]
-    
-    t_dados = Table([header] + corpo, colWidths=[120, 100, 100, 170])
+    t_dados = Table([header] + corpo, colWidths=[150, 100, 100, 100])
     t_dados.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 1, colors.black),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
@@ -171,7 +172,6 @@ def main():
 
     tabs_principal = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "📈 CONSOLIDADO", "⚙️ CONFIGURAÇÃO"])
 
-    # --- ABA RELATÓRIOS ---
     with tabs_principal[0]:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
         entregaram = df_ok['nome_oficial'].unique() if not df_ok.empty else []
@@ -211,7 +211,6 @@ def main():
                             inicializar_db().collection("relatorios_parque_alianca").add({"nome": p_nome, "mes_referencia": mes_sel, "horas": 0, "estudos_biblicos": 0, "observacoes": "Baixa manual"})
                             st.rerun()
 
-    # --- ABA TRIAGEM ---
     with tabs_principal[1]:
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
         if df_triagem.empty: st.success("✨ Tudo certo nos nomes!")
@@ -230,49 +229,50 @@ def main():
                         validar_e_gravar_novo_membro(row['id'], n_s if n_s != "-- Selecionar --" else n_f, cat_n)
                         st.rerun()
 
-    # --- ABA CONSOLIDADO (NOVA) ---
+    # --- ABA CONSOLIDADO ATUALIZADA ---
     with tabs_principal[2]:
-        st.subheader(f"📈 Consolidado por Categoria - {mes_sel}")
-        df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+        st.subheader("📈 Consolidado Geral por Categoria")
         
-        if df_ok.empty:
-            st.info("Nenhum dado validado para gerar o consolidado.")
+        if df.empty:
+            st.info("Aguardando dados para consolidar.")
         else:
-            col_cons = st.columns(3)
-            for i, cat in enumerate(categorias_lista):
-                with col_cons[i]:
-                    df_cat_cons = df_ok[df_ok['cat_oficial'] == cat]
-                    st.markdown(f"### {cat}")
-                    if df_cat_cons.empty:
-                        st.write("Sem registros.")
-                    else:
-                        st.metric("Total Pessoas", len(df_cat_cons))
-                        st.metric("Soma Horas", f"{int(df_cat_cons['horas'].sum())}h")
-                        st.metric("Soma Estudos", int(df_cat_cons['estudos_biblicos'].sum()))
-                        
-                        # Botão de Exportação Individual do Grupo
-                        pdf_cons = gerar_pdf_consolidado_categoria(df_cat_cons, cat, mes_sel)
-                        st.download_button(
-                            label=f"📥 PDF {cat}",
-                            data=pdf_cons,
-                            file_name=f"Consolidado_{cat}_{mes_sel}.pdf",
-                            mime="application/pdf",
-                            key=f"btn_cons_{cat}",
-                            use_container_width=True
-                        )
+            df_cons = df[df['status_validacao'] == "IDENTIFICADO"]
             
-            st.divider()
-            # Botão para baixar todos os consolidados em um ZIP se desejar
-            if st.button("📦 Gerar ZIP de todos os Consolidados", use_container_width=True):
-                zip_cons_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_cons_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
-                    for cat in categorias_lista:
-                        df_cat_zip = df_ok[df_ok['cat_oficial'] == cat]
-                        if not df_cat_zip.empty:
-                            zf.writestr(f"SOMA_{cat}_{mes_sel}.pdf", gerar_pdf_consolidado_categoria(df_cat_zip, cat, mes_sel))
-                st.download_button("📥 BAIXAR ZIP CONSOLIDADO", zip_cons_buffer.getvalue(), f"Consolidados_{mes_sel}.zip", "application/zip", use_container_width=True)
+            # Mapeamento para nomes amigáveis nas abas
+            label_map = {"PUBLICADOR": "PUBLICADORES", "PIONEIRO AUXILIAR": "AUXILIARES", "PIONEIRO REGULAR": "REGULARES"}
+            sub_tabs_cons = st.tabs([label_map[c] for c in categorias_lista])
+            
+            for i, cat in enumerate(categorias_lista):
+                with sub_tabs_cons[i]:
+                    df_cat_total = df_cons[df_cons['cat_oficial'] == cat]
+                    
+                    if df_cat_total.empty:
+                        st.write("Nenhum relatório identificado para esta categoria.")
+                    else:
+                        # Agrupamento conforme solicitado: mes; estudos; horas; relatorios (soma de pessoas)
+                        resumo = df_cat_total.groupby('mes_referencia').agg({
+                            'estudos_biblicos': 'sum',
+                            'horas': 'sum',
+                            'nome_oficial': 'count'
+                        }).reset_index()
+                        
+                        resumo.columns = ['Mês', 'Estudos', 'Horas', 'Relatórios']
+                        
+                        # Ordenação por mês (baseado no que existe no banco)
+                        resumo = resumo.sort_values('Mês')
+                        
+                        st.dataframe(resumo, use_container_width=True, hide_index=True)
+                        
+                        # Botão para exportar o PDF dessa tabela
+                        pdf_data = gerar_pdf_consolidado_categoria(resumo, label_map[cat])
+                        st.download_button(
+                            label=f"📥 Baixar Consolidado {label_map[cat]} (PDF)",
+                            data=pdf_data,
+                            file_name=f"Consolidado_{label_map[cat]}_2026.pdf",
+                            mime="application/pdf",
+                            key=f"btn_pdf_cons_{cat}"
+                        )
 
-    # --- ABA CONFIGURAÇÃO ---
     with tabs_principal[3]:
         sub_tabs_cfg = st.tabs(["👤 MEMBROS", "📂 REGISTROS TOTAIS (PDF/ZIP)"])
         with sub_tabs_cfg[0]:
@@ -286,7 +286,7 @@ def main():
                     st.rerun()
 
         with sub_tabs_cfg[1]:
-            st.subheader(f"📦 Exportação S-21 Individual - {mes_sel}")
+            st.subheader(f"📦 Exportação S-21 - {mes_sel}")
             df_export = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
             if not df_export.empty:
                 zip_buffer = io.BytesIO()
