@@ -35,6 +35,26 @@ def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
 
+def normalizar_nome_no_banco(nome_recebido, lista_membros):
+    entrada_norm = normalizar_texto(nome_recebido)
+    if not entrada_norm or len(entrada_norm) < 3: return None
+    
+    nomes_oficiais = list(lista_membros)
+    # 1. Busca exata (ignorando acentos/case)
+    for nome in nomes_oficiais:
+        if entrada_norm == normalizar_texto(nome):
+            return nome
+            
+    # 2. Busca por similaridade (Fuzzy Match)
+    melhor_match, maior_score = None, 0
+    for nome_oficial in nomes_oficiais:
+        oficial_norm = normalizar_texto(nome_oficial)
+        score = SequenceMatcher(None, entrada_norm, oficial_norm).ratio()
+        if score > maior_score:
+            maior_score, melhor_match = score, nome_oficial
+            
+    return melhor_match if maior_score >= 0.85 else None
+
 # --- MOTOR DE PDF (S-21 OFICIAL) ---
 def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows):
     path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
@@ -104,21 +124,14 @@ def atualizar_membro(nome, categoria):
     db = inicializar_db()
     if db: db.collection("membros_v2").document(nome).set({"categoria": categoria, "nome_oficial": nome}, merge=True)
 
-def deletar_relatorio(relatorio_id):
+def salvar_relatorio_direto(nome, mes, horas, estudos):
     db = inicializar_db()
-    if db: 
-        db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
-        st.toast("Removido!")
-
-def normalizar_nome_no_banco(nome_recebido, lista_membros):
-    entrada_norm = normalizar_texto(nome_recebido)
-    if not entrada_norm or len(entrada_norm) < 3: return None
-    melhor_match, maior_score = None, 0
-    for nome_oficial in lista_membros:
-        oficial_norm = normalizar_texto(nome_oficial)
-        score = SequenceMatcher(None, entrada_norm, oficial_norm).ratio()
-        if score > maior_score: maior_score, melhor_match = score, nome_oficial
-    return melhor_match if maior_score >= 0.85 else None
+    if db:
+        db.collection("relatorios_parque_alianca").add({
+            "nome": nome, "mes_referencia": mes, "horas": int(horas),
+            "estudos_biblicos": int(estudos), "observacoes": "Lançamento Manual"
+        })
+        st.toast(f"Relatório de {nome} salvo!")
 
 # --- APP ---
 def main():
@@ -142,12 +155,11 @@ def main():
         df[['nome_oficial', 'cat_oficial', 'status_validacao']] = df.apply(validar_envio, axis=1)
         df['mes_referencia'] = df['mes_referencia'].str.upper()
 
-    meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else ["ABRIL 2026"]
+    meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else ["MAIO 2026"]
     mes_sel = st.sidebar.selectbox("📅 Mês de Análise", meses_disponiveis, index=len(meses_disponiveis)-1)
     
     tabs = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "📈 CONSOLIDADO", "⚙️ CONFIGURAÇÃO"])
 
-    # --- ABA 0: RELATÓRIOS & PENDÊNCIAS ---
     with tabs[0]:
         df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
@@ -156,7 +168,6 @@ def main():
         st.subheader(f"Resumo de {mes_sel}")
         sub_rel = st.tabs(["PUBLICADOR", "P. AUXILIAR", "P. REGULAR", "⏳ PENDÊNCIAS"])
         
-        # Filtros por categoria
         for i, cat in enumerate(categorias_lista):
             with sub_rel[i]:
                 df_cat = df_ok[df_ok['cat_oficial'] == cat]
@@ -180,9 +191,19 @@ def main():
                 if pendentes:
                     with st.expander(f"{cat} ({len(pendentes)})"):
                         for p in pendentes:
-                            st.write(f"• {p}")
+                            c1, c2 = st.columns([3, 1])
+                            c1.write(f"• {p}")
+                            if c2.button("Entregar Manual", key=f"btn_p_{p}"):
+                                st.session_state[f"form_ativo_{p}"] = True
+                            
+                            if st.session_state.get(f"form_ativo_{p}"):
+                                with st.form(f"f_p_{p}"):
+                                    h_man = st.number_input("Horas", min_value=0, step=1)
+                                    e_man = st.number_input("Estudos", min_value=0, step=1)
+                                    if st.form_submit_button("Salvar Relatório"):
+                                        salvar_relatorio_direto(p, mes_sel, h_man, e_man)
+                                        st.rerun()
 
-    # --- ABA 1: TRIAGEM ---
     with tabs[1]:
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
         if df_triagem.empty: st.success("Tudo limpo!")
@@ -198,13 +219,12 @@ def main():
                     vincular = c1.selectbox("Vincular a:", ["-- Novo Membro --"] + nomes_db, index=idx_sug, key=f"v_{row['id']}")
                     cat_v = c2.selectbox("Categoria:", categorias_lista, key=f"c_{row['id']}")
                     
-                    if st.button("Confirmar", key=f"b_{row['id']}"):
+                    if st.button("Confirmar Vínculo", key=f"b_{row['id']}"):
                         nome_final = row['nome'] if vincular == "-- Novo Membro --" else vincular
                         atualizar_membro(nome_final, cat_v)
                         inicializar_db().collection("relatorios_parque_alianca").document(row['id']).update({"nome": nome_final})
                         st.rerun()
 
-    # --- ABA 2: CONSOLIDADO (S-21 HISTÓRICO) ---
     with tabs[2]:
         c1, c2 = st.tabs(["👤 INDIVIDUAL (HISTÓRICO)", "📊 CATEGORIA"])
         with c1:
@@ -215,20 +235,15 @@ def main():
                     st.table(df_hist[['mes_referencia', 'horas', 'estudos_biblicos']])
                     pdf = gerar_pdf_padrao_s21(publicador, membros_db[publicador].get('categoria'), df_hist)
                     st.download_button("📥 Baixar Cartão S-21 Completo", pdf, f"S21_{publicador}.pdf")
-
         with c2:
             cat_sel = st.selectbox("Consolidado por Categoria", categorias_lista)
             df_cons = df[(df['status_validacao'] == "IDENTIFICADO") & (df['cat_oficial'] == cat_sel)]
             if not df_cons.empty:
                 resumo = df_cons.groupby('mes_referencia').agg({'horas': 'sum', 'estudos_biblicos': 'sum'}).reset_index()
                 st.dataframe(resumo)
-                pdf_c = gerar_pdf_padrao_s21(f"CONSOLIDADO {cat_sel}S", cat_sel, resumo)
-                st.download_button(f"📥 Baixar Cartão {cat_sel}", pdf_c, f"S21_Consolidado_{cat_sel}.pdf")
 
-    # --- ABA 3: CONFIG & EDIÇÃO ---
     with tabs[3]:
         sub_cfg = st.tabs(["✏️ EDITAR RELATÓRIOS", "📦 EXPORTAR ZIP", "➕ MEMBROS"])
-        
         with sub_cfg[0]:
             st.write(f"### Edição Rápida - {mes_sel}")
             for _, r in df_ok.sort_values('nome_oficial').iterrows():
@@ -239,9 +254,7 @@ def main():
                     novos_e = ce3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"e_e_{r['id']}")
                     if st.button("Salvar Alterações", key=f"s_b_{r['id']}"):
                         inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({"horas": novas_h, "estudos_biblicos": novos_e})
-                        atualizar_membro(r['nome_oficial'], nova_cat)
-                        st.rerun()
-
+                        atualizar_membro(r['nome_oficial'], nova_cat); st.rerun()
         with sub_cfg[1]:
             if not df_ok.empty:
                 if st.button("🚀 GERAR ZIP MENSAL (TODOS S-21)"):
@@ -251,7 +264,6 @@ def main():
                             pdf = gerar_pdf_padrao_s21(r['nome_oficial'], r['cat_oficial'], pd.DataFrame([r]))
                             zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf)
                     st.download_button("📥 Baixar ZIP", buf.getvalue(), f"S21_{mes_sel}.zip")
-
         with sub_cfg[2]:
             with st.form("novo_membro"):
                 nm = st.text_input("Nome")
@@ -259,7 +271,7 @@ def main():
                 if st.form_submit_button("Adicionar"):
                     atualizar_membro(nm, ct); st.rerun()
 
-    st.caption("v2.4.0 | Parque Aliança | Gestão S-21 Unificada")
+    st.caption("v2.5.0 | Parque Aliança | Gestão S-21 Unificada")
 
 if __name__ == "__main__":
     main()
