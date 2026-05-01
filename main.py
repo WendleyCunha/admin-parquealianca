@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import json
 import io
-import zipfile
 import unicodedata
 import os
 from difflib import SequenceMatcher
@@ -23,7 +22,7 @@ st.markdown("""
     <style>
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
     .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; }
-    .pendencia-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #eee; }
+    .metric-container { background-color: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -32,26 +31,18 @@ def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
 
-# AJUSTE 2: Validação automática inteligente (Fuzzy Match)
 def validar_nome_automatico(nome_recebido, lista_membros):
     entrada_norm = normalizar_texto(nome_recebido)
     if not entrada_norm or len(entrada_norm) < 3: return None
-    
     melhor_match, maior_score = None, 0
     for nome_oficial in lista_membros:
         oficial_norm = normalizar_texto(nome_oficial)
-        
-        # Se for exatamente igual após normalizar, retorna na hora
         if entrada_norm == oficial_norm: return nome_oficial
-        
-        # Caso contrário, calcula similaridade (considera partes do nome)
         score = SequenceMatcher(None, entrada_norm, oficial_norm).ratio()
         if score > maior_score: maior_score, melhor_match = score, nome_oficial
-        
-    # Tolerância de 75% para aceitar erro de digitação/sobrenome faltando
     return melhor_match if maior_score >= 0.75 else None
 
-# --- MOTOR DE PDF (S-21 OFICIAL) ---
+# --- MOTOR DE PDF ---
 def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows):
     path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
     if not os.path.exists(path_original):
@@ -135,7 +126,6 @@ def main():
         df['estudos_biblicos'] = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
         
         def validar_envio(row):
-            # AJUSTE 2: Aplicação da busca automática
             nome_oficial = validar_nome_automatico(row['nome'], membros_db.keys())
             if nome_oficial:
                 cat = membros_db[nome_oficial].get('categoria', 'PUBLICADOR')
@@ -150,30 +140,26 @@ def main():
     
     tabs = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "📈 CONSOLIDADO", "⚙️ CONFIG"])
 
-    # --- ABA 0: RELATÓRIOS & PENDÊNCIAS ---
+    # --- ABA 0: RELATÓRIOS ---
     with tabs[0]:
         df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
         entregaram = df_ok['nome_oficial'].unique()
         
         sub_rel = st.tabs(["PUBLICADORES", "P. AUXILIARES", "P. REGULARES", "⏳ PENDÊNCIAS"])
-        
         for i, cat in enumerate(categorias_lista):
             with sub_rel[i]:
                 df_cat = df_ok[df_ok['cat_oficial'] == cat]
-                # AJUSTE 3: Ordem (Horas, Estudos e depois Envios)
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Total Horas", f"{int(df_cat['horas'].sum())}h")
                 m2.metric("Estudos Bíblicos", int(df_cat['estudos_biblicos'].sum()))
                 m3.metric("Total de Relatórios", len(df_cat))
-                
                 cols = st.columns(4)
                 for idx, (_, r) in enumerate(df_cat.sort_values('nome_oficial').iterrows()):
                     with cols[idx % 4]:
                         st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div>⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])}</div>', unsafe_allow_html=True)
 
         with sub_rel[3]:
-            # AJUSTE 1: Botão de Entrega Manual nas pendências
             st.warning(f"Pendentes em {mes_sel}")
             for cat in categorias_lista:
                 membros_cat = [n for n, d in membros_db.items() if d.get('categoria') == cat]
@@ -185,7 +171,6 @@ def main():
                             c1.write(f"• {p}")
                             if c2.button("Entregar Manual", key=f"btn_p_{p}"):
                                 st.session_state[f"show_form_{p}"] = True
-                            
                             if st.session_state.get(f"show_form_{p}"):
                                 with st.form(f"form_{p}"):
                                     h_man = st.number_input("Horas", min_value=0, key=f"h_{p}")
@@ -209,15 +194,35 @@ def main():
                         inicializar_db().collection("relatorios_parque_alianca").document(row['id']).update({"nome": nome_final})
                         st.rerun()
 
-    # --- ABA 2: CONSOLIDADO ---
+    # --- ABA 2: CONSOLIDADO (AJUSTE SOLICITADO) ---
     with tabs[2]:
-        publicador = st.selectbox("Publicador para Histórico S-21", sorted(list(membros_db.keys())))
+        st.subheader(f"📈 Visão Geral: {mes_sel}")
+        df_mes_ok = df[(df['mes_referencia'] == mes_sel) & (df['status_validacao'] == "IDENTIFICADO")]
+        
+        # Totais por Categoria
+        c1, c2, c3 = st.columns(3)
+        for i, cat in enumerate(categorias_lista):
+            df_c = df_mes_ok[df_mes_ok['cat_oficial'] == cat]
+            with [c1, c2, c3][i]:
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div style="font-size:0.9rem; color:#64748b;">{cat}S</div>
+                    <div style="font-size:1.5rem; font-weight:bold; color:#002366;">{int(df_c['horas'].sum())}h</div>
+                    <div style="font-size:0.8rem;">Estudos: {int(df_c['estudos_biblicos'].sum())} | Relatórios: {len(df_c)}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        st.divider()
+        st.subheader("🗄️ Histórico Individual & S-21")
+        publicador = st.selectbox("Selecione o Publicador", sorted(list(membros_db.keys())))
         if publicador:
             df_hist = df[(df['nome_oficial'] == publicador) & (df['status_validacao'] == "IDENTIFICADO")].sort_values('mes_referencia')
             if not df_hist.empty:
-                st.table(df_hist[['mes_referencia', 'horas', 'estudos_biblicos']])
+                st.dataframe(df_hist[['mes_referencia', 'horas', 'estudos_biblicos']], use_container_width=True)
                 pdf = gerar_pdf_padrao_s21(publicador, membros_db[publicador].get('categoria'), df_hist)
-                st.download_button("📥 Baixar Cartão S-21", pdf, f"S21_{publicador}.pdf")
+                st.download_button(f"📥 Baixar Cartão S-21 de {publicador}", pdf, f"S21_{publicador}.pdf")
+            else:
+                st.info("Nenhum registro encontrado para este publicador.")
 
     # --- ABA 3: CONFIG ---
     with tabs[3]:
@@ -227,7 +232,7 @@ def main():
             if st.form_submit_button("Adicionar"):
                 atualizar_membro(nm, ct); st.rerun()
 
-    st.caption("v2.5.0 | Parque Aliança | Gestão S-21")
+    st.caption("v2.6.0 | Parque Aliança | Gestão S-21")
 
 if __name__ == "__main__":
     main()
