@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import io
+import zipfile
 import unicodedata
 import os
 from difflib import SequenceMatcher
@@ -22,7 +23,9 @@ st.markdown("""
     <style>
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
     .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; }
-    .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;}
+    .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 15px; }
+    .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
+    .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -31,7 +34,7 @@ def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
 
-def validar_nome_automatico(nome_recebido, lista_membros):
+def normalizar_nome_no_banco(nome_recebido, lista_membros):
     entrada_norm = normalizar_texto(nome_recebido)
     if not entrada_norm or len(entrada_norm) < 3: return None
     melhor_match, maior_score = None, 0
@@ -40,9 +43,9 @@ def validar_nome_automatico(nome_recebido, lista_membros):
         if entrada_norm == oficial_norm: return nome_oficial
         score = SequenceMatcher(None, entrada_norm, oficial_norm).ratio()
         if score > maior_score: maior_score, melhor_match = score, nome_oficial
-    return melhor_match if maior_score >= 0.75 else None
+    return melhor_match if maior_score >= 0.80 else None # Tolerância ajustada para 80%
 
-# --- MOTOR DE PDF ---
+# --- MOTOR DE PDF (S-21 OFICIAL) ---
 def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows):
     path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
     if not os.path.exists(path_original):
@@ -67,9 +70,14 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows):
             if int(row.get('horas', 0)) > 0 or int(row.get('estudos_biblicos', 0)) > 0:
                 can.drawCentredString(53.5*mm, y_pos, "X")
             can.drawCentredString(80.5*mm, y_pos, str(int(row.get('estudos_biblicos', 0))))
-            if "AUXILIAR" in str(categoria_label).upper():
+            if row.get('cat_oficial') == "PIONEIRO AUXILIAR" or "AUXILIAR" in str(categoria_label).upper():
                 can.drawCentredString(97.5*mm, y_pos, "X")
             can.drawCentredString(116.5*mm, y_pos, str(int(row.get('horas', 0))))
+            obs = str(row.get('observacoes', ''))[:30]
+            if obs and obs.lower() != 'nan':
+                can.setFont("Helvetica", 7)
+                can.drawString(133*mm, y_pos, obs)
+                can.setFont("Helvetica-Bold", 10)
 
     can.save()
     packet.seek(0)
@@ -94,11 +102,13 @@ def inicializar_db():
 
 def carregar_membros():
     db = inicializar_db()
-    return {doc.id: doc.to_dict() for doc in db.collection("membros_v2").stream()} if db else {}
+    if not db: return {}
+    return {doc.id: doc.to_dict() for doc in db.collection("membros_v2").stream()}
 
 def carregar_relatorios():
     db = inicializar_db()
-    return [{"id": doc.id, **doc.to_dict()} for doc in db.collection("relatorios_parque_alianca").stream()] if db else []
+    if not db: return []
+    return [{"id": doc.id, **doc.to_dict()} for doc in db.collection("relatorios_parque_alianca").stream()]
 
 def atualizar_membro(nome, categoria):
     db = inicializar_db()
@@ -126,7 +136,7 @@ def main():
         df['estudos_biblicos'] = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
         
         def validar_envio(row):
-            nome_oficial = validar_nome_automatico(row['nome'], membros_db.keys())
+            nome_oficial = normalizar_nome_no_banco(row['nome'], membros_db.keys())
             if nome_oficial:
                 cat = membros_db[nome_oficial].get('categoria', 'PUBLICADOR')
                 return pd.Series([nome_oficial, cat, "IDENTIFICADO"])
@@ -138,7 +148,7 @@ def main():
     meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else ["MAIO 2026"]
     mes_sel = st.sidebar.selectbox("📅 Mês de Análise", meses_disponiveis, index=len(meses_disponiveis)-1)
     
-    tabs = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "📈 CONSOLIDADO", "⚙️ CONFIG"])
+    tabs = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "📈 CONSOLIDADO", "⚙️ CONFIGURAÇÃO"])
 
     # --- ABA 0: RELATÓRIOS & PENDÊNCIAS ---
     with tabs[0]:
@@ -146,20 +156,24 @@ def main():
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
         entregaram = df_ok['nome_oficial'].unique()
         
-        sub_rel = st.tabs(["PUBLICADORES", "P. AUXILIARES", "P. REGULARES", "⏳ PENDÊNCIAS"])
+        st.subheader(f"Resumo de {mes_sel}")
+        sub_rel = st.tabs(["PUBLICADOR", "P. AUXILIAR", "P. REGULAR", "⏳ PENDÊNCIAS"])
+        
         for i, cat in enumerate(categorias_lista):
             with sub_rel[i]:
                 df_cat = df_ok[df_ok['cat_oficial'] == cat]
-                # Ajuste de Ordem de Métricas
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Total Horas", f"{int(df_cat['horas'].sum())}h")
-                m2.metric("Estudos Bíblicos", int(df_cat['estudos_biblicos'].sum()))
-                m3.metric("Total de Relatórios", len(df_cat))
-                
-                cols = st.columns(4)
-                for idx, (_, r) in enumerate(df_cat.sort_values('nome_oficial').iterrows()):
-                    with cols[idx % 4]:
-                        st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div>⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])}</div>', unsafe_allow_html=True)
+                if df_cat.empty: st.info(f"Sem envios.")
+                else:
+                    # Melhoria Visual das Métricas (Mundo 1)
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Relatórios", len(df_cat))
+                    m2.metric("Total Horas", f"{int(df_cat['horas'].sum())}h")
+                    m3.metric("Estudos", int(df_cat['estudos_biblicos'].sum()))
+                    
+                    cols = st.columns(4)
+                    for idx, (_, r) in enumerate(df_cat.sort_values('nome_oficial').iterrows()):
+                        with cols[idx % 4]:
+                            st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div>⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])}</div>', unsafe_allow_html=True)
 
         with sub_rel[3]:
             st.warning(f"Pendentes em {mes_sel}")
@@ -171,71 +185,103 @@ def main():
                         for p in pendentes:
                             c1, c2 = st.columns([3, 1])
                             c1.write(f"• {p}")
+                            # Recurso de Entrega Manual (Mundo 1)
                             if c2.button("Entregar Manual", key=f"btn_p_{p}"):
                                 st.session_state[f"show_form_{p}"] = True
+                            
                             if st.session_state.get(f"show_form_{p}"):
                                 with st.form(f"form_{p}"):
                                     h_man = st.number_input("Horas", min_value=0, key=f"h_{p}")
                                     e_man = st.number_input("Estudos", min_value=0, key=f"e_{p}")
-                                    if st.form_submit_button("Salvar Relatório"):
+                                    if st.form_submit_button("Salvar"):
                                         salvar_relatorio_manual(p, mes_sel, h_man, e_man)
                                         st.rerun()
 
     # --- ABA 1: TRIAGEM ---
     with tabs[1]:
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
-        if df_triagem.empty: st.success("A validação automática resolveu tudo! ✅")
+        if df_triagem.empty: st.success("Tudo organizado! ✅")
         else:
             for _, row in df_triagem.iterrows():
                 with st.container(border=True):
-                    st.write(f"Digitado: **{row['nome']}** | Horas: {row['horas']}")
+                    st.write(f"**Digitado:** {row['nome']} | **Horas:** {row['horas']}")
                     nomes_db = sorted(list(membros_db.keys()))
-                    vincular = st.selectbox("Vincular a:", ["-- Novo Membro --"] + nomes_db, key=f"v_{row['id']}")
+                    sugestao = normalizar_nome_no_banco(row['nome'], nomes_db)
+                    idx_sug = nomes_db.index(sugestao) + 1 if sugestao else 0
+                    
+                    c1, c2 = st.columns(2)
+                    vincular = c1.selectbox("Vincular a:", ["-- Novo Membro --"] + nomes_db, index=idx_sug, key=f"v_{row['id']}")
+                    cat_v = c2.selectbox("Categoria:", categorias_lista, key=f"c_{row['id']}")
+                    
                     if st.button("Confirmar Vínculo", key=f"b_{row['id']}"):
                         nome_final = row['nome'] if vincular == "-- Novo Membro --" else vincular
+                        atualizar_membro(nome_final, cat_v)
                         inicializar_db().collection("relatorios_parque_alianca").document(row['id']).update({"nome": nome_final})
                         st.rerun()
 
-    # --- ABA 2: CONSOLIDADO (TODOS OS RECURSOS + TOTAIS POR CATEGORIA) ---
+    # --- ABA 2: CONSOLIDADO ---
     with tabs[2]:
-        st.subheader(f"📊 Totais do Mês: {mes_sel}")
-        df_mes_ok = df[(df['mes_referencia'] == mes_sel) & (df['status_validacao'] == "IDENTIFICADO")]
+        c1, c2 = st.tabs(["👤 INDIVIDUAL (HISTÓRICO)", "📊 POR CATEGORIA"])
+        with c1:
+            publicador = st.selectbox("Escolha o Publicador", sorted(list(membros_db.keys())))
+            if publicador:
+                df_hist = df[(df['nome_oficial'] == publicador) & (df['status_validacao'] == "IDENTIFICADO")].sort_values('mes_referencia')
+                if not df_hist.empty:
+                    st.table(df_hist[['mes_referencia', 'horas', 'estudos_biblicos']])
+                    pdf = gerar_pdf_padrao_s21(publicador, membros_db[publicador].get('categoria'), df_hist)
+                    st.download_button("📥 Baixar Cartão S-21 Completo", pdf, f"S21_{publicador}.pdf")
         
-        # Consolidados de Totais por Categoria
-        ct1, ct2, ct3 = st.columns(3)
-        for i, categoria in enumerate(categorias_lista):
-            df_cat_total = df_mes_ok[df_mes_ok['cat_oficial'] == categoria]
-            with [ct1, ct2, ct3][i]:
-                st.markdown(f"""
-                <div class="metric-container">
-                    <div style="font-weight:bold; color:#002366; border-bottom:1px solid #ddd; margin-bottom:5px;">{categoria}S</div>
-                    <div style="font-size:1.2rem;">⏱️ <b>{int(df_cat_total['horas'].sum())}</b> Horas</div>
-                    <div style="font-size:1.2rem;">📚 <b>{int(df_cat_total['estudos_biblicos'].sum())}</b> Estudos</div>
-                    <div style="font-size:0.9rem; color:#666;">Envios: {len(df_cat_total)}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        st.divider()
-        st.subheader("🗄️ Histórico Individual e Cartão S-21")
-        publicador = st.selectbox("Publicador para Histórico", sorted(list(membros_db.keys())))
-        if publicador:
-            df_hist = df[(df['nome_oficial'] == publicador) & (df['status_validacao'] == "IDENTIFICADO")].sort_values('mes_referencia')
-            if not df_hist.empty:
-                st.table(df_hist[['mes_referencia', 'horas', 'estudos_biblicos']])
-                pdf = gerar_pdf_padrao_s21(publicador, membros_db[publicador].get('categoria'), df_hist)
-                st.download_button(f"📥 Baixar Cartão S-21 ({publicador})", pdf, f"S21_{publicador}.pdf")
-            else:
-                st.info("Aguardando relatórios para este publicador.")
+        with c2:
+            st.subheader(f"Resumo Geral por Categoria - {mes_sel}")
+            ct1, ct2, ct3 = st.columns(3)
+            for i, cat in enumerate(categorias_lista):
+                df_cat_total = df_ok[df_ok['cat_oficial'] == cat]
+                with [ct1, ct2, ct3][i]:
+                    st.markdown(f"""
+                    <div class="metric-container">
+                        <div class="metric-label">{cat}S</div>
+                        <div class="metric-value">⏱️ {int(df_cat_total['horas'].sum())}h</div>
+                        <div class="metric-value">📚 {int(df_cat_total['estudos_biblicos'].sum())}</div>
+                        <div style="font-size:0.8rem; color:gray;">Envios: {len(df_cat_total)}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-    # --- ABA 3: CONFIG ---
+    # --- ABA 3: CONFIG & EDIÇÃO ---
     with tabs[3]:
-        with st.form("novo_membro"):
-            nm = st.text_input("Nome do Novo Membro")
-            ct = st.selectbox("Categoria", categorias_lista)
-            if st.form_submit_button("Adicionar"):
-                atualizar_membro(nm, ct); st.rerun()
+        sub_cfg = st.tabs(["✏️ EDITAR RELATÓRIOS", "📦 EXPORTAR ZIP", "➕ MEMBROS"])
+        
+        with sub_cfg[0]:
+            st.write(f"### Edição Rápida - {mes_sel}")
+            for _, r in df_ok.sort_values('nome_oficial').iterrows():
+                with st.expander(f"{r['nome_oficial']} ({int(r['horas'])}h)"):
+                    ce1, ce2, ce3 = st.columns([2,1,1])
+                    nova_cat = ce1.selectbox("Categoria", categorias_lista, index=categorias_lista.index(r['cat_oficial']), key=f"e_c_{r['id']}")
+                    novas_h = ce2.number_input("Horas", value=int(r['horas']), key=f"e_h_{r['id']}")
+                    novos_e = ce3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"e_e_{r['id']}")
+                    if st.button("Salvar Alterações", key=f"s_b_{r['id']}"):
+                        inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({"horas": novas_h, "estudos_biblicos": novos_e})
+                        atualizar_membro(r['nome_oficial'], nova_cat)
+                        st.rerun()
 
-    st.caption("v2.6.0 | Parque Aliança | Gestão S-21")
+        with sub_cfg[1]:
+            if not df_ok.empty:
+                if st.button("🚀 GERAR ZIP MENSAL (TODOS S-21 DO MÊS)"):
+                    buf = io.BytesIO()
+                    with zipfile.ZipFile(buf, "a") as zf:
+                        for _, r in df_ok.iterrows():
+                            # Gera PDF apenas com os dados daquele registro específico para o ZIP
+                            pdf = gerar_pdf_padrao_s21(r['nome_oficial'], r['cat_oficial'], pd.DataFrame([r]))
+                            zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf)
+                    st.download_button("📥 Baixar ZIP", buf.getvalue(), f"S21_Geral_{mes_sel}.zip")
+
+        with sub_cfg[2]:
+            with st.form("novo_membro"):
+                nm = st.text_input("Nome")
+                ct = st.selectbox("Categoria", categorias_lista)
+                if st.form_submit_button("Adicionar"):
+                    atualizar_membro(nm, ct); st.rerun()
+
+    st.caption("v2.6.0 | Parque Aliança | Gestão Integrada S-21")
 
 if __name__ == "__main__":
     main()
