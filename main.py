@@ -38,28 +38,22 @@ def normalizar_texto(texto):
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
     entrada_norm = normalizar_texto(nome_recebido)
     if not entrada_norm or len(entrada_norm) < 3: return None
-    
     nomes_oficiais = list(lista_membros)
-    # 1. Busca exata (ignorando acentos/case)
     for nome in nomes_oficiais:
         if entrada_norm == normalizar_texto(nome):
             return nome
-            
-    # 2. Busca por similaridade (Fuzzy Match)
     melhor_match, maior_score = None, 0
     for nome_oficial in nomes_oficiais:
         oficial_norm = normalizar_texto(nome_oficial)
         score = SequenceMatcher(None, entrada_norm, oficial_norm).ratio()
         if score > maior_score:
             maior_score, melhor_match = score, nome_oficial
-            
     return melhor_match if maior_score >= 0.85 else None
 
 # --- MOTOR DE PDF (S-21 OFICIAL) ---
 def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows):
     path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
     if not os.path.exists(path_original):
-        st.error("Arquivo 's21.pdf' não encontrado.")
         return None
 
     packet = io.BytesIO()
@@ -195,7 +189,6 @@ def main():
                             c1.write(f"• {p}")
                             if c2.button("Entregar Manual", key=f"btn_p_{p}"):
                                 st.session_state[f"form_ativo_{p}"] = True
-                            
                             if st.session_state.get(f"form_ativo_{p}"):
                                 with st.form(f"f_p_{p}"):
                                     h_man = st.number_input("Horas", min_value=0, step=1)
@@ -214,11 +207,9 @@ def main():
                     nomes_db = sorted(list(membros_db.keys()))
                     sugestao = normalizar_nome_no_banco(row['nome'], nomes_db)
                     idx_sug = nomes_db.index(sugestao) + 1 if sugestao else 0
-                    
                     c1, c2 = st.columns(2)
                     vincular = c1.selectbox("Vincular a:", ["-- Novo Membro --"] + nomes_db, index=idx_sug, key=f"v_{row['id']}")
                     cat_v = c2.selectbox("Categoria:", categorias_lista, key=f"c_{row['id']}")
-                    
                     if st.button("Confirmar Vínculo", key=f"b_{row['id']}"):
                         nome_final = row['nome'] if vincular == "-- Novo Membro --" else vincular
                         atualizar_membro(nome_final, cat_v)
@@ -234,19 +225,33 @@ def main():
                 if not df_hist.empty:
                     st.table(df_hist[['mes_referencia', 'horas', 'estudos_biblicos']])
                     pdf = gerar_pdf_padrao_s21(publicador, membros_db[publicador].get('categoria'), df_hist)
-                    st.download_button("📥 Baixar Cartão S-21 Completo", pdf, f"S21_{publicador}.pdf")
+                    if pdf: st.download_button("📥 Baixar Cartão S-21 Completo", pdf, f"S21_{publicador}.pdf")
+        
         with c2:
             cat_sel = st.selectbox("Consolidado por Categoria", categorias_lista)
             df_cons = df[(df['status_validacao'] == "IDENTIFICADO") & (df['cat_oficial'] == cat_sel)]
             if not df_cons.empty:
                 resumo = df_cons.groupby('mes_referencia').agg({'horas': 'sum', 'estudos_biblicos': 'sum'}).reset_index()
-                st.dataframe(resumo)
+                st.dataframe(resumo, use_container_width=True)
+                
+                # NOVO: Baixar todos os cartões desta categoria específica
+                if st.button(f"📥 Baixar Todos os Cartões: {cat_sel}"):
+                    membros_da_cat = [n for n, d in membros_db.items() if d.get('categoria') == cat_sel]
+                    buf = io.BytesIO()
+                    with zipfile.ZipFile(buf, "a") as zf:
+                        for m_nome in membros_da_cat:
+                            df_m = df[(df['nome_oficial'] == m_nome) & (df['status_validacao'] == "IDENTIFICADO")]
+                            if not df_m.empty:
+                                pdf = gerar_pdf_padrao_s21(m_nome, cat_sel, df_m)
+                                if pdf: zf.writestr(f"{cat_sel}/S21_{m_nome}.pdf", pdf)
+                    st.download_button(f"🚀 Clique aqui para salvar ZIP ({cat_sel})", buf.getvalue(), f"S21_{cat_sel}.zip")
 
     with tabs[3]:
         sub_cfg = st.tabs(["✏️ EDITAR RELATÓRIOS", "📦 EXPORTAR ZIP", "➕ MEMBROS"])
         with sub_cfg[0]:
             st.write(f"### Edição Rápida - {mes_sel}")
-            for _, r in df_ok.sort_values('nome_oficial').iterrows():
+            df_mes_ok = df[(df['mes_referencia'] == mes_sel) & (df['status_validacao'] == "IDENTIFICADO")]
+            for _, r in df_mes_ok.sort_values('nome_oficial').iterrows():
                 with st.expander(f"{r['nome_oficial']} ({int(r['horas'])}h)"):
                     ce1, ce2, ce3 = st.columns([2,1,1])
                     nova_cat = ce1.selectbox("Categoria", categorias_lista, index=categorias_lista.index(r['cat_oficial']), key=f"e_c_{r['id']}")
@@ -255,15 +260,27 @@ def main():
                     if st.button("Salvar Alterações", key=f"s_b_{r['id']}"):
                         inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({"horas": novas_h, "estudos_biblicos": novos_e})
                         atualizar_membro(r['nome_oficial'], nova_cat); st.rerun()
+        
         with sub_cfg[1]:
-            if not df_ok.empty:
-                if st.button("🚀 GERAR ZIP MENSAL (TODOS S-21)"):
-                    buf = io.BytesIO()
-                    with zipfile.ZipFile(buf, "a") as zf:
-                        for _, r in df_ok.iterrows():
-                            pdf = gerar_pdf_padrao_s21(r['nome_oficial'], r['cat_oficial'], pd.DataFrame([r]))
-                            zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf)
-                    st.download_button("📥 Baixar ZIP", buf.getvalue(), f"S21_{mes_sel}.zip")
+            st.subheader("Exportação Completa")
+            st.info("Esta opção gera um arquivo ZIP contendo o cartão S-21 (com todo o histórico acumulado) de todos os membros de todas as categorias.")
+            
+            if st.button("🚀 GERAR SUPER ZIP (TODAS CATEGORIAS)"):
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "a") as zf:
+                    # Itera por todas as categorias para organizar pastas
+                    for categoria in categorias_lista:
+                        membros_da_cat = [n for n, d in membros_db.items() if d.get('categoria') == categoria]
+                        for m_nome in membros_da_cat:
+                            # Pega todo o histórico do membro (não apenas o mês selecionado)
+                            df_m = df[(df['nome_oficial'] == m_nome) & (df['status_validacao'] == "IDENTIFICADO")]
+                            if not df_m.empty:
+                                pdf = gerar_pdf_padrao_s21(m_nome, categoria, df_m)
+                                if pdf:
+                                    zf.writestr(f"{categoria}/S21_{m_nome}.pdf", pdf)
+                
+                st.download_button("📥 Baixar ZIP Completo", buf.getvalue(), f"Consolidado_S21_Parque_Alianca.zip")
+
         with sub_cfg[2]:
             with st.form("novo_membro"):
                 nm = st.text_input("Nome")
@@ -271,7 +288,7 @@ def main():
                 if st.form_submit_button("Adicionar"):
                     atualizar_membro(nm, ct); st.rerun()
 
-    st.caption("v2.5.0 | Parque Aliança | Gestão S-21 Unificada")
+    st.caption("v2.6.0 | Parque Aliança | Gestão S-21 Unificada")
 
 if __name__ == "__main__":
     main()
