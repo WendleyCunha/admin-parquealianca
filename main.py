@@ -22,7 +22,7 @@ st.markdown("""
     <style>
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
     .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; }
-    .metric-container { background-color: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -140,7 +140,7 @@ def main():
     
     tabs = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "📈 CONSOLIDADO", "⚙️ CONFIG"])
 
-    # --- ABA 0: RELATÓRIOS ---
+    # --- ABA 0: RELATÓRIOS & PENDÊNCIAS ---
     with tabs[0]:
         df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
@@ -150,10 +150,12 @@ def main():
         for i, cat in enumerate(categorias_lista):
             with sub_rel[i]:
                 df_cat = df_ok[df_ok['cat_oficial'] == cat]
+                # Ajuste de Ordem de Métricas
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Total Horas", f"{int(df_cat['horas'].sum())}h")
                 m2.metric("Estudos Bíblicos", int(df_cat['estudos_biblicos'].sum()))
                 m3.metric("Total de Relatórios", len(df_cat))
+                
                 cols = st.columns(4)
                 for idx, (_, r) in enumerate(df_cat.sort_values('nome_oficial').iterrows()):
                     with cols[idx % 4]:
@@ -194,35 +196,36 @@ def main():
                         inicializar_db().collection("relatorios_parque_alianca").document(row['id']).update({"nome": nome_final})
                         st.rerun()
 
-    # --- ABA 2: CONSOLIDADO (AJUSTE SOLICITADO) ---
+    # --- ABA 2: CONSOLIDADO (TODOS OS RECURSOS + TOTAIS POR CATEGORIA) ---
     with tabs[2]:
-        st.subheader(f"📈 Visão Geral: {mes_sel}")
+        st.subheader(f"📊 Totais do Mês: {mes_sel}")
         df_mes_ok = df[(df['mes_referencia'] == mes_sel) & (df['status_validacao'] == "IDENTIFICADO")]
         
-        # Totais por Categoria
-        c1, c2, c3 = st.columns(3)
-        for i, cat in enumerate(categorias_lista):
-            df_c = df_mes_ok[df_mes_ok['cat_oficial'] == cat]
-            with [c1, c2, c3][i]:
+        # Consolidados de Totais por Categoria
+        ct1, ct2, ct3 = st.columns(3)
+        for i, categoria in enumerate(categorias_lista):
+            df_cat_total = df_mes_ok[df_mes_ok['cat_oficial'] == categoria]
+            with [ct1, ct2, ct3][i]:
                 st.markdown(f"""
                 <div class="metric-container">
-                    <div style="font-size:0.9rem; color:#64748b;">{cat}S</div>
-                    <div style="font-size:1.5rem; font-weight:bold; color:#002366;">{int(df_c['horas'].sum())}h</div>
-                    <div style="font-size:0.8rem;">Estudos: {int(df_c['estudos_biblicos'].sum())} | Relatórios: {len(df_c)}</div>
+                    <div style="font-weight:bold; color:#002366; border-bottom:1px solid #ddd; margin-bottom:5px;">{categoria}S</div>
+                    <div style="font-size:1.2rem;">⏱️ <b>{int(df_cat_total['horas'].sum())}</b> Horas</div>
+                    <div style="font-size:1.2rem;">📚 <b>{int(df_cat_total['estudos_biblicos'].sum())}</b> Estudos</div>
+                    <div style="font-size:0.9rem; color:#666;">Envios: {len(df_cat_total)}</div>
                 </div>
                 """, unsafe_allow_html=True)
         
         st.divider()
-        st.subheader("🗄️ Histórico Individual & S-21")
-        publicador = st.selectbox("Selecione o Publicador", sorted(list(membros_db.keys())))
+        st.subheader("🗄️ Histórico Individual e Cartão S-21")
+        publicador = st.selectbox("Publicador para Histórico", sorted(list(membros_db.keys())))
         if publicador:
             df_hist = df[(df['nome_oficial'] == publicador) & (df['status_validacao'] == "IDENTIFICADO")].sort_values('mes_referencia')
             if not df_hist.empty:
-                st.dataframe(df_hist[['mes_referencia', 'horas', 'estudos_biblicos']], use_container_width=True)
+                st.table(df_hist[['mes_referencia', 'horas', 'estudos_biblicos']])
                 pdf = gerar_pdf_padrao_s21(publicador, membros_db[publicador].get('categoria'), df_hist)
-                st.download_button(f"📥 Baixar Cartão S-21 de {publicador}", pdf, f"S21_{publicador}.pdf")
+                st.download_button(f"📥 Baixar Cartão S-21 ({publicador})", pdf, f"S21_{publicador}.pdf")
             else:
-                st.info("Nenhum registro encontrado para este publicador.")
+                st.info("Aguardando relatórios para este publicador.")
 
     # --- ABA 3: CONFIG ---
     with tabs[3]:
