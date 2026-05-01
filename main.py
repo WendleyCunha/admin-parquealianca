@@ -23,7 +23,6 @@ st.markdown("""
     <style>
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; position: relative; }
     .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; margin-right: 25px; }
-    .triagem-box { background-color: #fff4e5; padding: 15px; border-radius: 10px; border: 1px solid #ffa94d; margin-bottom: 10px; }
     .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 15px; }
     .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
     .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
@@ -37,10 +36,6 @@ def normalizar_texto(texto):
 
 # --- MOTOR DE PREENCHIMENTO UNIFICADO (S-21 OFICIAL) ---
 def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows):
-    """
-    Função Mestra: Preenche o formulário oficial S-21.
-    dados_rows: Pode ser um DataFrame com um mês ou com o histórico de vários meses.
-    """
     path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
     if not os.path.exists(path_original):
         st.error("Arquivo 's21.pdf' não encontrado no servidor.")
@@ -49,63 +44,81 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows):
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=A4)
     
-    # 1. Cabeçalho (Nome do Publicador ou Categoria)
+    # 1. Cabeçalho - Ajustado para cima (260.5mm)
     can.setFont("Helvetica-Bold", 10)
-    can.drawString(24*mm, 258*mm, str(nome_cabecalho).upper())
+    can.drawString(24*mm, 260.5*mm, str(nome_cabecalho).upper())
     
-    # 2. Mapeamento de Coordenadas Y para cada linha de mês do formulário
+    # 2. Mapeamento de Coordenadas Y (Ajustado para as linhas do formulário)
     y_map = {
-        "SETEMBRO": 204.5, "OUTUBRO": 196.5, "NOVEMBRO": 188.5, "DEZEMBRO": 180.5,
-        "JANEIRO": 172.5, "FEVEREIRO": 164.5, "MARÇO": 156.5, "ABRIL": 148.5,
-        "MAIO": 140.5, "JUNHO": 132.5, "JULHO": 124.5, "AGOSTO": 116.5
+        "SETEMBRO": 204.5, "OUTUBRO": 197.0, "NOVEMBRO": 189.5, "DEZEMBRO": 182.0,
+        "JANEIRO": 174.5, "FEVEREIRO": 167.0, "MARÇO": 159.5, "ABRIL": 152.0,
+        "MAIO": 144.5, "JUNHO": 137.0, "JULHO": 129.5, "AGOSTO": 122.0
     }
     
-    # 3. Preenchimento Iterativo (Suporta 1 ou vários meses no mesmo cartão)
+    total_estudos = 0
+    total_horas = 0
+
+    # 3. Preenchimento Iterativo das Linhas
     for _, row in dados_rows.iterrows():
-        # Extrai apenas o nome do mês (ex: "ABRIL 2026" -> "ABRIL")
         mes_key = str(row['mes_referencia']).split()[0].upper()
         
         if mes_key in y_map:
             y_pos = y_map[mes_key] * mm
             
+            # Conversão e Acúmulo
+            estudos = int(row.get('estudos_biblicos', 0))
+            horas = int(row.get('horas', 0))
+            total_estudos += estudos
+            total_horas += horas
+
             # Coluna: Participou (X)
-            if int(row.get('horas', 0)) > 0 or int(row.get('estudos_biblicos', 0)) > 0:
+            if horas > 0 or estudos > 0:
                 can.drawCentredString(53.5*mm, y_pos, "X")
             
             # Coluna: Estudos Bíblicos
-            can.drawCentredString(80.5*mm, y_pos, str(int(row.get('estudos_biblicos', 0))))
+            can.drawCentredString(80.5*mm, y_pos, str(estudos))
             
             # Coluna: Pioneiro Auxiliar (X)
-            # Marcamos se a categoria do publicador for Auxiliar ou se for um consolidado de Auxiliares
-            if row.get('cat_oficial') == "PIONEIRO AUXILIAR" or "AUXILIAR" in str(categoria_label).upper():
+            if str(row.get('cat_oficial')).upper() == "PIONEIRO AUXILIAR" or "AUXILIAR" in str(categoria_label).upper():
                 can.drawCentredString(97.5*mm, y_pos, "X")
                 
             # Coluna: Horas
-            can.drawCentredString(116.5*mm, y_pos, str(int(row.get('horas', 0))))
+            can.drawCentredString(116.5*mm, y_pos, str(horas))
             
-            # Coluna: Observações (limite de 30 caracteres)
+            # Coluna: Observações
             obs = str(row.get('observacoes', ''))[:30]
             if obs and obs.lower() != 'nan':
                 can.setFont("Helvetica", 7)
                 can.drawString(133*mm, y_pos, obs)
                 can.setFont("Helvetica-Bold", 10)
 
+    # 4. Preenchimento da Soma Total (Linha de baixo)
+    y_total = 111.5 * mm
+    can.setFont("Helvetica-Bold", 10)
+    can.drawCentredString(80.5*mm, y_total, str(total_estudos))
+    can.drawCentredString(116.5*mm, y_total, str(total_horas))
+
     can.save()
     packet.seek(0)
 
-    # Mesclagem
-    reader_original = PdfReader(open(path_original, "rb"))
-    writer = PdfWriter()
-    pagina_base = reader_original.pages[0]
-    overlay_pdf = PdfReader(packet)
-    pagina_base.merge_page(overlay_pdf.pages[0])
-    writer.add_page(pagina_base)
-    
-    output = io.BytesIO()
-    writer.write(output)
-    return output.getvalue()
+    # Mesclagem Final
+    try:
+        reader_original = PdfReader(open(path_original, "rb"))
+        writer = PdfWriter()
+        pagina_base = reader_original.pages[0]
+        overlay_pdf = PdfReader(packet)
+        pagina_base.merge_page(overlay_pdf.pages[0])
+        writer.add_page(pagina_base)
+        
+        output = io.BytesIO()
+        writer.write(output)
+        return output.getvalue()
+    except Exception as e:
+        st.error(f"Erro na mesclagem do PDF: {e}")
+        return None
 
-# --- FUNÇÕES DE BANCO (CONEXÃO FIRESTORE) ---
+# --- FUNÇÕES DE BANCO E INTERFACE (Mantidas conforme sua lógica) ---
+
 def inicializar_db():
     if "db" not in st.session_state:
         try:
@@ -127,10 +140,6 @@ def carregar_relatorios():
     if not db: return []
     docs = db.collection("relatorios_parque_alianca").stream()
     return [{"id": doc.id, **doc.to_dict()} for doc in docs]
-
-def atualizar_membro(nome, categoria):
-    db = inicializar_db()
-    if db: db.collection("membros_v2").document(nome).set({"categoria": categoria, "nome_oficial": nome}, merge=True)
 
 def deletar_relatorio(relatorio_id):
     db = inicializar_db()
@@ -156,7 +165,6 @@ def validar_e_gravar_novo_membro(relatorio_id, nome_final, categoria):
     db.collection("relatorios_parque_alianca").document(relatorio_id).update({"nome": nome_final})
     st.success(f"Membro {nome_final} validado!")
 
-# --- APLICATIVO PRINCIPAL ---
 def main():
     st.title("📊 Gestão Parque Aliança")
     membros_db = carregar_membros()
@@ -184,13 +192,10 @@ def main():
 
     tabs_principal = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "📈 CONSOLIDADO", "⚙️ CONFIGURAÇÃO"])
 
-    # ABA 0: RELATÓRIOS (Visão Mensal)
     with tabs_principal[0]:
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
-        entregaram = df_ok['nome_oficial'].unique() if not df_ok.empty else []
         st.subheader(f"Resumo de {mes_sel}")
-        sub_tabs_rel = st.tabs(["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "⏳ PENDÊNCIAS"])
-        
+        sub_tabs_rel = st.tabs(categorias_lista + ["⏳ PENDÊNCIAS"])
         for i, cat in enumerate(categorias_lista):
             with sub_tabs_rel[i]:
                 df_cat = df_ok[df_ok['cat_oficial'] == cat] if not df_ok.empty else pd.DataFrame()
@@ -200,7 +205,6 @@ def main():
                     m1.markdown(f'<div class="metric-container"><div class="metric-label">Envios</div><div class="metric-value">{len(df_cat)}</div></div>', unsafe_allow_html=True)
                     m2.markdown(f'<div class="metric-container"><div class="metric-label">Total Horas</div><div class="metric-value">{int(df_cat["horas"].sum())}h</div></div>', unsafe_allow_html=True)
                     m3.markdown(f'<div class="metric-container"><div class="metric-label">Total Estudos</div><div class="metric-value">{int(df_cat["estudos_biblicos"].sum())}</div></div>', unsafe_allow_html=True)
-                    
                     cols = st.columns(4)
                     for idx, (_, r) in enumerate(df_cat.sort_values('nome_oficial').iterrows()):
                         with cols[idx % 4]:
@@ -208,7 +212,6 @@ def main():
                             if st.button(f"🗑️ Deletar", key=f"del_rel_{r['id']}"):
                                 deletar_relatorio(r['id']); st.rerun()
 
-    # ABA 1: TRIAGEM (Ajuste de nomes)
     with tabs_principal[1]:
         df_triagem = df_mes[df_mes['status_validacao'] == "TRIAGEM"] if not df_mes.empty else pd.DataFrame()
         if df_triagem.empty: st.success("✨ Tudo certo!")
@@ -223,56 +226,41 @@ def main():
                     n_s = c1.selectbox("Vincular a:", ["-- Selecionar --"] + nomes_existentes, index=idx_sug, key=f"tri_s_{row['id']}")
                     cat_n = c2.selectbox("Categoria:", categorias_lista, key=f"tri_c_{row['id']}")
                     if st.button("✅ VALIDAR", key=f"tri_v_{row['id']}", use_container_width=True):
-                        validar_e_gravar_novo_membro(row['id'], n_s, cat_n)
-                        st.rerun()
+                        validar_e_gravar_novo_membro(row['id'], n_s, cat_n); st.rerun()
 
-    # ABA 2: CONSOLIDADO (UNIFICADO NO PADRÃO S-21)
     with tabs_principal[2]:
         c_sub1, c_sub2 = st.tabs(["📊 POR CATEGORIA", "👤 POR PESSOA"])
-        
         with c_sub1:
             cat_sel = st.selectbox("Selecione a Categoria para Consolidado", categorias_lista)
             df_cons = df[df['status_validacao'] == "IDENTIFICADO"]
             df_cat_total = df_cons[df_cons['cat_oficial'] == cat_sel]
-            
             if not df_cat_total.empty:
-                # Agrupa os totais de todos por mês
                 resumo_cat = df_cat_total.groupby('mes_referencia').agg({'horas': 'sum', 'estudos_biblicos': 'sum'}).reset_index()
                 st.dataframe(resumo_cat, use_container_width=True)
-                
-                # Gera o PDF usando o FORMULÁRIO OFICIAL preenchendo as linhas dos meses
                 pdf_cat = gerar_pdf_padrao_s21(f"CONSOLIDADO: {cat_sel}S", cat_sel, resumo_cat)
                 st.download_button(f"📥 Baixar Cartão S-21 ({cat_sel})", pdf_cat, f"S21_Consolidado_{cat_sel}.pdf")
-
         with c_sub2:
             pessoa_sel = st.selectbox("Selecione o Publicador para Histórico", sorted(list(membros_db.keys())))
             if pessoa_sel:
                 df_pessoal = df[(df['nome_oficial'] == pessoa_sel) & (df['status_validacao'] == "IDENTIFICADO")].sort_values('mes_referencia')
                 if not df_pessoal.empty:
-                    st.table(df_pessoal[['mes_referencia', 'horas', 'estudos_biblicos']])
-                    
-                    # Gera o PDF oficial com o histórico de todos os meses dele
                     pdf_h = gerar_pdf_padrao_s21(pessoa_sel, membros_db[pessoa_sel].get('categoria'), df_pessoal)
                     st.download_button(f"📥 Baixar Cartão S-21 Completo: {pessoa_sel}", pdf_h, f"S21_Historico_{pessoa_sel}.pdf")
 
-    # ABA 3: CONFIG E ZIP MENSAL
     with tabs_principal[3]:
         sub_tabs_cfg = st.tabs(["👤 MEMBROS", "📂 REGISTROS OFICIAIS (ZIP)"])
         with sub_tabs_cfg[1]:
-            st.subheader(f"📦 Exportação Mensal - {mes_sel}")
             df_export = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
-            
             if not df_export.empty:
                 if st.button("🚀 GERAR ZIP COM TODOS S-21 DO MÊS"):
                     zip_buffer = io.BytesIO()
                     with zipfile.ZipFile(zip_buffer, "a") as zf:
                         for _, r in df_export.iterrows():
-                            # Cada arquivo no ZIP é o formulário oficial preenchido
                             pdf_data = gerar_pdf_padrao_s21(r['nome_oficial'], r['cat_oficial'], pd.DataFrame([r]))
                             if pdf_data: zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf_data)
-                    st.download_button("📥 BAIXAR ZIP AGORA", zip_buffer.getvalue(), f"S21_{mes_sel}.zip")
+                    st.download_button("📥 BAIXAR ZIP", zip_buffer.getvalue(), f"S21_{mes_sel}.zip")
 
-    st.caption("v2.3.0 | Parque Aliança | Gestão Administrativa Unificada")
+    st.caption("v2.3.2 | Parque Aliança | Gestão Administrativa Unificada")
 
 if __name__ == "__main__":
     main()
