@@ -28,9 +28,8 @@ st.markdown("""
     .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
     .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
     /* Estilo para o botão de deletar */
-    .stButton > button.del-btn {
-        background-color: #ff4b4b;
-        color: white;
+    .stButton > button:first-child {
+        border-radius: 5px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -113,7 +112,7 @@ def deletar_relatorio(relatorio_id):
     db = inicializar_db()
     if db: 
         db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
-        st.toast("Removido!")
+        st.toast("Relatório Deletado!")
         st.rerun()
 
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
@@ -162,7 +161,6 @@ def main():
         st.subheader(f"Resumo de {mes_sel}")
         sub_rel = st.tabs(["PUBLICADOR", "P. AUXILIAR", "P. REGULAR", "⏳ PENDÊNCIAS"])
         
-        # Filtros por categoria
         for i, cat in enumerate(categorias_lista):
             with sub_rel[i]:
                 df_cat = df_ok[df_ok['cat_oficial'] == cat]
@@ -212,8 +210,8 @@ def main():
 
     # --- ABA 2: CONSOLIDADO (S-21 HISTÓRICO) ---
     with tabs[2]:
-        c1, c2 = st.tabs(["👤 INDIVIDUAL (HISTÓRICO)", "📊 CATEGORIA"])
-        with c1:
+        c1_tab, c2_tab = st.tabs(["👤 INDIVIDUAL (HISTÓRICO)", "📊 CATEGORIA"])
+        with c1_tab:
             publicador = st.selectbox("Escolha o Publicador", sorted(list(membros_db.keys())))
             if publicador:
                 df_hist = df[(df['nome_oficial'] == publicador) & (df['status_validacao'] == "IDENTIFICADO")].sort_values('mes_referencia')
@@ -222,7 +220,7 @@ def main():
                     pdf = gerar_pdf_padrao_s21(publicador, membros_db[publicador].get('categoria'), df_hist)
                     st.download_button("📥 Baixar Cartão S-21 Completo", pdf, f"S21_{publicador}.pdf")
 
-        with c2:
+        with c2_tab:
             cat_sel = st.selectbox("Consolidado por Categoria", categorias_lista)
             df_cons = df[(df['status_validacao'] == "IDENTIFICADO") & (df['cat_oficial'] == cat_sel)]
             if not df_cons.empty:
@@ -235,6 +233,7 @@ def main():
     with tabs[3]:
         sub_cfg = st.tabs(["✏️ EDITAR RELATÓRIOS", "👥 GERENCIAR MEMBROS", "➕ NOVO MEMBRO", "📦 EXPORTAR ZIP"])
         
+        # 1. EDITAR RELATÓRIOS (COM OPÇÃO DE DELETAR)
         with sub_cfg[0]:
             st.write(f"### Edição Rápida - {mes_sel}")
             if not df.empty:
@@ -242,7 +241,12 @@ def main():
                 for _, r in df_ok_mes.sort_values('nome_oficial').iterrows():
                     with st.expander(f"📝 {r['nome_oficial']} ({int(r['horas'])}h)"):
                         ce1, ce2, ce3 = st.columns([2,1,1])
-                        nova_cat = ce1.selectbox("Categoria", categorias_lista, index=categorias_lista.index(r['cat_oficial']), key=f"e_c_{r['id']}")
+                        
+                        # CORREÇÃO DO ERRO AQUI: Verificação de segurança para o index
+                        cat_do_banco = r['cat_oficial']
+                        idx_cat = categorias_lista.index(cat_do_banco) if cat_do_banco in categorias_lista else 0
+                        
+                        nova_cat = ce1.selectbox("Categoria", categorias_lista, index=idx_cat, key=f"e_c_{r['id']}")
                         novas_h = ce2.number_input("Horas", value=int(r['horas']), key=f"e_h_{r['id']}")
                         novos_e = ce3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"e_e_{r['id']}")
                         
@@ -253,9 +257,10 @@ def main():
                             st.success("Atualizado!")
                             st.rerun()
                         
-                        if col_btn2.button("Deletar Relatório", key=f"del_rel_{r['id']}", help="Remove apenas o relatório deste mês"):
+                        if col_btn2.button("Deletar Relatório", key=f"del_{r['id']}", type="secondary"):
                             deletar_relatorio(r['id'])
 
+        # 2. GERENCIAR MEMBROS (LISTA COMPLETA)
         with sub_cfg[1]:
             st.write("### Membros Cadastrados")
             if membros_db:
@@ -263,13 +268,17 @@ def main():
                     with st.container(border=True):
                         c1, c2, c3 = st.columns([3,2,1])
                         c1.write(f"**{nome}**")
-                        nova_c = c2.selectbox("Alterar Categoria", categorias_lista, 
-                                            index=categorias_lista.index(membros_db[nome].get('categoria', 'PUBLICADOR')), 
-                                            key=f"cfg_cat_{nome}")
+                        
+                        # CORREÇÃO DO ERRO AQUI TAMBÉM: Verificação de segurança para o index
+                        cat_membro = membros_db[nome].get('categoria', 'PUBLICADOR')
+                        idx_m = categorias_lista.index(cat_membro) if cat_membro in categorias_lista else 0
+                        
+                        nova_c = c2.selectbox("Alterar Categoria", categorias_lista, index=idx_m, key=f"cfg_cat_{nome}")
                         if c3.button("Atualizar", key=f"btn_up_{nome}"):
                             atualizar_membro(nome, nova_c)
                             st.toast(f"{nome} atualizado!")
 
+        # 3. NOVO MEMBRO
         with sub_cfg[2]:
             st.write("### Adicionar Manualmente")
             with st.form("novo_membro"):
@@ -281,6 +290,7 @@ def main():
                         st.success(f"{nm} cadastrado!")
                         st.rerun()
 
+        # 4. EXPORTAR ZIP
         with sub_cfg[3]:
             if not df_ok.empty:
                 if st.button("🚀 GERAR ZIP MENSAL (TODOS S-21)"):
@@ -291,7 +301,7 @@ def main():
                             zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf)
                     st.download_button("📥 Baixar ZIP", buf.getvalue(), f"S21_{mes_sel}.zip")
 
-    st.caption("v2.5.0 | Parque Aliança | Gestão S-21 Unificada")
+    st.caption("v2.5.1 | Parque Aliança | Gestão S-21 Corrigida")
 
 if __name__ == "__main__":
     main()
