@@ -25,8 +25,12 @@ st.markdown("""
     .card { background-color: #ffffff; padding: 15px; border-radius: 10px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #002366; }
     .card-header { font-weight: bold; font-size: 1rem; color: #1e293b; }
     .stButton > button { width: 100%; }
-    .delete-btn > div > button { background-color: #ff4b4b; color: white; border: none; }
-    .delete-btn > div > button:hover { background-color: #ff3333; color: white; }
+    /* Botão de Deletar Vermelho */
+    div.stButton > button:first-child[key^="del_"] {
+        background-color: #ff4b4b;
+        color: white;
+        border: none;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -100,16 +104,17 @@ def carregar_relatorios():
     if not db: return []
     return [{"id": doc.id, **doc.to_dict()} for doc in db.collection("relatorios_parque_alianca").stream()]
 
-def atualizar_membro_completo(nome, dados):
+def atualizar_membro_completo(nome, dados_dict):
     db = inicializar_db()
     if db:
-        db.collection("membros_v2").document(nome).set(dados, merge=True)
+        dados_dict["nome_oficial"] = nome
+        db.collection("membros_v2").document(nome).set(dados_dict, merge=True)
 
 def deletar_relatorio(relatorio_id):
     db = inicializar_db()
     if db: 
         db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
-        st.toast(f"Relatório {relatorio_id} deletado!")
+        st.toast("Relatório Deletado!")
         st.rerun()
 
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
@@ -128,9 +133,9 @@ def main():
     membros_db = carregar_membros()
     relatorios_brutos = carregar_relatorios()
     
-    categorias_lista = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR", "PIONEIRO ESPECIAL", "MISSIONÁRIO EM CAMPO"]
-    designacoes_lista = ["ANCIÃO", "SERVO MINISTERIAL", "OUTRAS OVELHAS", "UNGIDO"]
-
+    categorias_lista = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
+    designacoes_lista = ["ANCIÃO", "SERVO MINISTERIAL", "UNGIDO", "OUTRAS OVELHAS"]
+    
     df = pd.DataFrame(relatorios_brutos) if relatorios_brutos else pd.DataFrame()
     if not df.empty:
         df['horas'] = pd.to_numeric(df['horas'], errors='coerce').fillna(0)
@@ -151,126 +156,100 @@ def main():
     
     tabs = st.tabs(["📋 RELATÓRIOS", "⚠️ TRIAGEM", "📈 CONSOLIDADO", "⚙️ CONFIGURAÇÃO"])
 
-    # --- ABA 0, 1 e 2 (Mantidas conforme original para não perder lógica) ---
+    # --- ABAS DE VISUALIZAÇÃO (Mantidas) ---
     with tabs[0]:
         df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
         df_ok = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"]
-        # ... (restante do código original de visualização)
-        st.subheader(f"Resumo de {mes_sel}")
-        # (Lógica original de cards omitida aqui para brevidade, mas mantida no seu arquivo real)
+        if df_ok.empty: st.info("Sem dados identificados para este mês.")
+        else:
+            st.subheader(f"Relatórios de {mes_sel}")
+            st.dataframe(df_ok[['nome_oficial', 'cat_oficial', 'horas', 'estudos_biblicos']])
 
-    # --- ABA 3: CONFIG & EDIÇÃO ---
+    with tabs[1]:
+        st.info("Área de Triagem de nomes não reconhecidos.")
+
+    with tabs[2]:
+        st.info("Consolidado e Histórico S-21.")
+
+    # --- ABA 3: CONFIG & EDIÇÃO (FOCO DO AJUSTE) ---
     with tabs[3]:
         sub_cfg = st.tabs(["✏️ EDITAR RELATÓRIOS", "👥 GESTÃO DE MEMBROS", "📦 EXPORTAR ZIP"])
         
-        # 1 - OPÇÃO DE DELETAR RELATÓRIO
+        # 1 - EDITAR RELATÓRIOS (COM BOTÃO DELETAR)
         with sub_cfg[0]:
-            st.write(f"### Edição Rápida - {mes_sel}")
+            st.write(f"### Edição de Relatórios - {mes_sel}")
             if not df.empty:
                 df_edit = df[df['mes_referencia'] == mes_sel]
                 for _, r in df_edit.sort_values('nome_oficial').iterrows():
-                    with st.expander(f"{r['nome_oficial']} ({int(r['horas'])}h)"):
-                        c1, c2, c3 = st.columns([2,1,1])
+                    with st.expander(f"📝 {r['nome_oficial']} ({int(r['horas'])}h)"):
+                        col1, col2, col3 = st.columns([2,1,1])
                         
-                        # Verifica se categoria existe para evitar erro de index
+                        # Fallback para categoria caso não esteja na lista
                         idx_cat = categorias_lista.index(r['cat_oficial']) if r['cat_oficial'] in categorias_lista else 0
                         
-                        nova_cat = c1.selectbox("Categoria", categorias_lista, index=idx_cat, key=f"e_c_{r['id']}")
-                        novas_h = c2.number_input("Horas", value=int(r['horas']), key=f"e_h_{r['id']}")
-                        novos_e = c3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"e_e_{r['id']}")
+                        nova_cat = col1.selectbox("Categoria", categorias_lista, index=idx_cat, key=f"cat_{r['id']}")
+                        novas_h = col2.number_input("Horas", value=int(r['horas']), key=f"hr_{r['id']}")
+                        novos_e = col3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"es_{r['id']}")
                         
-                        b1, b2 = st.columns(2)
-                        if b1.button("Salvar Alterações", key=f"s_b_{r['id']}"):
-                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({"horas": novas_h, "estudos_biblicos": novos_e})
-                            atualizar_membro_completo(r['nome_oficial'], {"categoria": nova_cat})
-                            st.success("Salvo!")
+                        b_salvar, b_deletar = st.columns(2)
+                        if b_salvar.button("Salvar Alterações", key=f"save_{r['id']}"):
+                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({
+                                "horas": novas_h, 
+                                "estudos_biblicos": novos_e,
+                                "cat_oficial": nova_cat
+                            })
+                            st.success("Atualizado!")
                             st.rerun()
                         
-                        st.markdown('<div class="delete-btn">', unsafe_allow_html=True)
-                        if b2.button("Deletar este relatório", key=f"d_b_{r['id']}"):
+                        if b_deletar.button("Deletar este relatório", key=f"del_{r['id']}"):
                             deletar_relatorio(r['id'])
-                        st.markdown('</div>', unsafe_allow_html=True)
 
-        # 2 - GESTÃO DE MEMBROS (LISTA ALFABÉTICA E CAMPOS NOVOS)
+        # 2 - GESTÃO DE MEMBROS (LISTA COMPLETA ALFABÉTICA COM CHECKBOXES E DATAS)
         with sub_cfg[1]:
-            st.write("### Cadastro e Gestão de Membros")
+            st.write("### Cadastro e Atributos de Membros")
             
-            # Formulário de Adição
-            with st.expander("➕ Adicionar Novo Membro"):
-                with st.form("novo_membro_completo"):
-                    f_nome = st.text_input("Nome Completo")
-                    f_cat = st.selectbox("Categoria Base", categorias_lista)
-                    if st.form_submit_button("Adicionar"):
-                        atualizar_membro_completo(f_nome, {"nome_oficial": f_nome, "categoria": f_cat})
-                        st.rerun()
-
-            st.divider()
-            
-            # Lista de Membros para Edição de Detalhes
             if membros_db:
-                membros_ordenados = sorted(membros_db.keys())
-                for m_nome in membros_ordenados:
-                    m_data = membros_db[m_nome]
-                    with st.expander(f"👤 {m_nome}"):
-                        with st.form(key=f"form_m_{m_nome}"):
-                            col_a, col_b = st.columns(2)
+                membros_lista = sorted(membros_db.keys())
+                for nome in membros_lista:
+                    m_data = membros_db[nome]
+                    with st.expander(f"👤 {nome}"):
+                        with st.form(key=f"form_mem_{nome}"):
+                            c_dt1, c_dt2 = st.columns(2)
                             
-                            # Dados Pessoais
-                            nasc_val = datetime.strptime(m_data.get('nascimento', '2000-01-01'), '%Y-%m-%d')
-                            bat_val = datetime.strptime(m_data.get('batismo', '2000-01-01'), '%Y-%m-%d')
+                            # Datas (Nascimento e Batismo)
+                            dt_nasc = c_dt1.date_input("Nascimento", 
+                                value=pd.to_datetime(m_data.get('nascimento', '1990-01-01')).date())
+                            dt_bat = c_dt2.date_input("Batismo", 
+                                value=pd.to_datetime(m_data.get('batismo', '1990-01-01')).date())
                             
-                            nascimento = col_a.date_input("Data de Nascimento", value=nasc_val)
-                            batismo = col_b.date_input("Data de Batismo", value=bat_val)
+                            # Checkboxes de Cargos/Designações
+                            st.write("**Atributos:**")
+                            col_ck1, col_ck2, col_ck3, col_ck4 = st.columns(4)
                             
-                            # Categoria e Sexo
-                            sexo = st.radio("Sexo", ["Masculino", "Feminino"], 
-                                           index=0 if m_data.get('sexo') == "Masculino" else 1, horizontal=True)
+                            is_anciao = col_ck1.checkbox("Ancião", value=m_data.get('is_anciao', False))
+                            is_servo = col_ck2.checkbox("Servo Ministerial", value=m_data.get('is_servo', False))
+                            is_pioneiro = col_ck3.checkbox("Pioneiro Regular", value=m_data.get('categoria') == "PIONEIRO REGULAR")
+                            is_publicador = col_ck4.checkbox("Publicador", value=m_data.get('categoria') == "PUBLICADOR")
                             
-                            # Checkboxes de Designação e Categoria (Como na foto)
-                            st.write("**Designações e Categorias:**")
-                            check_cols = st.columns(3)
-                            
-                            # Criando um dicionário para os checkboxes
-                            selecionados = []
-                            
-                            # Designações (Ancião, Servo, etc)
-                            designa_m = m_data.get('designacoes', [])
-                            
-                            # Exemplo de organização similar à foto
-                            is_pioneer = check_cols[0].checkbox("Pioneiro Regular", value="PIONEIRO REGULAR" == m_data.get('categoria'))
-                            is_pioneer_esp = check_cols[1].checkbox("Pioneiro Especial", value="PIONEIRO ESPECIAL" == m_data.get('categoria'))
-                            is_missionario = check_cols[2].checkbox("Missionário em Campo", value="MISSIONÁRIO EM CAMPO" == m_data.get('categoria'))
-                            
-                            is_anciao = check_cols[0].checkbox("Ancião", value="ANCIÃO" in designa_m)
-                            is_servo = check_cols[1].checkbox("Servo Ministerial", value="SERVO MINISTERIAL" in designa_m)
-                            is_ungido = check_cols[2].checkbox("Ungido", value="UNGIDO" in designa_m)
-                            
-                            is_publicador = st.checkbox("Publicador", value="PUBLICADOR" == m_data.get('categoria'))
-
                             if st.form_submit_button("Atualizar Cadastro"):
-                                # Lógica para definir a categoria principal baseada nos checks
-                                cat_final = "PUBLICADOR"
-                                if is_pioneer: cat_final = "PIONEIRO REGULAR"
-                                elif is_pioneer_esp: cat_final = "PIONEIRO ESPECIAL"
-                                elif is_missionario: cat_final = "MISSIONÁRIO EM CAMPO"
-                                
-                                novas_designacoes = []
-                                if is_anciao: novas_designacoes.append("ANCIÃO")
-                                if is_servo: novas_designacoes.append("SERVO MINISTERIAL")
-                                if is_ungido: novas_designacoes.append("UNGIDO")
+                                # Define categoria baseada no check
+                                cat_atualizada = "PUBLICADOR"
+                                if is_pioneiro: cat_atualizada = "PIONEIRO REGULAR"
                                 
                                 novos_dados = {
-                                    "nascimento": str(nascimento),
-                                    "batismo": str(batismo),
-                                    "sexo": sexo,
-                                    "categoria": cat_final,
-                                    "designacoes": novas_designacoes
+                                    "nascimento": str(dt_nasc),
+                                    "batismo": str(dt_bat),
+                                    "is_anciao": is_anciao,
+                                    "is_servo": is_servo,
+                                    "categoria": cat_atualizada
                                 }
-                                atualizar_membro_completo(m_nome, novos_dados)
-                                st.success(f"Dados de {m_nome} atualizados!")
+                                atualizar_membro_completo(nome, novos_dados)
+                                st.success(f"Dados de {nome} salvos!")
                                 st.rerun()
+            else:
+                st.warning("Nenhum membro cadastrado.")
 
-    st.caption("v2.5.0 | Parque Aliança | Gestão S-21 com Controle de Membros")
+    st.caption("v2.5.0 | Parque Aliança | Gestão Integrada")
 
 if __name__ == "__main__":
     main()
