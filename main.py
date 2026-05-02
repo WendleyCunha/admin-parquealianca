@@ -27,10 +27,6 @@ st.markdown("""
     .metric-container { background-color: #f8fafc; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; text-align: center; margin-bottom: 15px; }
     .metric-value { font-size: 1.5rem; font-weight: bold; color: #002366; }
     .metric-label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
-    /* Estilo para o botão de deletar */
-    .stButton > button:first-child {
-        border-radius: 5px;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -39,7 +35,7 @@ def normalizar_texto(texto):
     if not texto: return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').lower().strip()
 
-# --- MOTOR DE PDF (S-21 OFICIAL) ---
+# --- MOTOR DE PDF ---
 def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows):
     path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
     if not os.path.exists(path_original):
@@ -115,6 +111,20 @@ def deletar_relatorio(relatorio_id):
         st.toast("Relatório Deletado!")
         st.rerun()
 
+def salvar_baixa_manual(nome, mes, horas, estudos):
+    db = inicializar_db()
+    if db:
+        novo_doc = {
+            "nome": nome,
+            "mes_referencia": mes,
+            "horas": horas,
+            "estudos_biblicos": estudos,
+            "timestamp": firestore.SERVER_TIMESTAMP
+        }
+        db.collection("relatorios_parque_alianca").add(novo_doc)
+        st.success(f"Relatório de {nome} adicionado!")
+        st.rerun()
+
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
     entrada_norm = normalizar_texto(nome_recebido)
     if not entrada_norm or len(entrada_norm) < 3: return None
@@ -176,6 +186,7 @@ def main():
                         with cols[idx % 4]:
                             st.markdown(f'<div class="card"><div class="card-header">{r["nome_oficial"]}</div>⏱️ {int(r["horas"])}h | 📚 {int(r["estudos_biblicos"])}</div>', unsafe_allow_html=True)
 
+        # SEÇÃO DE BAIXA MANUAL NAS PENDÊNCIAS
         with sub_rel[3]:
             st.warning(f"Quem ainda NÃO entregou em {mes_sel}:")
             for cat in categorias_lista:
@@ -184,7 +195,12 @@ def main():
                 if pendentes:
                     with st.expander(f"{cat} ({len(pendentes)})"):
                         for p in pendentes:
-                            st.write(f"• {p}")
+                            c1, c2, c3, c4 = st.columns([3, 1, 1, 2])
+                            c1.write(f"**{p}**")
+                            h_manual = c2.number_input("Horas", min_value=0, step=1, key=f"h_man_{p}")
+                            e_manual = c3.number_input("Est.", min_value=0, step=1, key=f"e_man_{p}")
+                            if c4.button("Dar Baixa", key=f"btn_man_{p}"):
+                                salvar_baixa_manual(p, mes_sel, h_manual, e_manual)
 
     # --- ABA 1: TRIAGEM ---
     with tabs[1]:
@@ -208,7 +224,7 @@ def main():
                         inicializar_db().collection("relatorios_parque_alianca").document(row['id']).update({"nome": nome_final})
                         st.rerun()
 
-    # --- ABA 2: CONSOLIDADO (S-21 HISTÓRICO) ---
+    # --- ABA 2: CONSOLIDADO ---
     with tabs[2]:
         c1_tab, c2_tab = st.tabs(["👤 INDIVIDUAL (HISTÓRICO)", "📊 CATEGORIA"])
         with c1_tab:
@@ -229,11 +245,10 @@ def main():
                 pdf_c = gerar_pdf_padrao_s21(f"CONSOLIDADO {cat_sel}S", cat_sel, resumo)
                 st.download_button(f"📥 Baixar Cartão {cat_sel}", pdf_c, f"S21_Consolidado_{cat_sel}.pdf")
 
-    # --- ABA 3: CONFIG & EDIÇÃO ---
+    # --- ABA 3: CONFIG ---
     with tabs[3]:
         sub_cfg = st.tabs(["✏️ EDITAR RELATÓRIOS", "👥 GERENCIAR MEMBROS", "➕ NOVO MEMBRO", "📦 EXPORTAR ZIP"])
         
-        # 1. EDITAR RELATÓRIOS (COM OPÇÃO DE DELETAR)
         with sub_cfg[0]:
             st.write(f"### Edição Rápida - {mes_sel}")
             if not df.empty:
@@ -241,26 +256,18 @@ def main():
                 for _, r in df_ok_mes.sort_values('nome_oficial').iterrows():
                     with st.expander(f"📝 {r['nome_oficial']} ({int(r['horas'])}h)"):
                         ce1, ce2, ce3 = st.columns([2,1,1])
-                        
-                        # CORREÇÃO DO ERRO AQUI: Verificação de segurança para o index
-                        cat_do_banco = r['cat_oficial']
-                        idx_cat = categorias_lista.index(cat_do_banco) if cat_do_banco in categorias_lista else 0
-                        
+                        idx_cat = categorias_lista.index(r['cat_oficial']) if r['cat_oficial'] in categorias_lista else 0
                         nova_cat = ce1.selectbox("Categoria", categorias_lista, index=idx_cat, key=f"e_c_{r['id']}")
                         novas_h = ce2.number_input("Horas", value=int(r['horas']), key=f"e_h_{r['id']}")
                         novos_e = ce3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"e_e_{r['id']}")
-                        
                         col_btn1, col_btn2 = st.columns(2)
                         if col_btn1.button("Salvar Alterações", key=f"s_b_{r['id']}"):
                             inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({"horas": novas_h, "estudos_biblicos": novos_e})
                             atualizar_membro(r['nome_oficial'], nova_cat)
-                            st.success("Atualizado!")
                             st.rerun()
-                        
-                        if col_btn2.button("Deletar Relatório", key=f"del_{r['id']}", type="secondary"):
+                        if col_btn2.button("Deletar Relatório", key=f"del_{r['id']}"):
                             deletar_relatorio(r['id'])
 
-        # 2. GERENCIAR MEMBROS (LISTA COMPLETA)
         with sub_cfg[1]:
             st.write("### Membros Cadastrados")
             if membros_db:
@@ -268,29 +275,20 @@ def main():
                     with st.container(border=True):
                         c1, c2, c3 = st.columns([3,2,1])
                         c1.write(f"**{nome}**")
-                        
-                        # CORREÇÃO DO ERRO AQUI TAMBÉM: Verificação de segurança para o index
-                        cat_membro = membros_db[nome].get('categoria', 'PUBLICADOR')
-                        idx_m = categorias_lista.index(cat_membro) if cat_membro in categorias_lista else 0
-                        
+                        cat_m = membros_db[nome].get('categoria', 'PUBLICADOR')
+                        idx_m = categorias_lista.index(cat_m) if cat_m in categorias_lista else 0
                         nova_c = c2.selectbox("Alterar Categoria", categorias_lista, index=idx_m, key=f"cfg_cat_{nome}")
                         if c3.button("Atualizar", key=f"btn_up_{nome}"):
                             atualizar_membro(nome, nova_c)
-                            st.toast(f"{nome} atualizado!")
+                            st.toast("Atualizado!")
 
-        # 3. NOVO MEMBRO
         with sub_cfg[2]:
-            st.write("### Adicionar Manualmente")
             with st.form("novo_membro"):
                 nm = st.text_input("Nome Completo")
                 ct = st.selectbox("Categoria", categorias_lista)
                 if st.form_submit_button("Adicionar"):
-                    if nm:
-                        atualizar_membro(nm, ct)
-                        st.success(f"{nm} cadastrado!")
-                        st.rerun()
+                    if nm: atualizar_membro(nm, ct); st.rerun()
 
-        # 4. EXPORTAR ZIP
         with sub_cfg[3]:
             if not df_ok.empty:
                 if st.button("🚀 GERAR ZIP MENSAL (TODOS S-21)"):
@@ -301,7 +299,7 @@ def main():
                             zf.writestr(f"S21_{r['nome_oficial']}.pdf", pdf)
                     st.download_button("📥 Baixar ZIP", buf.getvalue(), f"S21_{mes_sel}.zip")
 
-    st.caption("v2.5.1 | Parque Aliança | Gestão S-21 Corrigida")
+    st.caption("v2.6.0 | Parque Aliança | Gestão Completa")
 
 if __name__ == "__main__":
     main()
