@@ -287,7 +287,11 @@ def main():
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([3,2,1])
                     c1.write(f"**{nome}**")
-                    idx_m = categorias_lista.index(membros_db[nome].get('categoria', 'PUBLICADOR'))
+                   # Obtém a categoria e garante que ela exista na lista; se não, assume 'PUBLICADOR'
+                    cat_gravada = membros_db[nome].get('categoria', 'PUBLICADOR')
+                    if cat_gravada not in categorias_lista:
+                        cat_gravada = "PUBLICADOR"
+                    idx_m = categorias_lista.index(cat_gravada)
                     nova_c = c2.selectbox("Alterar", categorias_lista, index=idx_m, key=f"cfg_{nome}")
                     if c3.button("Atualizar", key=f"btn_up_{nome}"):
                         atualizar_membro(nome, nova_c)
