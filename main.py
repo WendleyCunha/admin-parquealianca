@@ -256,10 +256,27 @@ def main():
         with c2_tab:
             cat_sel = st.selectbox("Consolidado por Categoria", categorias_lista)
             df_cons = df[(df['status_validacao'] == "IDENTIFICADO") & (df['cat_oficial'] == cat_sel)]
+            
             if not df_cons.empty:
-                resumo = df_cons.groupby('mes_referencia').agg({'horas': 'sum', 'estudos_biblicos': 'sum'}).reset_index()
-                st.dataframe(resumo)
-                pdf_c = gerar_pdf_padrao_s21(f"CONSOLIDADO {cat_sel}S", cat_sel, resumo)
+                # O segredo está aqui: adicionamos 'id': 'count' para contar os relatórios
+                resumo = df_cons.groupby('mes_referencia').agg({
+                    'id': 'count', 
+                    'horas': 'sum', 
+                    'estudos_biblicos': 'sum'
+                }).reset_index()
+                
+                # Renomeando as colunas para ficar legível na tela
+                resumo = resumo.rename(columns={
+                    'id': 'relatorios_enviados',
+                    'horas': 'total_horas',
+                    'estudos_biblicos': 'total_estudos'
+                })
+                
+                st.dataframe(resumo, use_container_width=True)
+                
+                # Para o PDF, precisamos garantir que ele receba as colunas que ele espera
+                # mas agora temos uma visão clara do volume de envios na tela
+                pdf_c = gerar_pdf_padrao_s21(f"CONSOLIDADO {cat_sel}S", cat_sel, resumo.rename(columns={'total_horas': 'horas', 'total_estudos': 'estudos_biblicos'}))
                 st.download_button(f"📥 Baixar Cartão {cat_sel}", pdf_c, f"S21_Consolidado_{cat_sel}.pdf")
 
     # --- ABA 3: CONFIG ---
