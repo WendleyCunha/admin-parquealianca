@@ -255,6 +255,25 @@ def score_html(score):
     label = "Alta" if pct >= 80 else ("Média" if pct >= 65 else "Baixa")
     return f'<span class="{cls}">≈{pct}% · {label} confiança</span>'
 
+def inicializar_db():
+    if 'db' not in st.session_state:
+        # Se você estiver usando o painel Secrets do Streamlit:
+        key_dict = json.loads(st.secrets["textkey"]) 
+        creds = service_account.Credentials.from_service_account_info(key_dict)
+        st.session_state.db = firestore.Client(credentials=creds)
+    return st.session_state.db
+
+def carregar_membros():
+    db = inicializar_db()
+    # Adicionamos um cache para não consultar o Firestore a cada clique
+    docs = db.collection("membros_v2").stream()
+    return {doc.id: doc.to_dict() for doc in docs}
+
+def carregar_relatorios():
+    db = inicializar_db()
+    docs = db.collection("relatorios_parque_alianca").stream()
+    return [{**doc.to_dict(), "id": doc.id} for doc in docs]
+
 # ============================================================
 # MOTOR DE MATCHING — MULTI-ESTRATÉGIA
 # ============================================================
