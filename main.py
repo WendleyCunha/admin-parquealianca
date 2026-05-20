@@ -379,74 +379,67 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows):
     return output.getvalue()
 
 # ============================================================
-# BANCO DE DADOS — com cache de sessão para evitar reads excessivos
+# BANCO DE DADOS — OTIMIZADO: cache cirúrgico, sem releituras
 # ============================================================
 
-def inicializar_db():
-    if "db" not in st.session_state:
-        try:
-            key_dict = json.loads(st.secrets["textkey"])
-            creds = service_account.Credentials.from_service_account_info(key_dict)
-            st.session_state.db = firestore.Client(
-                credentials=creds, project="wendleydesenvolvimento"
-            )
-        except Exception as e:
-            st.error(f"Erro de conexão com Firestore: {e}")
-            return None
-    return st.session_state.db
-
 def invalidar_cache():
-    """Remove todos os caches para forçar reload do Firestore no próximo acesso."""
+    """Remove TODOS os caches. Use SOMENTE no botão 'Recarregar'."""
     for k in ['membros_cache', 'relatorios_cache', 'df_processado']:
         st.session_state.pop(k, None)
 
-def carregar_membros() -> dict:
-    db = inicializar_db()
-    if not db: return {}
-    if 'membros_cache' not in st.session_state:
-        st.session_state.membros_cache = {
-            doc.id: doc.to_dict()
-            for doc in db.collection("membros_v2").stream()
-        }
-    return st.session_state.membros_cache
-
-def carregar_relatorios() -> list:
-    db = inicializar_db()
-    if not db: return []
-    if 'relatorios_cache' not in st.session_state:
-        st.session_state.relatorios_cache = [
-            {"id": doc.id, **doc.to_dict()}
-            for doc in db.collection("relatorios_parque_alianca").stream()
-        ]
-    return st.session_state.relatorios_cache
+def _limpar_df_processado():
+    """Descarta só o DataFrame derivado, preservando os dados brutos."""
+    st.session_state.pop('df_processado', None)
 
 def atualizar_membro(nome: str, categoria: str, novo: bool = False):
     db = inicializar_db()
-    if db:
-        dados = {"categoria": categoria, "nome_oficial": nome}
-        if novo:
-            dados["mes_inicio"] = obter_mes_atual_str()
-        db.collection("membros_v2").document(nome).set(dados, merge=True)
-        invalidar_cache()
+    if not db:
+        return
+    dados = {"categoria": categoria, "nome_oficial": nome}
+    if novo:
+        dados["mes_inicio"] = obter_mes_atual_str()
+    db.collection("membros_v2").document(nome).set(dados, merge=True)
+
+    # ✅ Atualiza cache local em vez de apagar tudo
+    if 'membros_cache' in st.session_state:
+        if nome not in st.session_state.membros_cache:
+            st.session_state.membros_cache[nome] = {}
+        st.session_state.membros_cache[nome].update(dados)
+    _limpar_df_processado()
 
 def deletar_relatorio(relatorio_id: str):
     db = inicializar_db()
-    if db:
-        db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
-        invalidar_cache()
-        st.toast("🗑️ Relatório deletado.")
-        st.rerun()
+    if not db:
+        return
+    db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
+
+    # ✅ Remove só o item deletado do cache
+    if 'relatorios_cache' in st.session_state:
+        st.session_state.relatorios_cache = [
+            r for r in st.session_state.relatorios_cache
+            if r.get('id') != relatorio_id
+        ]
+    _limpar_df_processado()
+    st.toast("🗑️ Relatório deletado.")
+    st.rerun()
 
 def deletar_multiplos(ids: list):
-    """Batch delete para máxima eficiência no Firestore."""
     db = inicializar_db()
-    if not db or not ids: return
+    if not db or not ids:
+        return
     batch = db.batch()
     for rid in ids:
         batch.delete(db.collection("relatorios_parque_alianca").document(rid))
     batch.commit()
-    invalidar_cache()
-    # Limpa checkboxes dos itens deletados
+
+    # ✅ Filtra em memória — zero leituras extras
+    if 'relatorios_cache' in st.session_state:
+        ids_set = set(ids)
+        st.session_state.relatorios_cache = [
+            r for r in st.session_state.relatorios_cache
+            if r.get('id') not in ids_set
+        ]
+    _limpar_df_processado()
     for rid in ids:
         st.session_state.pop(f"chk_{rid}", None)
     st.toast(f"🗑️ {len(ids)} relatório(s) deletado(s).")
@@ -454,17 +447,28 @@ def deletar_multiplos(ids: list):
 
 def salvar_baixa_manual(nome: str, mes: str, horas: int, estudos: int):
     db = inicializar_db()
-    if db:
-        db.collection("relatorios_parque_alianca").add({
+    if not db:
+        return
+    _, ref = db.collection("relatorios_parque_alianca").add({
+        "nome": nome,
+        "mes_referencia": mes,
+        "horas": horas,
+        "estudos_biblicos": estudos,
+        "timestamp": firestore.SERVER_TIMESTAMP,
+    })
+
+    # ✅ Insere o novo doc direto no cache (usa o ID retornado pelo Firestore)
+    if 'relatorios_cache' in st.session_state:
+        st.session_state.relatorios_cache.append({
+            "id": ref.id,
             "nome": nome,
             "mes_referencia": mes,
             "horas": horas,
             "estudos_biblicos": estudos,
-            "timestamp": firestore.SERVER_TIMESTAMP,
         })
-        invalidar_cache()
-        st.toast(f"✅ Baixa registrada para {nome}!")
-        st.rerun()
+    _limpar_df_processado()
+    st.toast(f"✅ Baixa registrada para {nome}!")
+    st.rerun()
 
 # ============================================================
 # PROCESSAMENTO DO DATAFRAME — com cache na sessão
@@ -898,6 +902,7 @@ def main():
                     )
 
                     btn1, btn2 = st.columns([2, 1])
+
                     with btn1:
                         if st.button(
                             "✅ Confirmar Identificação",
@@ -907,11 +912,22 @@ def main():
                         ):
                             eh_novo = (vincular == "— Cadastrar como Novo Membro —")
                             nome_final = row['nome'] if eh_novo else vincular
+
+                            # 1. Grava no Firestore (membro + relatório)
                             atualizar_membro(nome_final, cat_v, novo=eh_novo)
                             inicializar_db().collection("relatorios_parque_alianca") \
                                 .document(row['id']).update({"nome": nome_final})
-                            invalidar_cache()
+
+                            # 2. ✅ Atualiza cache local — sem reler o Firestore
+                            if 'relatorios_cache' in st.session_state:
+                                for doc in st.session_state.relatorios_cache:
+                                    if doc.get('id') == row['id']:
+                                        doc['nome'] = nome_final
+                                        break
+                            _limpar_df_processado()
+
                             st.rerun()
+
                     with btn2:
                         if st.button(
                             "🗑️ Descartar",
