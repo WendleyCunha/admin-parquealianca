@@ -45,24 +45,26 @@ st.markdown("""
 PDF_Y_OFFSET    = 0.0     # ajuste fino global das linhas da tabela (mm)
 
 # ── Cabeçalho ──────────────────────────────────────────────────────────────────
-PDF_NOME_Y      = 258.0   # y do nome
+# DIAGNÓSTICO: nome estava aparecendo na linha do batismo → todos sobem +14 mm
+PDF_NOME_Y      = 272.0   # y do nome      (era 258.0)
 PDF_NOME_X      = 24.0    # x do nome
 
-PDF_NASCI_Y     = 251.5   # y data de nascimento
+PDF_NASCI_Y     = 265.0   # y data de nascimento  (era 251.5)
 PDF_NASCI_X     = 48.0    # x do valor (após o label)
 
-PDF_BATISM_Y    = 244.5   # y data de batismo
+PDF_BATISM_Y    = 258.0   # y data de batismo     (era 244.5)
 PDF_BATISM_X    = 48.0    # x do valor
 
-PDF_CARGO_Y     = 237.5   # y da linha dos checkboxes de cargo
+PDF_CARGO_Y     = 251.0   # y linha dos checkboxes de cargo  (era 237.5)
 
 # ── Gênero (lado direito — mesma linha do nascimento) ─────────────────────────
-PDF_MASC_X      = 138.0   # "Masculino"
-PDF_FEM_X       = 163.0   # "Feminino"
+# DIAGNÓSTICO: X aparecia na coluna Horas (116 mm) → movido para a direita
+PDF_MASC_X      = 122.0   # "Masculino"   (era 138.0 — ajuste se necessário ±5mm)
+PDF_FEM_X       = 148.0   # "Feminino"    (era 163.0)
 
 # ── Classe (lado direito — mesma linha do batismo) ────────────────────────────
-PDF_OVELHAS_X   = 138.0   # "Outras ovelhas"
-PDF_UNGIDO_X    = 163.0   # "Ungido"
+PDF_OVELHAS_X   = 122.0   # "Outras ovelhas"  (era 138.0)
+PDF_UNGIDO_X    = 148.0   # "Ungido"          (era 163.0)
 
 # ── Cargos/Privilégios (linha inferior do cabeçalho) ──────────────────────────
 PDF_ANCIAO_X    = 12.0
@@ -205,18 +207,23 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
         # Horas
         can.drawCentredString(PDF_COL_HORAS_X * mm, y_pos, str(horas))
 
-        # Observações: telefone na 1ª linha, depois as obs normais
-        obs_parts = []
-        if idx == 0 and tel_emerg:
-            obs_parts.append(f"Tel: {tel_emerg}")
+        # Observações: telefone em destaque na 1ª linha, obs normais abaixo
         obs_normal = str(row.get('observacoes', ''))
-        if obs_normal and obs_normal.lower() not in ('nan', '', 'none'):
-            obs_parts.append(obs_normal[:25])
-        obs_texto = " | ".join(obs_parts)[:35]
-        if obs_texto:
-            can.setFont("Helvetica", 7)
-            can.drawString(PDF_COL_OBS_X * mm, y_pos, obs_texto)
-            can.setFont("Helvetica-Bold", 10)
+        obs_normal = obs_normal if obs_normal.lower() not in ('nan', '', 'none') else ''
+
+        if idx == 0 and tel_emerg:
+            # Telefone: fonte maior e em negrito para destaque
+            can.setFont("Helvetica-Bold", 9)
+            can.drawString(PDF_COL_OBS_X * mm, y_pos, f"Tel: {tel_emerg}"[:30])
+            # Obs normal abaixo do tel (deslocada 3mm para baixo)
+            if obs_normal:
+                can.setFont("Helvetica", 7)
+                can.drawString(PDF_COL_OBS_X * mm, y_pos - 3 * mm, obs_normal[:30])
+        elif obs_normal:
+            can.setFont("Helvetica", 8)
+            can.drawString(PDF_COL_OBS_X * mm, y_pos, obs_normal[:30])
+
+        can.setFont("Helvetica-Bold", 10)
 
     can.save()
     packet.seek(0)
