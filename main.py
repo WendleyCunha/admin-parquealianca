@@ -55,23 +55,27 @@ PDF_NASCI_X     = 48.0    # x do valor (após o label)
 PDF_BATISM_Y    = 258.0   # y data de batismo     (era 244.5)
 PDF_BATISM_X    = 48.0    # x do valor
 
-PDF_CARGO_Y     = 251.0   # y linha dos checkboxes de cargo  (era 237.5)
+PDF_CARGO_Y     = 252.0   # y linha dos checkboxes de cargo (+1mm para cima)
 
 # ── Gênero (lado direito — mesma linha do nascimento) ─────────────────────────
-# DIAGNÓSTICO: X aparecia na coluna Horas (116 mm) → movido para a direita
-PDF_MASC_X      = 122.0   # "Masculino"   (era 138.0 — ajuste se necessário ±5mm)
-PDF_FEM_X       = 148.0   # "Feminino"    (era 163.0)
+# X precisa ir mais para a DIREITA para alcançar o checkbox de Masculino/Feminino
+PDF_MASC_X      = 150.0   # era 122 → mais à direita (ajuste ±3mm se necessário)
+PDF_FEM_X       = 172.0   # era 148 → mais à direita
 
 # ── Classe (lado direito — mesma linha do batismo) ────────────────────────────
-PDF_OVELHAS_X   = 122.0   # "Outras ovelhas"  (era 138.0)
-PDF_UNGIDO_X    = 148.0   # "Ungido"          (era 163.0)
+PDF_OVELHAS_X   = 150.0   # era 122 → mais à direita
+PDF_UNGIDO_X    = 172.0   # era 148 → mais à direita
 
 # ── Cargos/Privilégios (linha inferior do cabeçalho) ──────────────────────────
-PDF_ANCIAO_X    = 12.0
+# X do Ancião: ligeiramente à esquerda e mínimo para cima
+PDF_ANCIAO_X    = 9.5     # era 12.0 → levemente à esquerda
 PDF_SERVO_X     = 35.0
 PDF_PREG_X      = 65.0    # Pioneiro regular
 PDF_PESP_X      = 100.0   # Pioneiro especial
 PDF_MISS_X      = 140.0   # Missionário em campo
+
+# ── Telefone de emergência fixo no cabeçalho da tabela (sob "Observações") ────
+PDF_TEL_HEADER_Y = 232.0  # ajuste ±2mm se necessário
 
 # ── Y-map dos meses (ajuste PDF_Y_OFFSET se todos estiverem deslocados) ────────
 # Valores corrigidos +24 mm em relação à versão anterior para alinhar ao s21.pdf
@@ -177,10 +181,15 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
     if cargo in cargo_map:
         can.drawString(cargo_map[cargo] * mm, PDF_CARGO_Y * mm, "X")
 
-    # ── Linhas da tabela de meses ────────────────────────────────────────────
+    # ── Telefone de emergência: fixo no cabeçalho da tabela (sob "Observações") ─
     tel_emerg = str(mi.get("telefone_emergencia", "")).strip()
+    if tel_emerg:
+        can.setFont("Helvetica-Bold", 9)
+        can.drawString(PDF_COL_OBS_X * mm, PDF_TEL_HEADER_Y * mm,
+                       f"Tel: {tel_emerg}"[:32])
 
-    for idx, (_, row) in enumerate(dados_rows.iterrows()):
+    # ── Linhas da tabela de meses ────────────────────────────────────────────
+    for _, row in dados_rows.iterrows():
         mes_key = str(row.get('mes_referencia', '')).split()[0].upper()
         y_base  = _Y_MAP_BASE.get(mes_key)
         if y_base is None:
@@ -207,21 +216,12 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
         # Horas
         can.drawCentredString(PDF_COL_HORAS_X * mm, y_pos, str(horas))
 
-        # Observações: telefone em destaque na 1ª linha, obs normais abaixo
+        # Observações da linha (sem telefone — já está no cabeçalho)
         obs_normal = str(row.get('observacoes', ''))
         obs_normal = obs_normal if obs_normal.lower() not in ('nan', '', 'none') else ''
-
-        if idx == 0 and tel_emerg:
-            # Telefone: fonte maior e em negrito para destaque
-            can.setFont("Helvetica-Bold", 9)
-            can.drawString(PDF_COL_OBS_X * mm, y_pos, f"Tel: {tel_emerg}"[:30])
-            # Obs normal abaixo do tel (deslocada 3mm para baixo)
-            if obs_normal:
-                can.setFont("Helvetica", 7)
-                can.drawString(PDF_COL_OBS_X * mm, y_pos - 3 * mm, obs_normal[:30])
-        elif obs_normal:
+        if obs_normal:
             can.setFont("Helvetica", 8)
-            can.drawString(PDF_COL_OBS_X * mm, y_pos, obs_normal[:30])
+            can.drawString(PDF_COL_OBS_X * mm, y_pos, obs_normal[:32])
 
         can.setFont("Helvetica-Bold", 10)
 
