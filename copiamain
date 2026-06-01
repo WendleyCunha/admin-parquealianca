@@ -38,47 +38,40 @@ st.markdown("""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTES DE CALIBRAÇÃO DO PDF S-21
-# Se o preenchimento aparecer deslocado, ajuste os valores abaixo.
-# Todas as medidas são em mm a partir do rodapé da página (padrão ReportLab).
-# PDF_Y_OFFSET: positivo = sobe tudo; negativo = desce tudo (tabela de meses)
 # ═══════════════════════════════════════════════════════════════════════════════
-PDF_Y_OFFSET    = 0.0     # ajuste fino global das linhas da tabela (mm)
+PDF_Y_OFFSET    = 0.0
 
 # ── Cabeçalho ──────────────────────────────────────────────────────────────────
-# DIAGNÓSTICO: nome estava aparecendo na linha do batismo → todos sobem +14 mm
-PDF_NOME_Y      = 272.0   # y do nome      (era 258.0)
-PDF_NOME_X      = 24.0    # x do nome
+PDF_NOME_Y      = 272.0
+PDF_NOME_X      = 24.0
 
-PDF_NASCI_Y     = 265.0   # y data de nascimento  (era 251.5)
-PDF_NASCI_X     = 48.0    # x do valor (após o label)
+PDF_NASCI_Y     = 265.0
+PDF_NASCI_X     = 48.0
 
-PDF_BATISM_Y    = 258.0   # y data de batismo     (era 244.5)
-PDF_BATISM_X    = 48.0    # x do valor
+PDF_BATISM_Y    = 258.0
+PDF_BATISM_X    = 48.0
 
-PDF_CARGO_Y     = 252.0   # y linha dos checkboxes de cargo (+1mm para cima)
+PDF_CARGO_Y     = 252.0
 
 # ── Gênero (lado direito — mesma linha do nascimento) ─────────────────────────
-# X precisa ir mais para a DIREITA para alcançar o checkbox de Masculino/Feminino
-PDF_MASC_X      = 150.0   # era 122 → mais à direita (ajuste ±3mm se necessário)
-PDF_FEM_X       = 172.0   # era 148 → mais à direita
+PDF_MASC_X      = 150.0
+PDF_FEM_X       = 172.0
 
 # ── Classe (lado direito — mesma linha do batismo) ────────────────────────────
-PDF_OVELHAS_X   = 150.0   # era 122 → mais à direita
-PDF_UNGIDO_X    = 172.0   # era 148 → mais à direita
+PDF_OVELHAS_X   = 150.0
+PDF_UNGIDO_X    = 172.0
 
 # ── Cargos/Privilégios (linha inferior do cabeçalho) ──────────────────────────
-# X do Ancião: ligeiramente à esquerda e mínimo para cima
-PDF_ANCIAO_X    = 9.5     # era 12.0 → levemente à esquerda
+PDF_ANCIAO_X    = 9.5
 PDF_SERVO_X     = 35.0
-PDF_PREG_X      = 65.0    # Pioneiro regular
-PDF_PESP_X      = 100.0   # Pioneiro especial
-PDF_MISS_X      = 140.0   # Missionário em campo
+PDF_PREG_X      = 65.0
+PDF_PESP_X      = 100.0
+PDF_MISS_X      = 140.0
 
-# ── Telefone de emergência fixo no cabeçalho da tabela (sob "Observações") ────
-PDF_TEL_HEADER_Y = 232.0  # ajuste ±2mm se necessário
+# ── Telefone de emergência fixo no cabeçalho da tabela ────────────────────────
+PDF_TEL_HEADER_Y = 232.0
 
-# ── Y-map dos meses (ajuste PDF_Y_OFFSET se todos estiverem deslocados) ────────
-# Valores corrigidos +24 mm em relação à versão anterior para alinhar ao s21.pdf
+# ── Y-map dos meses ────────────────────────────────────────────────────────────
 _Y_MAP_BASE = {
     "SETEMBRO":  228.5,
     "OUTUBRO":   220.5,
@@ -94,14 +87,30 @@ _Y_MAP_BASE = {
     "AGOSTO":    140.5,
 }
 
-# Colunas da tabela
-PDF_COL_PARTICIP_X = 53.5   # "Participou no ministério" (X)
-PDF_COL_ESTUDOS_X  = 80.5   # Estudos bíblicos
-PDF_COL_PIAUX_X    = 97.5   # Pioneiro auxiliar (X)
-PDF_COL_HORAS_X    = 116.5  # Horas
-PDF_COL_OBS_X      = 133.0  # Observações
+# ── Y da linha TOTAL ───────────────────────────────────────────────────────────
+PDF_TOTAL_Y = 131.5   # linha "Total" abaixo de Agosto
 
-# ───────────────────────────────────────────────────────────────────────────────
+# Colunas da tabela
+PDF_COL_PARTICIP_X = 53.5
+PDF_COL_ESTUDOS_X  = 80.5
+PDF_COL_PIAUX_X    = 97.5
+PDF_COL_HORAS_X    = 116.5
+PDF_COL_OBS_X      = 133.0
+
+# ── Mapa de cargos → X no PDF ─────────────────────────────────────────────────
+_CARGO_X_MAP = {
+    "Ancião":               PDF_ANCIAO_X,
+    "Servo ministerial":    PDF_SERVO_X,
+    "Pioneiro regular":     PDF_PREG_X,
+    "Pioneiro especial":    PDF_PESP_X,
+    "Missionário em campo": PDF_MISS_X,
+}
+
+# Lista completa de cargos disponíveis
+_CARGOS_LISTA = [
+    "Ancião", "Servo ministerial", "Pioneiro regular",
+    "Pioneiro especial", "Missionário em campo"
+]
 
 
 # --- FUNÇÕES UTILITÁRIAS ---
@@ -121,12 +130,25 @@ def obter_mes_atual_str():
     return f"{meses[now.month - 1]} {now.year}"
 
 
+def cargos_para_lista(cargo_val):
+    """
+    Converte o valor salvo no Firestore (str ou list) para uma lista Python.
+    Garante compatibilidade com registros antigos onde 'cargo' era string.
+    """
+    if not cargo_val:
+        return []
+    if isinstance(cargo_val, list):
+        return [c for c in cargo_val if c]
+    # legado: string simples
+    return [cargo_val] if cargo_val else []
+
+
 # ─── MOTOR DE PDF ──────────────────────────────────────────────────────────────
 def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_info=None):
     """
     Preenche o cartão S-21.
-    membro_info : dict com os campos extras do membro (data_nascimento,
-                  data_batismo, genero, classe, cargo, telefone_emergencia).
+    membro_info : dict com os campos extras do membro.
+    Suporta 'cargo' como string (legado) ou lista de strings.
     """
     path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
     if not os.path.exists(path_original):
@@ -169,19 +191,14 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
     elif classe == "Ungido":
         can.drawString(PDF_UNGIDO_X * mm, PDF_BATISM_Y * mm, "X")
 
-    # ── Cargo / Privilégio ───────────────────────────────────────────────────
-    cargo = mi.get("cargo", "")
-    cargo_map = {
-        "Ancião":               PDF_ANCIAO_X,
-        "Servo ministerial":    PDF_SERVO_X,
-        "Pioneiro regular":     PDF_PREG_X,
-        "Pioneiro especial":    PDF_PESP_X,
-        "Missionário em campo": PDF_MISS_X,
-    }
-    if cargo in cargo_map:
-        can.drawString(cargo_map[cargo] * mm, PDF_CARGO_Y * mm, "X")
+    # ── Cargos / Privilégios (suporte a múltiplos) ───────────────────────────
+    cargos = cargos_para_lista(mi.get("cargo", ""))
+    can.setFont("Helvetica-Bold", 10)
+    for cargo in cargos:
+        if cargo in _CARGO_X_MAP:
+            can.drawString(_CARGO_X_MAP[cargo] * mm, PDF_CARGO_Y * mm, "X")
 
-    # ── Telefone de emergência: fixo no cabeçalho da tabela (sob "Observações") ─
+    # ── Telefone de emergência ───────────────────────────────────────────────
     tel_emerg = str(mi.get("telefone_emergencia", "")).strip()
     if tel_emerg:
         can.setFont("Helvetica-Bold", 9)
@@ -189,6 +206,9 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
                        f"Tel: {tel_emerg}"[:32])
 
     # ── Linhas da tabela de meses ────────────────────────────────────────────
+    total_horas  = 0
+    total_estud  = 0
+
     for _, row in dados_rows.iterrows():
         mes_key = str(row.get('mes_referencia', '')).split()[0].upper()
         y_base  = _Y_MAP_BASE.get(mes_key)
@@ -198,6 +218,8 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
 
         horas = int(row.get('horas', 0))
         estud = int(row.get('estudos_biblicos', 0))
+        total_horas += horas
+        total_estud += estud
 
         # Participou no ministério
         if horas > 0 or estud > 0:
@@ -216,7 +238,7 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
         # Horas
         can.drawCentredString(PDF_COL_HORAS_X * mm, y_pos, str(horas))
 
-        # Observações da linha (sem telefone — já está no cabeçalho)
+        # Observações da linha
         obs_normal = str(row.get('observacoes', ''))
         obs_normal = obs_normal if obs_normal.lower() not in ('nan', '', 'none') else ''
         if obs_normal:
@@ -224,6 +246,14 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
             can.drawString(PDF_COL_OBS_X * mm, y_pos, obs_normal[:32])
 
         can.setFont("Helvetica-Bold", 10)
+
+    # ── Linha TOTAL (soma de horas) ──────────────────────────────────────────
+    if total_horas > 0:
+        can.setFont("Helvetica-Bold", 10)
+        can.drawCentredString(PDF_COL_HORAS_X * mm, PDF_TOTAL_Y * mm, str(total_horas))
+    if total_estud > 0:
+        can.setFont("Helvetica-Bold", 10)
+        can.drawCentredString(PDF_COL_ESTUDOS_X * mm, PDF_TOTAL_Y * mm, str(total_estud))
 
     can.save()
     packet.seek(0)
@@ -269,8 +299,7 @@ def carregar_relatorios():
 def atualizar_membro(nome, categoria, novo=False, extra=None):
     """
     Salva/atualiza um membro no Firestore.
-    extra : dict com campos adicionais (data_nascimento, data_batismo,
-            genero, classe, cargo, telefone_emergencia).
+    extra : dict com campos adicionais. 'cargo' pode ser lista ou string.
     """
     db = inicializar_db()
     if db:
@@ -546,9 +575,53 @@ def main():
     # ── ABA 2: CONSOLIDADO ─────────────────────────────────────────────────────
     with tabs[2]:
         c1_tab, c2_tab = st.tabs(["👤 INDIVIDUAL (HISTÓRICO)", "📊 CATEGORIA"])
+
         with c1_tab:
             publicador = st.selectbox("Escolha o Publicador",
                                        sorted(list(membros_db.keys())))
+
+            # ── Botão: Baixar TODOS os cartões em ZIP ────────────────────────
+            st.markdown("---")
+            st.markdown("#### 📦 Exportar Todos os Cartões")
+            st.caption("Gera um ZIP com o cartão S-21 histórico completo de **todos os membros**.")
+
+            if st.button("⬇️ BAIXAR TODOS OS CARTÕES EM ZIP", use_container_width=True, type="primary"):
+                if df.empty:
+                    st.warning("Nenhum relatório encontrado.")
+                else:
+                    buf_all = io.BytesIO()
+                    count_ok = 0
+                    with zipfile.ZipFile(buf_all, "w") as zf_all:
+                        for nome_m in sorted(membros_db.keys()):
+                            df_hist_m = df[
+                                (df['nome_oficial'] == nome_m) &
+                                (df['status_validacao'] == "IDENTIFICADO")
+                            ].sort_values('mes_referencia')
+                            if df_hist_m.empty:
+                                continue
+                            mi_m = membros_db.get(nome_m, {})
+                            pdf_m = gerar_pdf_padrao_s21(
+                                nome_m,
+                                mi_m.get('categoria', 'PUBLICADOR'),
+                                df_hist_m,
+                                membro_info=mi_m
+                            )
+                            if pdf_m:
+                                zf_all.writestr(f"S21_{nome_m}.pdf", pdf_m)
+                                count_ok += 1
+                    if count_ok:
+                        st.download_button(
+                            f"📥 Baixar ZIP ({count_ok} cartões)",
+                            buf_all.getvalue(),
+                            f"S21_Todos_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
+                            mime="application/zip"
+                        )
+                    else:
+                        st.warning("Nenhum PDF foi gerado. Verifique se há relatórios identificados.")
+
+            st.markdown("---")
+            st.markdown("#### 👤 Cartão Individual")
+
             if publicador:
                 df_hist = df[
                     (df['nome_oficial'] == publicador) &
@@ -560,11 +633,13 @@ def main():
                         publicador,
                         membros_db[publicador].get('categoria'),
                         df_hist,
-                        membro_info=membros_db[publicador]   # ← dados completos
+                        membro_info=membros_db[publicador]
                     )
                     if pdf:
                         st.download_button("📥 Baixar Cartão S-21 Completo", pdf,
                                            f"S21_{publicador}.pdf")
+                else:
+                    st.info("Nenhum relatório identificado para este publicador.")
 
         with c2_tab:
             cat_sel  = st.selectbox("Consolidado por Categoria", categorias_lista)
@@ -794,15 +869,13 @@ def main():
                         if st.button("Deletar Relatório", key=f"del_{r['id']}"):
                             deletar_relatorio(r['id'])
 
-        # ── Sub-aba 1: GERENCIAR MEMBROS (UPGRADE COMPLETO) ──────────────────
+        # ── Sub-aba 1: GERENCIAR MEMBROS ──────────────────────────────────────
         with sub_cfg[1]:
             st.subheader("👥 Gerenciar Membros")
             st.caption("Clique no nome do membro para expandir e editar todos os dados.")
 
             _GENEROS  = ["", "Masculino", "Feminino"]
             _CLASSES  = ["", "Outras ovelhas", "Ungido"]
-            _CARGOS   = ["", "Ancião", "Servo ministerial", "Pioneiro regular",
-                         "Pioneiro especial", "Missionário em campo"]
 
             for nome in sorted(membros_db.keys()):
                 m        = membros_db[nome]
@@ -862,22 +935,29 @@ def main():
                             index=_CLASSES.index(cls_val) if cls_val in _CLASSES else 0,
                             key=f"cls_{nome}")
 
-                        cgo_val  = m.get('cargo', '')
-                        novo_cgo = st.selectbox(
-                            "Cargo / Privilégio",
-                            _CARGOS,
-                            index=_CARGOS.index(cgo_val) if cgo_val in _CARGOS else 0,
-                            key=f"cgo_{nome}")
+                        # ── MULTI-CARGO: converte legado → lista ──────────────
+                        cargos_atuais = cargos_para_lista(m.get('cargo', ''))
+                        st.markdown("**Cargo(s) / Privilégio(s)**")
+                        st.caption("Selecione um ou mais cargos:")
+                        novos_cargos = []
+                        for cargo_op in _CARGOS_LISTA:
+                            checked = st.checkbox(
+                                cargo_op,
+                                value=(cargo_op in cargos_atuais),
+                                key=f"cgo_{nome}_{cargo_op}"
+                            )
+                            if checked:
+                                novos_cargos.append(cargo_op)
 
                         # ── Resumo do cartão S-21 ─────────────────────────────
                         st.markdown("##### 🗂️ Resumo p/ Cartão S-21")
                         flags = []
-                        if nova_gen:    flags.append(nova_gen)
-                        if nova_cls:    flags.append(nova_cls)
-                        if novo_cgo:    flags.append(novo_cgo)
-                        if data_nasc:   flags.append(f"Nasc: {data_nasc}")
-                        if data_bat:    flags.append(f"Bat: {data_bat}")
-                        if tel_emer:    flags.append(f"Tel: {tel_emer}")
+                        if nova_gen:         flags.append(nova_gen)
+                        if nova_cls:         flags.append(nova_cls)
+                        for cg in novos_cargos: flags.append(cg)
+                        if data_nasc:        flags.append(f"Nasc: {data_nasc}")
+                        if data_bat:         flags.append(f"Bat: {data_bat}")
+                        if tel_emer:         flags.append(f"Tel: {tel_emer}")
                         if flags:
                             for f in flags:
                                 st.markdown(f"• {f}")
@@ -893,7 +973,7 @@ def main():
                             "telefone_emergencia": tel_emer,
                             "genero":              nova_gen,
                             "classe":              nova_cls,
-                            "cargo":               novo_cgo,
+                            "cargo":               novos_cargos,   # salva como lista
                         }
                         atualizar_membro(nome, nova_cat, extra=extra)
                         st.toast(f"✅ {nome} atualizado com sucesso!")
@@ -913,13 +993,17 @@ def main():
                 data_nasc_n = c3.text_input("📅 Data de Nascimento", placeholder="DD/MM/AAAA")
                 data_bat_n  = c4.text_input("🕊️ Data de Batismo",    placeholder="DD/MM/AAAA")
 
-                c5, c6, c7 = st.columns(3)
+                c5, c6 = st.columns(2)
                 gen_n = c5.selectbox("Gênero", ["", "Masculino", "Feminino"])
                 cls_n = c6.selectbox("Classe", ["", "Outras ovelhas", "Ungido"])
-                cgo_n = c7.selectbox("Cargo / Privilégio",
-                                      ["", "Ancião", "Servo ministerial",
-                                       "Pioneiro regular", "Pioneiro especial",
-                                       "Missionário em campo"])
+
+                st.markdown("**Cargo(s) / Privilégio(s)**")
+                st.caption("Marque todos os que se aplicam:")
+                cargos_novos_form = []
+                cols_form = st.columns(len(_CARGOS_LISTA))
+                for idx_c, cargo_op in enumerate(_CARGOS_LISTA):
+                    if cols_form[idx_c].checkbox(cargo_op, key=f"new_cgo_{cargo_op}"):
+                        cargos_novos_form.append(cargo_op)
 
                 tel_n = st.text_input("📞 Telefone de Emergência",
                                        placeholder="(XX) XXXXX-XXXX")
@@ -932,7 +1016,7 @@ def main():
                             "telefone_emergencia": tel_n,
                             "genero":              gen_n,
                             "classe":              cls_n,
-                            "cargo":               cgo_n,
+                            "cargo":               cargos_novos_form,   # lista
                         }
                         atualizar_membro(nm.strip(), ct, novo=True, extra=extra_n)
                         st.success(f"✅ {nm.strip()} adicionado com sucesso!")
@@ -940,8 +1024,9 @@ def main():
                     else:
                         st.error("Informe o nome completo.")
 
-        # ── Sub-aba 3: EXPORTAR ZIP ───────────────────────────────────────────
+        # ── Sub-aba 3: EXPORTAR ZIP (por mês) ────────────────────────────────
         with sub_cfg[3]:
+            st.markdown(f"#### 📦 Exportar relatórios de **{mes_sel}**")
             df_ok_zip = (df[(df['mes_referencia'] == mes_sel) &
                             (df['status_validacao'] == "IDENTIFICADO")]
                          if not df.empty else pd.DataFrame())
@@ -957,7 +1042,7 @@ def main():
                 st.download_button("📥 Baixar ZIP", buf.getvalue(),
                                    f"S21_{mes_sel}.zip")
 
-    st.caption("v4.0.0 | Parque Aliança | Gestão Completa")
+    st.caption("v4.1.0 | Parque Aliança | Gestão Completa")
 
 
 if __name__ == "__main__":
