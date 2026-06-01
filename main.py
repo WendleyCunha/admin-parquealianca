@@ -112,6 +112,13 @@ _CARGOS_LISTA = [
     "Pioneiro especial", "Missionário em campo"
 ]
 
+# Ordem cronológica dos meses para ordenação correta no cartão S-21
+_MESES_ORDEM = [
+    "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO",
+    "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL",
+    "MAIO", "JUNHO", "JULHO", "AGOSTO"
+]
+
 
 # --- FUNÇÕES UTILITÁRIAS ---
 def normalizar_texto(texto):
@@ -141,6 +148,24 @@ def cargos_para_lista(cargo_val):
         return [c for c in cargo_val if c]
     # legado: string simples
     return [cargo_val] if cargo_val else []
+
+
+def ordenar_df_por_mes(df_input):
+    """
+    Ordena um DataFrame de relatórios pela ordem cronológica real do cartão S-21
+    (SETEMBRO → OUTUBRO → ... → AGOSTO), em vez de ordem alfabética.
+    """
+    def chave_mes(mes_ref):
+        partes = str(mes_ref).upper().split()
+        nome_mes = partes[0] if partes else ""
+        ano = int(partes[1]) if len(partes) > 1 else 0
+        idx = _MESES_ORDEM.index(nome_mes) if nome_mes in _MESES_ORDEM else 99
+        return (ano, idx)
+
+    df_sorted = df_input.copy()
+    df_sorted["_sort_key"] = df_sorted["mes_referencia"].apply(chave_mes)
+    df_sorted = df_sorted.sort_values("_sort_key").drop(columns=["_sort_key"])
+    return df_sorted
 
 
 # ─── MOTOR DE PDF ──────────────────────────────────────────────────────────────
@@ -580,25 +605,49 @@ def main():
             publicador = st.selectbox("Escolha o Publicador",
                                        sorted(list(membros_db.keys())))
 
-            # ── Botão: Baixar TODOS os cartões em ZIP ────────────────────────
+            # ── Seção: Baixar TODOS os cartões em ZIP ────────────────────────
             st.markdown("---")
             st.markdown("#### 📦 Exportar Todos os Cartões")
             st.caption("Gera um ZIP com o cartão S-21 histórico completo de **todos os membros**.")
 
-            if st.button("⬇️ BAIXAR TODOS OS CARTÕES EM ZIP", use_container_width=True, type="primary"):
+            # ─────────────────────────────────────────────────────────────────
+            # CORREÇÃO DO BUG: o ZIP é gerado e armazenado no session_state.
+            # Isso evita o problema clássico do Streamlit onde st.button() +
+            # st.download_button() dentro do mesmo bloco condicional falha,
+            # pois ao clicar no download_button ocorre um rerun e o st.button()
+            # já não está mais "ativo", apagando o arquivo da memória.
+            # ─────────────────────────────────────────────────────────────────
+            if st.button("⚙️ PREPARAR ZIP COM TODOS OS CARTÕES", use_container_width=True):
                 if df.empty:
                     st.warning("Nenhum relatório encontrado.")
+                    st.session_state.pop("zip_todos_cartoes", None)
+                    st.session_state.pop("zip_todos_nome", None)
                 else:
+                    progress = st.progress(0, text="Gerando cartões...")
+                    membros_lista = sorted(membros_db.keys())
                     buf_all = io.BytesIO()
                     count_ok = 0
-                    with zipfile.ZipFile(buf_all, "w") as zf_all:
-                        for nome_m in sorted(membros_db.keys()):
+                    count_total = len(membros_lista)
+
+                    with zipfile.ZipFile(buf_all, "w", compression=zipfile.ZIP_DEFLATED) as zf_all:
+                        for i, nome_m in enumerate(membros_lista):
+                            progress.progress(
+                                (i + 1) / count_total,
+                                text=f"Gerando cartão de {nome_m} ({i+1}/{count_total})..."
+                            )
+                            # Filtra todos os relatórios identificados do membro
                             df_hist_m = df[
                                 (df['nome_oficial'] == nome_m) &
                                 (df['status_validacao'] == "IDENTIFICADO")
-                            ].sort_values('mes_referencia')
+                            ]
+
                             if df_hist_m.empty:
                                 continue
+
+                            # Ordena cronologicamente (SETEMBRO→OUTUBRO→...→AGOSTO)
+                            # em vez de alfabeticamente, para o cartão S-21 ficar correto
+                            df_hist_m = ordenar_df_por_mes(df_hist_m)
+
                             mi_m = membros_db.get(nome_m, {})
                             pdf_m = gerar_pdf_padrao_s21(
                                 nome_m,
@@ -607,17 +656,38 @@ def main():
                                 membro_info=mi_m
                             )
                             if pdf_m:
-                                zf_all.writestr(f"S21_{nome_m}.pdf", pdf_m)
+                                # Nome de arquivo seguro (sem caracteres especiais)
+                                nome_arquivo = "".join(
+                                    c for c in nome_m if c.isalnum() or c in (' ', '_', '-')
+                                ).strip().replace(' ', '_')
+                                zf_all.writestr(f"S21_{nome_arquivo}.pdf", pdf_m)
                                 count_ok += 1
+
+                    progress.empty()
+
                     if count_ok:
-                        st.download_button(
-                            f"📥 Baixar ZIP ({count_ok} cartões)",
-                            buf_all.getvalue(),
-                            f"S21_Todos_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
-                            mime="application/zip"
+                        # Armazena no session_state para download seguro
+                        st.session_state["zip_todos_cartoes"] = buf_all.getvalue()
+                        st.session_state["zip_todos_nome"] = (
+                            f"S21_Todos_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
                         )
+                        st.session_state["zip_todos_count"] = count_ok
+                        st.success(f"✅ {count_ok} cartões gerados com sucesso! Clique em baixar abaixo.")
                     else:
                         st.warning("Nenhum PDF foi gerado. Verifique se há relatórios identificados.")
+                        st.session_state.pop("zip_todos_cartoes", None)
+
+            # Botão de download fica sempre visível enquanto o ZIP estiver no session_state
+            if "zip_todos_cartoes" in st.session_state:
+                count_label = st.session_state.get("zip_todos_count", "?")
+                st.download_button(
+                    label=f"📥 Baixar ZIP ({count_label} cartões)",
+                    data=st.session_state["zip_todos_cartoes"],
+                    file_name=st.session_state.get("zip_todos_nome", "S21_Todos.zip"),
+                    mime="application/zip",
+                    use_container_width=True,
+                    type="primary",
+                )
 
             st.markdown("---")
             st.markdown("#### 👤 Cartão Individual")
@@ -626,8 +696,10 @@ def main():
                 df_hist = df[
                     (df['nome_oficial'] == publicador) &
                     (df['status_validacao'] == "IDENTIFICADO")
-                ].sort_values('mes_referencia')
+                ]
                 if not df_hist.empty:
+                    # Ordena cronologicamente para exibição e geração do PDF
+                    df_hist = ordenar_df_por_mes(df_hist)
                     st.table(df_hist[['mes_referencia', 'horas', 'estudos_biblicos']])
                     pdf = gerar_pdf_padrao_s21(
                         publicador,
@@ -1042,7 +1114,7 @@ def main():
                 st.download_button("📥 Baixar ZIP", buf.getvalue(),
                                    f"S21_{mes_sel}.zip")
 
-    st.caption("v4.1.0 | Parque Aliança | Gestão Completa")
+    st.caption("v4.2.0 | Parque Aliança | Gestão Completa")
 
 
 if __name__ == "__main__":
