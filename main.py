@@ -1383,6 +1383,7 @@ def main():
                             novos_e  = ce3.number_input("Estudos", value=int(r['estudos_biblicos']),
                                                          key=f"e_e_{r['id']}")
                             col_save, col_del = st.columns(2)
+                            
                             with col_save:
                                 if st.button("💾 Salvar", key=f"s_b_{r['id']}", type="primary", use_container_width=True):
                                     try:
@@ -1402,6 +1403,27 @@ def main():
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"Erro ao salvar alterações: {e}")
+                                        
+                            # 🌟 LÓGICA DE EXCLUSÃO GLOBAL IMPLEMENTADA AQUI
+                            with col_del:
+                                with st.popover("🗑️ Deletar", use_container_width=True):
+                                    st.error("Atenção! Ação irreversível.")
+                                    st.write(f"Deseja apagar definitivamente o relatório de **{r['nome_oficial']}** deste mês?")
+                                    
+                                    # Botão de confirmação de exclusão
+                                    if st.button("Sim, Excluir", key=f"conf_del_{r['id']}", type="primary", use_container_width=True):
+                                        try:
+                                            # 1. Apaga fisicamente do banco de dados global (Firestore)
+                                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).delete()
+                                            
+                                            # 2. Limpa o cache para que o Streamlit esqueça esse dado
+                                            carregar_relatorios_cached.clear()
+                                            
+                                            # 3. Dá o aviso de sucesso e recarrega a tela (ele vai sumir na hora)
+                                            st.toast("🗑️ Relatório removido permanentemente do sistema!")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Erro ao tentar deletar: {e}")
 
         # ── Sub-aba 1: GERENCIAR MEMBROS ──────────────────────────────────────
         with sub_cfg[1]:
