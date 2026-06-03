@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ESTILIZAÇÃO GLOBAL — Adaptação Visual King Star (Portal do Cliente)
+# ESTILIZAÇÃO GLOBAL — 
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
@@ -40,7 +40,7 @@ html, body, [class*="css"], .stMarkdown p {
     font-family: 'Inter', sans-serif !important;
 }
 
-/* ── Fundo do App (Light Theme do Portal) ── */
+/* ── Fundo do App (Light Theme) ── */
 .stApp {
     background: #F4F4F4 !important;
     color: #1A1A1A !important;
@@ -50,25 +50,41 @@ html, body, [class*="css"], .stMarkdown p {
     max-width: 1400px;
 }
 
-/* ── Sidebar (Dark de acordo com o HTML) ── */
+/* ── CORREÇÃO DA BARRA LATERAL (image_95b61e.png) ── */
 [data-testid="stSidebar"] {
     background: #111010 !important;
     border-right: 1px solid #222222 !important;
 }
-[data-testid="stSidebar"] .stMarkdown p,
-[data-testid="stSidebar"] label {
-    color: #AAAAAA !important;
-    font-size: 0.78rem !important;
-    letter-spacing: 0.06em !important;
-    text-transform: uppercase !important;
-    font-weight: 600 !important;
+
+/* Força todos os textos gerais e labels da sidebar a ficarem claros */
+[data-testid="stSidebar"] , 
+[data-testid="stSidebar"] p, 
+[data-testid="stSidebar"] label, 
+[data-testid="stSidebar"] span {
+    color: #C5C5C5 !important;
+}
+
+/* Títulos principais dentro da Sidebar */
+[data-testid="stSidebar"] h1, 
+[data-testid="stSidebar"] h2, 
+[data-testid="stSidebar"] h3 {
+    color: #FFFFFF !important;
+}
+
+/* Garante que os números e textos DENTRO dos cards brancos continuem escuros */
+[data-testid="stSidebar"] .pa-card *, 
+[data-testid="stSidebar"] .pa-metric * {
+    color: #1A1A1A !important;
+}
+[data-testid="stSidebar"] .pa-metric-label {
+    color: #888888 !important;
 }
 
 /* Navegação ativa/Selectbox na Sidebar */
 [data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {
     background: #1C1C1C !important;
     border: 1px solid #333333 !important;
-    color: #F0EDE6 !important;
+    color: #FFFFFF !important;
     border-radius: 8px !important;
 }
 
@@ -91,7 +107,7 @@ h2 { font-weight: 600 !important; font-size: 1.3rem !important; }
     border-bottom: 2px solid #C9A227 !important;
 }
 
-/* ── Cards Customizados (Estilo .panel / .sum-card do HTML) ── */
+/* ── Cards Customizados ── */
 .pa-card, .pa-metric {
     background: #FFFFFF !important;
     border: 1px solid #EDEDED !important;
@@ -105,28 +121,11 @@ h2 { font-weight: 600 !important; font-size: 1.3rem !important; }
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
-.pa-card-header {
-    font-weight: 600;
-    font-size: 0.9rem;
-    color: #1A1A1A;
-}
-.pa-card-sub {
-    font-size: 0.8rem;
-    color: #888888;
-    margin-top: 4px;
-}
 
-/* ── Métricas (Estilo .sum-num do HTML) ── */
 .pa-metric-value {
     font-size: 22px !important;
     font-weight: 700 !important;
     color: #1A1A1A !important;
-}
-.pa-metric-label {
-    font-size: 12px !important;
-    color: #888888 !important;
-    text-transform: none !important;
-    font-weight: 500 !important;
 }
 
 /* ── Inputs e Campos de Texto ── */
@@ -138,47 +137,20 @@ h2 { font-weight: 600 !important; font-size: 1.3rem !important; }
     color: #1A1A1A !important;
     border-radius: 8px !important;
 }
-[data-testid="stTextInput"] input:focus {
-    border-color: #C9A227 !important;
-}
 
-/* ── Botões (Estilo .btn-login e .btn-detail do HTML) ── */
+/* ── Botões ── */
 .stButton > button {
     background: transparent !important;
     color: #C9A227 !important;
     border: 1.5px solid #C9A227 !important;
     border-radius: 8px !important;
     font-weight: 600 !important;
-    transition: all 0.2s !important;
 }
-.stButton > button:hover {
-    background: #C9A227 !important;
-    color: #111111 !important;
-}
-
-/* Botão Primário (Destaque Ouro) */
 button[kind="primary"], .stButton [kind="primary"] > button {
     background: #C9A227 !important;
     color: #111111 !important;
     border: none !important;
-    font-weight: 600 !important;
 }
-button[kind="primary"]:hover {
-    background: #DDB83A !important;
-}
-
-/* ── Badges de Status do HTML ── */
-.badge {
-    display: inline-block;
-    padding: 3px 9px;
-    border-radius: 20px;
-    font-size: 10px;
-    font-weight: 600;
-}
-.badge-ok   { background: #EDFAF4; color: #1E8A4A; } /* .badge-done do HTML */
-.badge-warn { background: #FFF8E6; color: #B8860B; } /* .badge-aguard do HTML */
-.badge-err  { background: #FFEEEE; color: #C0392B; } /* .badge-cancel do HTML */
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -189,7 +161,7 @@ button[kind="primary"]:hover {
 _AUTH_USERS = {"wendley": "Qmerd@10"}
 
 def tela_login():
-    # Injeta um background escuro temporário apenas na tela de login para bater com o HTML
+    # Injeta um background escuro temporário apenas na tela de login
     st.markdown("""
     <style>
     .stApp { background: #111111 !important; }
@@ -198,20 +170,20 @@ def tela_login():
 
     col_left, col_center, col_right = st.columns([1, 1.2, 1])
     with col_center:
-        # Estrutura idêntica à classe .login-box do seu HTML
+        # CORREÇÃO DA IDENTIDADE E DO CONTRASTE (image_95b6d7.png)
         st.markdown("""
         <div style="background: #1C1C1C; border: 1px solid #2A2A2A; border-radius: 16px; padding: 2.5rem 2rem; margin-top: 12vh; text-align: center;">
           <div style="display: flex; justify-content: center; margin-bottom: 1.25rem;">
             <div style="background: #C9A227; border-radius: 12px; width: 54px; height: 54px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; color: #111;">
-              KS
+              PA
             </div>
           </div>
-          <h2 style="color: #F0EDE6 !important; font-size: 20px; font-weight: 600; margin-bottom: 6px;">Portal do Cliente</h2>
-          <p style="color: #777777; font-size: 13px; margin-bottom: 1.5rem;">King Star – Gestão</p>
+          <h2 style="color: #FFFFFF !important; font-size: 22px; font-weight: 600; margin-bottom: 6px;">Portal de Relatórios</h2>
+          <p style="color: #AAAAAA !important; font-size: 13px; margin-bottom: 1.5rem;">Congregação Parque Aliança – 72249</p>
         </div>
         """, unsafe_allow_html=True)
 
-        # Inputs do Streamlit colocados logo abaixo (ficam visualmente integrados)
+        # Inputs do Streamlit colocados logo abaixo
         with st.container():
             user = st.text_input("Usuário", placeholder="Digite seu usuário", label_visibility="collapsed", key="login_user")
             senha = st.text_input("Senha", placeholder="Digite sua senha", type="password", label_visibility="collapsed", key="login_pass")
