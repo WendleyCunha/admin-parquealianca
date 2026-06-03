@@ -1054,9 +1054,15 @@ def main():
                             carregar_relatorios_cached.clear()
                             st.rerun()
                     with col_del:
-                        if st.button("🗑 Deletar", key=f"del_tri_{row['id']}", use_container_width=True):
-                            deletar_relatorio(row['id'])
-
+                        if st.button("🗑 Deletar", key=f"del_{r['id']}", use_container_width=True):
+                            try:
+                                # Chama a função que apaga diretamente da coleção global do Firestore
+                                deletar_relatorio(r['id'])
+                                
+                                # Nota: A função deletar_relatorio já possui o 'carregar_relatorios_cached.clear()' 
+                                # e o 'st.rerun()' embutidos nela, o que força a tela a redesenhar sem o registro sumido.
+                            except Exception as e:
+                                st.error(f"Erro crítico ao deletar o relatório: {e}")
     # ════════════════════════════════════════════════════════════════════════════
     # ABA 2 — CONSOLIDADO
     # ════════════════════════════════════════════════════════════════════════════
