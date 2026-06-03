@@ -444,17 +444,31 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
         can.setFont("Helvetica-Bold", 10)
         can.drawCentredString(PDF_COL_ESTUDOS_X * mm, y_pos, str(estud))
 
-        cat_str = str(categoria_label).upper()
-        if row.get('cat_oficial') == "PIONEIRO AUXILIAR" or "AUXILIAR" in cat_str:
+        # 💡 AJUSTE AQUI: Identifica a categoria real aplicada a ESTE mês específico
+        categoria_do_mes = str(row.get('cat_oficial', '')).upper()
+        
+        # Se for Pioneiro Auxiliar neste mês específico, marca o "X" na coluna correta
+        if categoria_do_mes == "PIONEIRO AUXILIAR":
             can.drawCentredString(PDF_COL_PIAUX_X * mm, y_pos, "X")
 
         can.drawCentredString(PDF_COL_HORAS_X * mm, y_pos, str(horas))
 
+        # 💡 AJUSTE AQUI: Regra da aba OBS para incluir o Pioneiro Auxiliar dinamicamente
         obs_normal = str(row.get('observacoes', ''))
         obs_normal = obs_normal if obs_normal.lower() not in ('nan', '', 'none') else ''
-        if obs_normal:
+        
+        # Concatena a informação caso o membro tenha atuado como auxiliar neste mês
+        if categoria_do_mes == "PIONEIRO AUXILIAR":
+            if obs_normal:
+                obs_final = f"Pion. Auxiliar | {obs_normal}"
+            else:
+                obs_final = "Pioneiro Auxiliar"
+        else:
+            obs_final = obs_normal
+
+        if obs_final:
             can.setFont("Helvetica", 8)
-            can.drawString(PDF_COL_OBS_X * mm, y_pos, obs_normal[:32])
+            can.drawString(PDF_COL_OBS_X * mm, y_pos, obs_final[:32])
 
         can.setFont("Helvetica-Bold", 10)
 
@@ -1365,17 +1379,23 @@ def main():
                             col_save, col_del = st.columns(2)
                             with col_save:
                                 if st.button("💾 Salvar", key=f"s_b_{r['id']}", type="primary", use_container_width=True):
-                                    inicializar_db().collection("relatorios_parque_alianca") \
-                                        .document(r['id']).update(
-                                            {"horas": novas_h, "estudos_biblicos": novos_e})
-                                    atualizar_membro(r['nome_oficial'], nova_cat)
-                                    carregar_relatorios_cached.clear()
-                                    st.rerun()
-                            with col_del:
-                                if st.button("🗑 Deletar", key=f"del_{r['id']}", use_container_width=True):
-                                    deletar_relatorio(r['id'])
-            else:
-                st.info("Nenhum dado disponível.")
+                                    try:
+                                        # Atualiza APENAS o relatório do mês corrente com a categoria de exceção
+                                        inicializar_db().collection("relatorios_parque_alianca") \
+                                            .document(r['id']).update({
+                                                "horas": novas_h, 
+                                                "estudos_biblicos": novos_e,
+                                                "categoria_mes": nova_cat  # Salva a categoria exclusiva deste mês
+                                            })
+                                        
+                                        # ❌ REMOVIDO: atualizar_membro(r['nome_oficial'], nova_cat) 
+                                        # Isso garante que a Fonte da Verdade em 'membros_v2' permaneça intacta.
+                            
+                                        carregar_relatorios_cached.clear()
+                                        st.toast("💾 Alterações salvas com sucesso para este mês!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao salvar alterações: {e}")
 
         # ── Sub-aba 1: GERENCIAR MEMBROS ──────────────────────────────────────
         with sub_cfg[1]:
