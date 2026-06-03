@@ -27,358 +27,158 @@ st.set_page_config(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ESTILIZAÇÃO GLOBAL — visual premium
+# ESTILIZAÇÃO GLOBAL — Adaptação Visual King Star (Portal do Cliente)
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ── Reset geral ── */
+/* ── Reset e Fonte Global ── */
 *, *::before, *::after { box-sizing: border-box; }
 
-html, body, [class*="css"] {
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+html, body, [class*="css"], .stMarkdown p {
+    font-family: 'Inter', sans-serif !important;
 }
 
-/* ── Fundo da app ── */
+/* ── Fundo do App (Light Theme do Portal) ── */
 .stApp {
-    background: #0d1117 !important;
+    background: #F4F4F4 !important;
+    color: #1A1A1A !important;
 }
 .main .block-container {
     padding: 1.5rem 2.5rem 3rem !important;
     max-width: 1400px;
 }
 
-/* ── Sidebar ── */
+/* ── Sidebar (Dark de acordo com o HTML) ── */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0d1117 0%, #111827 100%) !important;
-    border-right: 1px solid #1f2937 !important;
+    background: #111010 !important;
+    border-right: 1px solid #222222 !important;
 }
 [data-testid="stSidebar"] .stMarkdown p,
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] .stSelectbox label {
-    color: #9ca3af !important;
+[data-testid="stSidebar"] label {
+    color: #AAAAAA !important;
     font-size: 0.78rem !important;
     letter-spacing: 0.06em !important;
     text-transform: uppercase !important;
     font-weight: 600 !important;
 }
+
+/* Navegação ativa/Selectbox na Sidebar */
 [data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {
-    background: #1f2937 !important;
-    border: 1px solid #374151 !important;
-    color: #f9fafb !important;
-    border-radius: 10px !important;
+    background: #1C1C1C !important;
+    border: 1px solid #333333 !important;
+    color: #F0EDE6 !important;
+    border-radius: 8px !important;
 }
 
-/* ── Título principal ── */
-h1 {
-    font-size: 1.9rem !important;
-    font-weight: 800 !important;
-    color: #f9fafb !important;
-    letter-spacing: -0.03em !important;
-    margin-bottom: 0.15rem !important;
+/* ── Títulos ── */
+h1, h2, h3, h4, h5 { 
+    color: #1A1A1A !important; 
+    font-family: 'Inter', sans-serif !important;
 }
-h2 { color: #e5e7eb !important; font-weight: 700 !important; font-size: 1.3rem !important; }
-h3 { color: #d1d5db !important; font-weight: 600 !important; font-size: 1.05rem !important; }
-h4, h5 { color: #9ca3af !important; font-weight: 600 !important; }
+h1 { font-size: 1.9rem !important; font-weight: 700 !important; letter-spacing: -0.02em !important; }
+h2 { font-weight: 600 !important; font-size: 1.3rem !important; }
 
-/* ── Tabs ── */
+/* ── Tabs (Abas) ── */
 [data-testid="stTabs"] [data-testid="stTab"] {
-    background: transparent !important;
-    color: #6b7280 !important;
-    font-weight: 600 !important;
-    font-size: 0.82rem !important;
-    letter-spacing: 0.04em !important;
-    border: none !important;
-    border-bottom: 2px solid transparent !important;
-    padding: 0.5rem 1.1rem !important;
-    transition: color 0.2s !important;
+    color: #888888 !important;
+    font-weight: 500 !important;
+    font-size: 0.85rem !important;
 }
 [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] {
-    color: #f59e0b !important;
-    border-bottom: 2px solid #f59e0b !important;
-    background: transparent !important;
-}
-[data-testid="stTabs"] > div:first-child {
-    border-bottom: 1px solid #1f2937 !important;
-    gap: 0 !important;
+    color: #C9A227 !important;
+    border-bottom: 2px solid #C9A227 !important;
 }
 
-/* ── Cards customizados ── */
-.pa-card {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 14px;
-    padding: 1.1rem 1.3rem;
-    margin-bottom: 0.7rem;
-    border-left: 3px solid #f59e0b;
-    transition: border-color 0.2s, box-shadow 0.2s;
+/* ── Cards Customizados (Estilo .panel / .sum-card do HTML) ── */
+.pa-card, .pa-metric {
+    background: #FFFFFF !important;
+    border: 1px solid #EDEDED !important;
+    border-radius: 14px !important;
+    padding: 1.2rem !important;
+    margin-bottom: 0.8rem !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    transition: transform 0.2s, box-shadow 0.2s;
 }
-.pa-card:hover { border-left-color: #fbbf24; box-shadow: 0 4px 24px rgba(245,158,11,0.08); }
+.pa-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
 .pa-card-header {
-    font-weight: 700;
-    font-size: 0.88rem;
-    color: #f9fafb;
-    letter-spacing: 0.01em;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #1A1A1A;
 }
 .pa-card-sub {
-    font-size: 0.78rem;
-    color: #6b7280;
-    margin-top: 3px;
-}
-
-/* ── Metric cards ── */
-.pa-metric {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 14px;
-    padding: 1.2rem 1.4rem;
-    text-align: center;
-}
-.pa-metric-value {
-    font-size: 2.1rem;
-    font-weight: 800;
-    color: #f59e0b;
-    letter-spacing: -0.04em;
-    font-family: 'DM Mono', monospace;
-}
-.pa-metric-label {
-    font-size: 0.7rem;
-    color: #6b7280;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-weight: 600;
+    font-size: 0.8rem;
+    color: #888888;
     margin-top: 4px;
 }
 
-/* ── Triagem box ── */
-.pa-triagem {
-    background: #1a1200;
-    border: 1px solid #92400e;
-    border-left: 3px solid #f59e0b;
-    border-radius: 12px;
-    padding: 1rem 1.2rem;
-    margin-bottom: 0.8rem;
-}
-
-/* ── Badge de status ── */
-.badge {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-}
-.badge-ok   { background: #064e3b; color: #6ee7b7; }
-.badge-warn { background: #451a03; color: #fcd34d; }
-.badge-err  { background: #450a0a; color: #fca5a5; }
-
-/* ── Inputs / Selects ── */
-[data-testid="stTextInput"] input,
-[data-testid="stNumberInput"] input,
-[data-testid="stSelectbox"] > div > div,
-[data-testid="stMultiSelect"] > div > div {
-    background: #1f2937 !important;
-    border: 1px solid #374151 !important;
-    color: #f9fafb !important;
-    border-radius: 10px !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-}
-[data-testid="stTextInput"] input:focus,
-[data-testid="stNumberInput"] input:focus {
-    border-color: #f59e0b !important;
-    box-shadow: 0 0 0 3px rgba(245,158,11,0.15) !important;
-}
-
-/* ── Botões ── */
-.stButton > button {
-    background: #1f2937 !important;
-    color: #d1d5db !important;
-    border: 1px solid #374151 !important;
-    border-radius: 10px !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    font-weight: 600 !important;
-    font-size: 0.82rem !important;
-    padding: 0.45rem 1rem !important;
-    transition: all 0.18s !important;
-}
-.stButton > button:hover {
-    background: #374151 !important;
-    border-color: #f59e0b !important;
-    color: #f9fafb !important;
-}
-.stButton [kind="primary"] > button,
-button[kind="primary"] {
-    background: linear-gradient(135deg, #d97706, #f59e0b) !important;
-    color: #000 !important;
-    border: none !important;
+/* ── Métricas (Estilo .sum-num do HTML) ── */
+.pa-metric-value {
+    font-size: 22px !important;
     font-weight: 700 !important;
+    color: #1A1A1A !important;
 }
-
-/* ── Download button ── */
-[data-testid="stDownloadButton"] button {
-    background: linear-gradient(135deg, #1d4ed8, #3b82f6) !important;
-    color: #fff !important;
-    border: none !important;
-    border-radius: 10px !important;
-    font-weight: 700 !important;
-}
-
-/* ── Expander ── */
-[data-testid="stExpander"] {
-    background: #161b22 !important;
-    border: 1px solid #21262d !important;
-    border-radius: 12px !important;
-    margin-bottom: 0.5rem !important;
-}
-[data-testid="stExpander"] summary {
-    color: #e5e7eb !important;
-    font-weight: 600 !important;
-    font-size: 0.88rem !important;
-}
-
-/* ── DataFrame ── */
-[data-testid="stDataFrame"] {
-    border: 1px solid #21262d !important;
-    border-radius: 12px !important;
-    overflow: hidden !important;
-}
-
-/* ── Divider ── */
-hr { border-color: #1f2937 !important; }
-
-/* ── Alertas ── */
-[data-testid="stAlert"] {
-    border-radius: 10px !important;
-    border: 1px solid #374151 !important;
-    background: #161b22 !important;
-    color: #d1d5db !important;
-}
-
-/* ── Caption / info ── */
-.stCaption { color: #6b7280 !important; font-size: 0.75rem !important; }
-
-/* ── Progress bar ── */
-[data-testid="stProgressBar"] > div { background: #f59e0b !important; }
-
-/* ── Login card ── */
-.login-wrap {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(ellipse at 50% 30%, #1a1000 0%, #0d1117 70%);
-}
-.login-card {
-    background: #161b22;
-    border: 1px solid #21262d;
-    border-radius: 20px;
-    padding: 3rem 2.8rem;
-    width: 100%;
-    max-width: 420px;
-    box-shadow: 0 32px 80px rgba(0,0,0,0.6);
-}
-.login-logo {
-    text-align: center;
-    margin-bottom: 2rem;
-}
-.login-logo-icon {
-    font-size: 3rem;
-    display: block;
-    margin-bottom: 0.5rem;
-}
-.login-title {
-    text-align: center;
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: #f9fafb;
-    letter-spacing: -0.02em;
-}
-.login-sub {
-    text-align: center;
-    font-size: 0.8rem;
-    color: #6b7280;
-    margin-bottom: 2rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-}
-
-/* ── Mes badge ── */
-.mes-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: linear-gradient(135deg, #1a1000, #292000);
-    border: 1px solid #92400e;
-    border-radius: 999px;
-    padding: 6px 18px;
-    font-size: 0.82rem;
-    font-weight: 700;
-    color: #fbbf24;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-}
-.mes-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #f59e0b;
-    box-shadow: 0 0 8px #f59e0b;
-    animation: pulse-dot 2s ease-in-out infinite;
-}
-@keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
-
-/* ── Section header ── */
-.section-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 1rem;
-    padding-bottom: 0.6rem;
-    border-bottom: 1px solid #1f2937;
-}
-.section-header-text {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: #6b7280;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-}
-
-/* ── Sidebar logo ── */
-.sidebar-brand {
-    padding: 1rem 0 1.5rem;
-    text-align: center;
-}
-.sidebar-brand-title {
-    font-size: 1rem;
-    font-weight: 800;
-    color: #f9fafb;
-    letter-spacing: -0.01em;
-}
-.sidebar-brand-sub {
-    font-size: 0.68rem;
-    color: #6b7280;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-}
-.sidebar-divider {
-    border: none;
-    border-top: 1px solid #1f2937;
-    margin: 0.8rem 0;
-}
-
-/* ── Checkbox ── */
-[data-testid="stCheckbox"] label {
-    color: #d1d5db !important;
-    font-size: 0.83rem !important;
+.pa-metric-label {
+    font-size: 12px !important;
+    color: #888888 !important;
+    text-transform: none !important;
     font-weight: 500 !important;
 }
+
+/* ── Inputs e Campos de Texto ── */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stSelectbox"] > div > div {
+    background: #FFFFFF !important;
+    border: 1px solid #E8E8E8 !important;
+    color: #1A1A1A !important;
+    border-radius: 8px !important;
+}
+[data-testid="stTextInput"] input:focus {
+    border-color: #C9A227 !important;
+}
+
+/* ── Botões (Estilo .btn-login e .btn-detail do HTML) ── */
+.stButton > button {
+    background: transparent !important;
+    color: #C9A227 !important;
+    border: 1.5px solid #C9A227 !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s !important;
+}
+.stButton > button:hover {
+    background: #C9A227 !important;
+    color: #111111 !important;
+}
+
+/* Botão Primário (Destaque Ouro) */
+button[kind="primary"], .stButton [kind="primary"] > button {
+    background: #C9A227 !important;
+    color: #111111 !important;
+    border: none !important;
+    font-weight: 600 !important;
+}
+button[kind="primary"]:hover {
+    background: #DDB83A !important;
+}
+
+/* ── Badges de Status do HTML ── */
+.badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+}
+.badge-ok   { background: #EDFAF4; color: #1E8A4A; } /* .badge-done do HTML */
+.badge-warn { background: #FFF8E6; color: #B8860B; } /* .badge-aguard do HTML */
+.badge-err  { background: #FFEEEE; color: #C0392B; } /* .badge-cancel do HTML */
+
 </style>
 """, unsafe_allow_html=True)
 
