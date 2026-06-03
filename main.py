@@ -1410,9 +1410,13 @@ def main():
 
             _GENEROS = ["", "Masculino", "Feminino"]
             _CLASSES = ["", "Outras ovelhas", "Ungido"]
+            _STATUS_OPCOES = ["Ativo", "Inativo"] # Opções de status adicionadas
 
-            # Ordem alfabética (item 9)
-            for nome in sorted(membros_db.keys()):
+            # Criando as abas internas para separar Ativos de Inativos
+            tab_ativos, tab_inativos = st.tabs(["👥 Membros Ativos", "💤 Membros Inativos"])
+
+            # Função interna para renderizar o formulário do membro sem duplicar código
+            def renderizar_formulario_membro(nome):
                 m = membros_db[nome]
                 cat_icon = {"PUBLICADOR": "👤", "PIONEIRO AUXILIAR": "🌟",
                             "PIONEIRO REGULAR": "⭐"}.get(m.get('categoria',''), "👤")
@@ -1446,6 +1450,12 @@ def main():
                         nova_cls = st.selectbox("Classe", _CLASSES,
                                                  index=_CLASSES.index(cls_val) if cls_val in _CLASSES else 0,
                                                  key=f"cls_{nome}")
+                        
+                        # 🌟 NOVO: Campo para selecionar o Status do membro
+                        status_atual = m.get('status', 'Ativo') # Padrão 'Ativo' se não existir no banco ainda
+                        novo_status = st.selectbox("Status", _STATUS_OPCOES,
+                                                    index=_STATUS_OPCOES.index(status_atual) if status_atual in _STATUS_OPCOES else 0,
+                                                    key=f"status_{nome}")
 
                         cargos_atuais = cargos_para_lista(m.get('cargo',''))
                         st.markdown("**Cargo(s)**")
@@ -1465,10 +1475,33 @@ def main():
                             "genero":              nova_gen,
                             "classe":              nova_cls,
                             "cargo":               novos_cargos,
+                            "status":              novo_status, # 🌟 NOVO: Gravando o status alterado
                         }
                         atualizar_membro(nome, nova_cat, extra=extra)
                         st.toast(f"✅ {nome} atualizado!")
                         st.rerun()
+
+            # Organização alfabética e filtragem por Status
+            membros_ordenados = sorted(membros_db.keys())
+
+            with tab_ativos:
+                # Filtra apenas quem é 'Ativo' (ou quem não tem a propriedade definida ainda)
+                ativos = [n for n in membros_ordenados if membros_db[n].get('status', 'Ativo') == 'Ativo']
+                if ativos:
+                    for nome in ativos:
+                        renderizar_formulario_membro(nome)
+                else:
+                    st.info("Nenhum membro ativo cadastrado.")
+
+            with tab_inativos:
+                # Filtra apenas quem foi marcado como 'Inativo'
+                inativos = [n for n in membros_ordenados if membros_db[n].get('status', 'Ativo') == 'Inativo']
+                if inativos:
+                    for nome in inativos:
+                        renderizar_formulario_membro(nome)
+                else:
+                    st.info("Nenhum membro inativo.")
+
 
         # ── Sub-aba 2: NOVO MEMBRO ────────────────────────────────────────────
         with sub_cfg[2]:
@@ -1506,6 +1539,7 @@ def main():
                             "genero":              gen_n,
                             "classe":              cls_n,
                             "cargo":               cargos_novos_form,
+                            "status":              "Ativo", # 🌟 NOVO: Todo membro criado nasce Ativo por padrão
                         }
                         atualizar_membro(nm.strip(), ct, novo=True, extra=extra_n)
                         st.success(f"✅ {nm.strip()} adicionado!")
