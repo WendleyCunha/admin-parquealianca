@@ -1413,13 +1413,15 @@ def main():
                                     # Botão de confirmação de exclusão
                                     if st.button("Sim, Excluir", key=f"conf_del_{r['id']}", type="primary", use_container_width=True):
                                         try:
-                                            # 1. Apaga fisicamente do banco de dados global (Firestore)
-                                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).delete()
+                                            # MUDA AQUI: Em vez de .delete(), atualizamos o status para EXCLUIDO
+                                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({
+                                                "status_validacao": "EXCLUIDO"
+                                            })
                                             
-                                            # 2. Limpa o cache para que o Streamlit esqueça esse dado
+                                            # Limpa o cache para que o Streamlit atualize os dados na hora
                                             carregar_relatorios_cached.clear()
                                             
-                                            # 3. Dá o aviso de sucesso e recarrega a tela (ele vai sumir na hora)
+                                            # Dá o aviso de sucesso e recarrega a tela
                                             st.toast("🗑️ Relatório removido permanentemente do sistema!")
                                             st.rerun()
                                         except Exception as e:
