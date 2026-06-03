@@ -189,24 +189,33 @@ button[kind="primary"]:hover {
 _AUTH_USERS = {"wendley": "Qmerd@10"}
 
 def tela_login():
+    # Injeta um background escuro temporário apenas na tela de login para bater com o HTML
+    st.markdown("""
+    <style>
+    .stApp { background: #111111 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
     col_left, col_center, col_right = st.columns([1, 1.2, 1])
     with col_center:
+        # Estrutura idêntica à classe .login-box do seu HTML
         st.markdown("""
-        <div style="margin-top:8vh;">
-          <div class="login-logo">
-            <span class="login-logo-icon">⛪</span>
+        <div style="background: #1C1C1C; border: 1px solid #2A2A2A; border-radius: 16px; padding: 2.5rem 2rem; margin-top: 12vh; text-align: center;">
+          <div style="display: flex; justify-content: center; margin-bottom: 1.25rem;">
+            <div style="background: #C9A227; border-radius: 12px; width: 54px; height: 54px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; color: #111;">
+              KS
+            </div>
           </div>
-          <div class="login-title">Parque Aliança</div>
-          <div class="login-sub">Sistema de Gestão</div>
+          <h2 style="color: #F0EDE6 !important; font-size: 20px; font-weight: 600; margin-bottom: 6px;">Portal do Cliente</h2>
+          <p style="color: #777777; font-size: 13px; margin-bottom: 1.5rem;">King Star – Gestão</p>
         </div>
         """, unsafe_allow_html=True)
 
+        # Inputs do Streamlit colocados logo abaixo (ficam visualmente integrados)
         with st.container():
-            user = st.text_input("Usuário", placeholder="usuário", label_visibility="collapsed",
-                                 key="login_user")
-            senha = st.text_input("Senha", placeholder="senha", type="password",
-                                  label_visibility="collapsed", key="login_pass")
-            entrar = st.button("→ ENTRAR", use_container_width=True, type="primary")
+            user = st.text_input("Usuário", placeholder="Digite seu usuário", label_visibility="collapsed", key="login_user")
+            senha = st.text_input("Senha", placeholder="Digite sua senha", type="password", label_visibility="collapsed", key="login_pass")
+            entrar = st.button("Acessar Portal", use_container_width=True, type="primary")
 
         if entrar:
             if _AUTH_USERS.get(user.lower().strip()) == senha:
@@ -215,7 +224,6 @@ def tela_login():
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
-        st.markdown("<div style='text-align:center;margin-top:2rem;font-size:0.72rem;color:#374151'>v5.0 · Parque Aliança</div>", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
