@@ -533,9 +533,15 @@ def atualizar_membro(nome, categoria, novo=False, extra=None):
 def deletar_relatorio(relatorio_id):
     db = inicializar_db()
     if db:
+        # 1. Apaga do banco de dados do Firestore
         db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
+        
+        # 2. Limpeza agressiva de Cache (Garante que o fantasma não volte)
         carregar_relatorios_cached.clear()
-        st.toast("✅ Relatório deletado!")
+        carregar_membros_cached.clear()
+        
+        # 3. Força a atualização
+        st.toast("🗑️ Relatório deletado permanentemente!")
         st.rerun()
 
 
@@ -919,23 +925,27 @@ def main():
                 with st.expander(f"{'👤' if cat=='PUBLICADOR' else '🌟' if 'AUXILIAR' in cat else '⭐'} {cat} — {len(pendentes)} pendente(s)", expanded=False):
 
                     # Botão BAIXAR TODOS (item 7)
-                    col_btn_zip, _ = st.columns([2, 3])
-                    with col_btn_zip:
-                        zip_key = f"zip_pend_{cat}_{mes_sel}"
-                        if st.button(f"📦 Baixar todos ({len(pendentes)})", key=f"gerar_{zip_key}"):
-                            zip_data = gerar_zip_pendentes(pendentes, mes_sel, membros_db, df if not df.empty else pd.DataFrame())
-                            st.session_state[zip_key] = zip_data
-
-                        if zip_key in st.session_state:
-                            nome_zip = cat.replace(" ", "_") + f"_Pendentes_{mes_sel.replace(' ','_')}.zip"
-                            st.download_button(
-                                "📥 Baixar ZIP",
-                                data=st.session_state[zip_key],
-                                file_name=nome_zip,
-                                mime="application/zip",
-                                key=f"dl_{zip_key}",
-                                type="primary",
-                            )
+                    col_btn_baixa, _ = st.columns([2, 3])
+                    with col_btn_baixa:
+                        if st.button(f"✔ Dar Baixa em Todos ({len(pendentes)})", key=f"baixa_all_{cat}_{mes_sel}", type="primary"):
+                            db = inicializar_db()
+                            if db:
+                                batch = db.batch()
+                                for p in pendentes:
+                                    # Cria uma nova referência vazia no Firestore
+                                    doc_ref = db.collection("relatorios_parque_alianca").document()
+                                    batch.set(doc_ref, {
+                                        "nome": p, 
+                                        "mes_referencia": mes_sel, 
+                                        "horas": 0,
+                                        "estudos_biblicos": 0, 
+                                        "timestamp": firestore.SERVER_TIMESTAMP
+                                    })
+                                
+                                batch.commit() # Dispara todas as baixas de uma vez
+                                carregar_relatorios_cached.clear() # Limpa o cache
+                                st.success(f"✅ Baixa realizada para {len(pendentes)} publicadores(as)!")
+                                st.rerun()
 
                     st.markdown("---")
                     for p in pendentes:
