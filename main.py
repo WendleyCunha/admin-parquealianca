@@ -668,7 +668,7 @@ def gerar_html_agenda(d):
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PROCESSAMENTO DO DATAFRAME — validação de relatórios
-# Regra 8: categoria do membro é a FONTE DA VERDADE
+# Regra 8: categoria do membro é a FONTE DA VERDADE (com exceção mensal)
 # ═══════════════════════════════════════════════════════════════════════════════
 def processar_dataframe(relatorios_brutos, membros_db):
     if not relatorios_brutos:
@@ -685,10 +685,19 @@ def processar_dataframe(relatorios_brutos, membros_db):
         nome_oficial = normalizar_nome_no_banco(row['nome'], lista_nomes)
         if nome_oficial:
             dados_m = membros_db[nome_oficial]
-            # REGRA 8: categoria do banco é a fonte da verdade
-            cat_final = dados_m.get('categoria', 'PUBLICADOR')
-            if cat_final not in categorias_lista:
-                cat_final = 'PUBLICADOR'
+            
+            # 💡 NOVO: Verifica se o relatório tem uma categoria ESPECÍFICA salva para este mês
+            cat_mes = row.get('categoria_mes')
+            
+            # Se houver uma exceção salva e ela for válida, usa ela
+            if pd.notna(cat_mes) and cat_mes in categorias_lista:
+                cat_final = cat_mes
+            else:
+                # Se não houver exceção, obedece à Fonte da Verdade (cadastro global)
+                cat_final = dados_m.get('categoria', 'PUBLICADOR')
+                if cat_final not in categorias_lista:
+                    cat_final = 'PUBLICADOR'
+                    
             return pd.Series([nome_oficial, cat_final, "IDENTIFICADO"])
         return pd.Series([row['nome'], "DESCONHECIDO", "TRIAGEM"])
 
