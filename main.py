@@ -20,7 +20,7 @@ from reportlab.lib.units import mm
 # CONFIGURAÇÃO DA PÁGINA
 # ═══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Parque Aliança · Gestão",
+    page_title="🏢 Parque Aliança · Gestão",
     layout="wide",
     page_icon="⛪",
     initial_sidebar_state="expanded",
@@ -814,7 +814,7 @@ def main():
     # ── Header ─────────────────────────────────────────────────────────────────
     col_title, col_mes = st.columns([3, 1])
     with col_title:
-        st.markdown("# ⛪ Parque Aliança")
+        st.markdown("# Parque Aliança")
         st.markdown('<p style="color:#6b7280;font-size:0.85rem;margin-top:-8px;">Sistema de Gestão · Relatórios & Publicadores</p>', unsafe_allow_html=True)
     with col_mes:
         st.markdown(f"""
@@ -847,7 +847,7 @@ def main():
     with tabs[0]:
         st.markdown(f"### 📋 Relatórios de {mes_sel}")
 
-        sub_rel = st.tabs(["👤 PUBLICADOR", "🌟 P. AUXILIAR", "⭐ P. REGULAR", "⏳ PENDÊNCIAS"])
+        sub_rel = st.tabs(["👤 PUBLICADOR", "🌟 P. AUXILIAR", "💎 P. REGULAR", "⏳ PENDÊNCIAS"])
 
         for i, cat in enumerate(categorias_lista):
             with sub_rel[i]:
