@@ -27,20 +27,18 @@ st.set_page_config(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ESTILIZAÇÃO GLOBAL — 
+# ESTILIZAÇÃO GLOBAL
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ── Reset e Fonte Global ── */
 *, *::before, *::after { box-sizing: border-box; }
 
 html, body, [class*="css"], .stMarkdown p {
     font-family: 'Inter', sans-serif !important;
 }
 
-/* ── Fundo do App (Light Theme) ── */
 .stApp {
     background: #F4F4F4 !important;
     color: #1A1A1A !important;
@@ -50,29 +48,25 @@ html, body, [class*="css"], .stMarkdown p {
     max-width: 1400px;
 }
 
-/* ── CORREÇÃO DA BARRA LATERAL (image_95b61e.png) ── */
 [data-testid="stSidebar"] {
     background: #111010 !important;
     border-right: 1px solid #222222 !important;
 }
 
-/* Força todos os textos gerais e labels da sidebar a ficarem claros */
-[data-testid="stSidebar"] , 
-[data-testid="stSidebar"] p, 
-[data-testid="stSidebar"] label, 
+[data-testid="stSidebar"] ,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label,
 [data-testid="stSidebar"] span {
     color: #C5C5C5 !important;
 }
 
-/* Títulos principais dentro da Sidebar */
-[data-testid="stSidebar"] h1, 
-[data-testid="stSidebar"] h2, 
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3 {
     color: #FFFFFF !important;
 }
 
-/* Garante que os números e textos DENTRO dos cards brancos continuem escuros */
-[data-testid="stSidebar"] .pa-card *, 
+[data-testid="stSidebar"] .pa-card *,
 [data-testid="stSidebar"] .pa-metric * {
     color: #1A1A1A !important;
 }
@@ -80,7 +74,6 @@ html, body, [class*="css"], .stMarkdown p {
     color: #888888 !important;
 }
 
-/* Navegação ativa/Selectbox na Sidebar */
 [data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {
     background: #1C1C1C !important;
     border: 1px solid #333333 !important;
@@ -88,15 +81,13 @@ html, body, [class*="css"], .stMarkdown p {
     border-radius: 8px !important;
 }
 
-/* ── Títulos ── */
-h1, h2, h3, h4, h5 { 
-    color: #1A1A1A !important; 
+h1, h2, h3, h4, h5 {
+    color: #1A1A1A !important;
     font-family: 'Inter', sans-serif !important;
 }
 h1 { font-size: 1.9rem !important; font-weight: 700 !important; letter-spacing: -0.02em !important; }
 h2 { font-weight: 600 !important; font-size: 1.3rem !important; }
 
-/* ── Tabs (Abas) ── */
 [data-testid="stTabs"] [data-testid="stTab"] {
     color: #888888 !important;
     font-weight: 500 !important;
@@ -107,7 +98,6 @@ h2 { font-weight: 600 !important; font-size: 1.3rem !important; }
     border-bottom: 2px solid #C9A227 !important;
 }
 
-/* ── Cards Customizados ── */
 .pa-card, .pa-metric {
     background: #FFFFFF !important;
     border: 1px solid #EDEDED !important;
@@ -128,7 +118,6 @@ h2 { font-weight: 600 !important; font-size: 1.3rem !important; }
     color: #1A1A1A !important;
 }
 
-/* ── Inputs e Campos de Texto ── */
 [data-testid="stTextInput"] input,
 [data-testid="stNumberInput"] input,
 [data-testid="stSelectbox"] > div > div {
@@ -138,7 +127,6 @@ h2 { font-weight: 600 !important; font-size: 1.3rem !important; }
     border-radius: 8px !important;
 }
 
-/* ── Botões ── */
 .stButton > button {
     background: transparent !important;
     color: #C9A227 !important;
@@ -161,7 +149,6 @@ button[kind="primary"], .stButton [kind="primary"] > button {
 _AUTH_USERS = {"wendley": "Qmerd@10"}
 
 def tela_login():
-    # Injeta um background escuro temporário apenas na tela de login
     st.markdown("""
     <style>
     .stApp { background: #111111 !important; }
@@ -170,7 +157,6 @@ def tela_login():
 
     col_left, col_center, col_right = st.columns([1, 1.2, 1])
     with col_center:
-        # CORREÇÃO DA IDENTIDADE E DO CONTRASTE (image_95b6d7.png)
         st.markdown("""
         <div style="background: #1C1C1C; border: 1px solid #2A2A2A; border-radius: 16px; padding: 2.5rem 2rem; margin-top: 12vh; text-align: center;">
           <div style="display: flex; justify-content: center; margin-bottom: 1.25rem;">
@@ -183,16 +169,15 @@ def tela_login():
         </div>
         """, unsafe_allow_html=True)
 
-        # Inputs do Streamlit colocados logo abaixo
         with st.container():
-            user = st.text_input("Usuário", placeholder="Digite seu usuário", label_visibility="collapsed", key="login_user")
-            senha = st.text_input("Senha", placeholder="Digite sua senha", type="password", label_visibility="collapsed", key="login_pass")
+            user  = st.text_input("Usuário", placeholder="Digite seu usuário", label_visibility="collapsed", key="login_user")
+            senha = st.text_input("Senha",   placeholder="Digite sua senha",   type="password",              label_visibility="collapsed", key="login_pass")
             entrar = st.button("Acessar Portal", use_container_width=True, type="primary")
 
         if entrar:
             if _AUTH_USERS.get(user.lower().strip()) == senha:
-                st.session_state["autenticado"] = True
-                st.session_state["usuario_logado"] = user.strip().title()
+                st.session_state["autenticado"]     = True
+                st.session_state["usuario_logado"]  = user.strip().title()
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
@@ -277,18 +262,12 @@ def normalizar_texto(texto):
 
 
 def obter_mes_vigente_str():
-    """
-    O mês inicia no dia 20 de cada mês:
-    - Se hoje >= dia 20 → mês vigente é o mês atual
-    - Se hoje < dia 20  → mês vigente é o mês anterior
-    """
     meses = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO",
              "JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]
     hoje = date.today()
     if hoje.day >= 20:
         return f"{meses[hoje.month - 1]} {hoje.year}"
     else:
-        # mês anterior
         if hoje.month == 1:
             return f"DEZEMBRO {hoje.year - 1}"
         return f"{meses[hoje.month - 2]} {hoje.year}"
@@ -317,16 +296,8 @@ def ordenar_df_por_mes(df_input):
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MOTOR DE TRIAGEM APRIMORADO
-# Lógica: extrai primeiro e segundo nome, busca match por componentes
 # ═══════════════════════════════════════════════════════════════════════════════
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
-    """
-    Tenta identificar o membro digitado:
-    1. Match exato normalizado
-    2. O nome digitado é subconjunto de tokens de algum nome oficial
-    3. Qualquer token do nome digitado coincide com o primeiro nome oficial
-    4. Fuzzy SequenceMatcher >= 0.82
-    """
     entrada_norm = normalizar_texto(nome_recebido)
     if not entrada_norm or len(entrada_norm) < 2:
         return None
@@ -338,25 +309,21 @@ def normalizar_nome_no_banco(nome_recebido, lista_membros):
         oficial_norm = normalizar_texto(nome_oficial)
         tokens_oficial = oficial_norm.split()
 
-        # 1. Exato
         if entrada_norm == oficial_norm:
             return nome_oficial
 
-        # 2. Token único digitado bate com primeiro nome oficial
         if len(tokens_entrada) == 1:
             primeiro = tokens_oficial[0] if tokens_oficial else ""
             segundo  = tokens_oficial[1] if len(tokens_oficial) > 1 else ""
             if entrada_norm in (primeiro, segundo):
                 return nome_oficial
 
-        # 3. Todos tokens digitados são subconjunto dos tokens oficiais
         if tokens_entrada and tokens_entrada.issubset(set(tokens_oficial)):
             score = len(tokens_entrada) / max(len(tokens_oficial), 1) + 0.5
             if score > maior_score:
                 maior_score, melhor_match = score, nome_oficial
             continue
 
-        # 4. Algum token coincide com primeiro nome
         primeiro_oficial = tokens_oficial[0] if tokens_oficial else ""
         for tok in tokens_entrada:
             if tok == primeiro_oficial and len(tok) >= 3:
@@ -364,7 +331,6 @@ def normalizar_nome_no_banco(nome_recebido, lista_membros):
                 if score > maior_score:
                     maior_score, melhor_match = score, nome_oficial
 
-        # 5. Fuzzy geral
         score_fuzzy = SequenceMatcher(None, entrada_norm, oficial_norm).ratio()
         if score_fuzzy > maior_score:
             maior_score, melhor_match = score_fuzzy, nome_oficial
@@ -444,25 +410,18 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
         can.setFont("Helvetica-Bold", 10)
         can.drawCentredString(PDF_COL_ESTUDOS_X * mm, y_pos, str(estud))
 
-        # 💡 AJUSTE AQUI: Identifica a categoria real aplicada a ESTE mês específico
         categoria_do_mes = str(row.get('cat_oficial', '')).upper()
-        
-        # Se for Pioneiro Auxiliar neste mês específico, marca o "X" na coluna correta
+
         if categoria_do_mes == "PIONEIRO AUXILIAR":
             can.drawCentredString(PDF_COL_PIAUX_X * mm, y_pos, "X")
 
         can.drawCentredString(PDF_COL_HORAS_X * mm, y_pos, str(horas))
 
-        # 💡 AJUSTE AQUI: Regra da aba OBS para incluir o Pioneiro Auxiliar dinamicamente
         obs_normal = str(row.get('observacoes', ''))
         obs_normal = obs_normal if obs_normal.lower() not in ('nan', '', 'none') else ''
-        
-        # Concatena a informação caso o membro tenha atuado como auxiliar neste mês
+
         if categoria_do_mes == "PIONEIRO AUXILIAR":
-            if obs_normal:
-                obs_final = f"Pion. Auxiliar | {obs_normal}"
-            else:
-                obs_final = "Pioneiro Auxiliar"
+            obs_final = f"Pion. Auxiliar | {obs_normal}" if obs_normal else "Pioneiro Auxiliar"
         else:
             obs_final = obs_normal
 
@@ -493,7 +452,7 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# BANCO DE DADOS — com cache para velocidade
+# BANCO DE DADOS
 # ═══════════════════════════════════════════════════════════════════════════════
 def inicializar_db():
     if "db" not in st.session_state:
@@ -520,8 +479,14 @@ def carregar_relatorios_cached():
     db = inicializar_db()
     if not db:
         return []
-    return [{"id": doc.id, **doc.to_dict()}
-            for doc in db.collection("relatorios_parque_alianca").stream()]
+    # ─── FIX #1: filtra na origem registros marcados como EXCLUIDO ───────────
+    # Isso garante que soft-deletes nunca reapareçam após rerun.
+    docs = db.collection("relatorios_parque_alianca").stream()
+    return [
+        {"id": doc.id, **doc.to_dict()}
+        for doc in docs
+        if doc.to_dict().get("status_validacao") != "EXCLUIDO"
+    ]
 
 
 def carregar_membros():
@@ -544,19 +509,23 @@ def atualizar_membro(nome, categoria, novo=False, extra=None):
         carregar_membros_cached.clear()
 
 
+# ─── FIX #2: função única e canônica de deleção ──────────────────────────────
+# Usa .delete() real (hard delete). Chamada em TODOS os lugares que deletam.
 def deletar_relatorio(relatorio_id):
+    """Remove permanentemente um relatório do Firestore e limpa o cache."""
     db = inicializar_db()
-    if db:
-        # 1. Apaga do banco de dados do Firestore
+    if not db:
+        st.error("Sem conexão com o banco.")
+        return
+    try:
         db.collection("relatorios_parque_alianca").document(relatorio_id).delete()
-        
-        # 2. Limpeza agressiva de Cache (Garante que o fantasma não volte)
-        carregar_relatorios_cached.clear()
-        carregar_membros_cached.clear()
-        
-        # 3. Força a atualização
-        st.toast("🗑️ Relatório deletado permanentemente!")
-        st.rerun()
+    except Exception as e:
+        st.error(f"Erro ao deletar: {e}")
+        return
+    carregar_relatorios_cached.clear()
+    carregar_membros_cached.clear()
+    st.toast("🗑️ Relatório deletado permanentemente!")
+    st.rerun()
 
 
 def salvar_baixa_manual(nome, mes, horas, estudos):
@@ -681,17 +650,26 @@ def gerar_html_agenda(d):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PROCESSAMENTO DO DATAFRAME — validação de relatórios
-# Regra 8: categoria do membro é a FONTE DA VERDADE (com exceção mensal)
+# PROCESSAMENTO DO DATAFRAME
 # ═══════════════════════════════════════════════════════════════════════════════
 def processar_dataframe(relatorios_brutos, membros_db):
     if not relatorios_brutos:
         return pd.DataFrame()
 
     df = pd.DataFrame(relatorios_brutos)
-    df['horas'] = pd.to_numeric(df.get('horas', 0), errors='coerce').fillna(0)
-    df['estudos_biblicos'] = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
-    df['mes_referencia'] = df['mes_referencia'].str.upper()
+
+    # ─── FIX #3: garante que registros EXCLUIDO nunca entram no DataFrame ─────
+    # Dupla proteção: carregar_relatorios_cached já filtra, mas se vier lixo
+    # de cache antigo, este filtro elimina antes de qualquer processamento.
+    if 'status_validacao' in df.columns:
+        df = df[df['status_validacao'] != "EXCLUIDO"].copy()
+
+    if df.empty:
+        return pd.DataFrame()
+
+    df['horas']             = pd.to_numeric(df.get('horas', 0), errors='coerce').fillna(0)
+    df['estudos_biblicos']  = pd.to_numeric(df.get('estudos_biblicos', 0), errors='coerce').fillna(0)
+    df['mes_referencia']    = df['mes_referencia'].str.upper()
 
     lista_nomes = list(membros_db.keys())
 
@@ -699,19 +677,13 @@ def processar_dataframe(relatorios_brutos, membros_db):
         nome_oficial = normalizar_nome_no_banco(row['nome'], lista_nomes)
         if nome_oficial:
             dados_m = membros_db[nome_oficial]
-            
-            # 💡 NOVO: Verifica se o relatório tem uma categoria ESPECÍFICA salva para este mês
             cat_mes = row.get('categoria_mes')
-            
-            # Se houver uma exceção salva e ela for válida, usa ela
             if pd.notna(cat_mes) and cat_mes in categorias_lista:
                 cat_final = cat_mes
             else:
-                # Se não houver exceção, obedece à Fonte da Verdade (cadastro global)
                 cat_final = dados_m.get('categoria', 'PUBLICADOR')
                 if cat_final not in categorias_lista:
                     cat_final = 'PUBLICADOR'
-                    
             return pd.Series([nome_oficial, cat_final, "IDENTIFICADO"])
         return pd.Series([row['nome'], "DESCONHECIDO", "TRIAGEM"])
 
@@ -750,14 +722,11 @@ def main():
         tela_login()
         st.stop()
 
-    # ── Carregar dados (com cache) ─────────────────────────────────────────────
+    # ── Carregar dados ─────────────────────────────────────────────────────────
     membros_db        = carregar_membros()
     relatorios_brutos = carregar_relatorios()
-
-    df = processar_dataframe(relatorios_brutos, membros_db)
-
-    # ── Mês vigente (dia 20 = início do mês) ──────────────────────────────────
-    mes_vigente = obter_mes_vigente_str()
+    df                = processar_dataframe(relatorios_brutos, membros_db)
+    mes_vigente       = obter_mes_vigente_str()
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
@@ -774,7 +743,6 @@ def main():
 
         meses_disponiveis = sorted(df['mes_referencia'].unique()) if not df.empty else [mes_vigente]
 
-        # Sempre tenta selecionar o mês vigente como padrão
         idx_default = len(meses_disponiveis) - 1
         if mes_vigente in meses_disponiveis:
             idx_default = meses_disponiveis.index(mes_vigente)
@@ -786,7 +754,6 @@ def main():
             label_visibility="collapsed"
         )
 
-        # Badge do mês vigente
         eh_vigente = (mes_sel == mes_vigente)
         if eh_vigente:
             st.markdown(f"""
@@ -806,7 +773,6 @@ def main():
 
         st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
-        # Totais rápidos
         if not df.empty:
             df_mes_side = df[df['mes_referencia'] == mes_sel]
             df_id_side  = df_mes_side[df_mes_side['status_validacao'] == "IDENTIFICADO"]
@@ -845,7 +811,7 @@ def main():
                 st.session_state.pop(k, None)
             st.rerun()
 
-    # ── Header da página ───────────────────────────────────────────────────────
+    # ── Header ─────────────────────────────────────────────────────────────────
     col_title, col_mes = st.columns([3, 1])
     with col_title:
         st.markdown("# ⛪ Parque Aliança")
@@ -871,8 +837,8 @@ def main():
         "⚙️  CONFIGURAÇÃO",
     ])
 
-    df_mes   = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
-    df_ok    = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+    df_mes     = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
+    df_ok      = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
     entregaram = set(df_ok['nome_oficial'].unique()) if not df_ok.empty else set()
 
     # ════════════════════════════════════════════════════════════════════════════
@@ -890,7 +856,6 @@ def main():
                 if df_cat.empty:
                     st.info(f"Nenhum envio de {cat} em {mes_sel}.")
                 else:
-                    # Métricas
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.markdown(f"""
@@ -912,7 +877,6 @@ def main():
                         </div>""", unsafe_allow_html=True)
 
                     st.markdown("")
-                    # Cards dos publicadores em ordem alfabética
                     df_cat_sorted = df_cat.sort_values('nome_oficial')
                     cols = st.columns(4)
                     for idx, (_, r) in enumerate(df_cat_sorted.iterrows()):
@@ -932,22 +896,21 @@ def main():
             for cat in categorias_lista:
                 pendentes = []
                 for n, d_m in membros_db.items():
-                    inicio    = d_m.get('mes_inicio', 'SETEMBRO 2025')
-                    idx_ini   = (meses_referencia_ordem.index(inicio)
-                                 if inicio in meses_referencia_ordem else 0)
+                    inicio  = d_m.get('mes_inicio', 'SETEMBRO 2025')
+                    idx_ini = (meses_referencia_ordem.index(inicio)
+                               if inicio in meses_referencia_ordem else 0)
                     if (d_m.get('categoria') == cat
                             and n not in entregaram
                             and idx_mes_sel >= idx_ini):
                         pendentes.append(n)
 
-                pendentes = sorted(pendentes)  # ordem alfabética
+                pendentes = sorted(pendentes)
 
                 if not pendentes:
                     continue
 
                 with st.expander(f"{'👤' if cat=='PUBLICADOR' else '🌟' if 'AUXILIAR' in cat else '⭐'} {cat} — {len(pendentes)} pendente(s)", expanded=False):
 
-                    # Botão BAIXAR TODOS (item 7)
                     col_btn_baixa, _ = st.columns([2, 3])
                     with col_btn_baixa:
                         if st.button(f"✔ Dar Baixa em Todos ({len(pendentes)})", key=f"baixa_all_{cat}_{mes_sel}", type="primary"):
@@ -955,18 +918,16 @@ def main():
                             if db:
                                 batch = db.batch()
                                 for p in pendentes:
-                                    # Cria uma nova referência vazia no Firestore
                                     doc_ref = db.collection("relatorios_parque_alianca").document()
                                     batch.set(doc_ref, {
-                                        "nome": p, 
-                                        "mes_referencia": mes_sel, 
+                                        "nome": p,
+                                        "mes_referencia": mes_sel,
                                         "horas": 0,
-                                        "estudos_biblicos": 0, 
+                                        "estudos_biblicos": 0,
                                         "timestamp": firestore.SERVER_TIMESTAMP
                                     })
-                                
-                                batch.commit() # Dispara todas as baixas de uma vez
-                                carregar_relatorios_cached.clear() # Limpa o cache
+                                batch.commit()
+                                carregar_relatorios_cached.clear()
                                 st.success(f"✅ Baixa realizada para {len(pendentes)} publicadores(as)!")
                                 st.rerun()
 
@@ -1001,19 +962,18 @@ def main():
                 ⚠️ Triagem — {len(df_triagem)} item(s)
               </div>
               <div style="color:#6b7280;font-size:0.82rem;">
-                Estes relatórios precisam de validação manual. O sistema tentou associar automaticamente — confirme ou ajuste.
+                Estes relatórios precisam de validação manual.
               </div>
             </div>
             """, unsafe_allow_html=True)
 
             nomes_db = sorted(list(membros_db.keys()))
 
+            # ─── FIX #4: variável do loop é 'row', não 'r' ───────────────────
             for _, row in df_triagem.iterrows():
-                # Tenta sugestão automática
                 sugestao = normalizar_nome_no_banco(row['nome'], nomes_db)
                 idx_sug  = nomes_db.index(sugestao) + 1 if sugestao else 0
                 conf_str = "Auto-sugerido" if sugestao else "Não reconhecido"
-                badge_cls = "badge-warn" if sugestao else "badge-err"
 
                 with st.container(border=True):
                     col_info, col_badge = st.columns([4, 1])
@@ -1025,7 +985,7 @@ def main():
                         </div>
                         """, unsafe_allow_html=True)
                     with col_badge:
-                        st.markdown(f'<span class="badge {badge_cls}">{conf_str}</span>', unsafe_allow_html=True)
+                        st.markdown(f'<span style="font-size:0.75rem;font-weight:700;color:#f59e0b;">{conf_str}</span>', unsafe_allow_html=True)
 
                     if sugestao:
                         st.markdown(f"""
@@ -1054,15 +1014,10 @@ def main():
                             carregar_relatorios_cached.clear()
                             st.rerun()
                     with col_del:
-                        if st.button("🗑 Deletar", key=f"del_{r['id']}", use_container_width=True):
-                            try:
-                                # Chama a função que apaga diretamente da coleção global do Firestore
-                                deletar_relatorio(r['id'])
-                                
-                                # Nota: A função deletar_relatorio já possui o 'carregar_relatorios_cached.clear()' 
-                                # e o 'st.rerun()' embutidos nela, o que força a tela a redesenhar sem o registro sumido.
-                            except Exception as e:
-                                st.error(f"Erro crítico ao deletar o relatório: {e}")
+                        # ─── FIX #4 cont.: usa row['id'], não r['id'] ────────
+                        if st.button("🗑 Deletar", key=f"del_{row['id']}", use_container_width=True):
+                            deletar_relatorio(row['id'])
+
     # ════════════════════════════════════════════════════════════════════════════
     # ABA 2 — CONSOLIDADO
     # ════════════════════════════════════════════════════════════════════════════
@@ -1113,8 +1068,8 @@ def main():
                     prog.empty()
                     if count_ok:
                         st.session_state["zip_todos_cartoes"] = buf_all.getvalue()
-                        st.session_state["zip_todos_nome"] = f"S21_Todos_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
-                        st.session_state["zip_todos_count"] = count_ok
+                        st.session_state["zip_todos_nome"]    = f"S21_Todos_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
+                        st.session_state["zip_todos_count"]   = count_ok
                         st.success(f"✅ {count_ok} cartões prontos!")
                     else:
                         st.warning("Nenhum PDF gerado.")
@@ -1166,6 +1121,13 @@ def main():
                 else:
                     st.info("Nenhum relatório identificado para este publicador.")
 
+        # ════════════════════════════════════════════════════════════════════════
+        # FIX #5 — POR CATEGORIA: total_relatorios visível no PDF
+        # A coluna 'total_relatorios' é gravada em 'horas' no resumo enviado ao
+        # PDF consolidado, pois o cartão S-21 não tem campo próprio para isso.
+        # Em vez disso, imprimimos a contagem na coluna OBS de cada mês,
+        # e o total acumulado no rodapé "Total" do cartão.
+        # ════════════════════════════════════════════════════════════════════════
         with c2_tab:
             cat_sel = st.selectbox("Categoria", categorias_lista)
             df_cons = df[
@@ -1174,16 +1136,16 @@ def main():
             ] if not df.empty else pd.DataFrame()
 
             if not df_cons.empty:
+                # Agrupa por mês: conta relatórios, soma horas, soma estudos
                 resumo = df_cons.groupby('mes_referencia').agg(
-                    total_relatorios=('id', 'count'),
-                    total_horas=('horas', 'sum'),
-                    total_estudos=('estudos_biblicos', 'sum'),
+                    total_relatorios=('id',              'count'),
+                    total_horas     =('horas',           'sum'),
+                    total_estudos   =('estudos_biblicos', 'sum'),
                 ).reset_index()
 
-                # Ordena cronologicamente
-                resumo_ord = ordenar_df_por_mes(resumo.rename(columns={'mes_referencia': 'mes_referencia'}))
+                resumo_ord = ordenar_df_por_mes(resumo)
 
-                # Item 6: no mês vigente, observação com total de relatórios
+                # Observação do mês vigente
                 def obs_col(row):
                     if row['mes_referencia'] == mes_vigente:
                         return f"📌 {int(row['total_relatorios'])} relatórios entregues"
@@ -1191,25 +1153,43 @@ def main():
 
                 resumo_ord['observacao'] = resumo_ord.apply(obs_col, axis=1)
 
+                # Tabela na tela
                 st.dataframe(
                     resumo_ord.rename(columns={
-                        'mes_referencia': 'Mês',
-                        'total_relatorios': 'Relatórios',
-                        'total_horas': 'Total Horas',
-                        'total_estudos': 'Total Estudos',
-                        'observacao': 'Observação'
+                        'mes_referencia':  'Mês',
+                        'total_relatorios':'Relatórios',
+                        'total_horas':     'Total Horas',
+                        'total_estudos':   'Total Estudos',
+                        'observacao':      'Observação',
                     }),
                     use_container_width=True,
                     hide_index=True,
                 )
 
+                # ─── FIX #5: monta DataFrame especial para o PDF ─────────────
+                # Precisamos que gerar_pdf_padrao_s21 receba:
+                #   - mes_referencia   → para localizar a linha correta no cartão
+                #   - horas            → total de horas (coluna Horas do PDF)
+                #   - estudos_biblicos → total de estudos (coluna Estudos)
+                #   - observacoes      → "N relat." impresso na coluna OBS
+                #   - cat_oficial      → para lógica de Pioneiro Auxiliar
+                # O total de relatórios vai para a coluna OBS de cada linha.
+                df_pdf_consolidado = resumo_ord[['mes_referencia','total_relatorios','total_horas','total_estudos']].copy()
+                df_pdf_consolidado = df_pdf_consolidado.rename(columns={
+                    'total_horas':     'horas',
+                    'total_estudos':   'estudos_biblicos',
+                })
+                # Imprime a contagem de relatórios na coluna OBS de cada mês
+                df_pdf_consolidado['observacoes'] = df_pdf_consolidado['total_relatorios'].apply(
+                    lambda n: f"{int(n)} relat."
+                )
+                # cat_oficial vazio → não marca coluna Pioneiro Auxiliar no consolidado
+                df_pdf_consolidado['cat_oficial'] = cat_sel
+
                 pdf_c = gerar_pdf_padrao_s21(
                     f"CONSOLIDADO {cat_sel}",
                     cat_sel,
-                    resumo_ord.rename(columns={
-                        'total_horas': 'horas',
-                        'total_estudos': 'estudos_biblicos'
-                    })
+                    df_pdf_consolidado,
                 )
                 if pdf_c:
                     st.download_button(
@@ -1284,8 +1264,8 @@ def main():
                 tesouros = []
                 for i in range(int(n_tes)):
                     c1, c2 = st.columns([4, 1])
-                    t = c1.text_input(f"Item {i+1}", key=f"tes_t_{i}", label_visibility="collapsed", placeholder=f"Item {i+1}")
-                    d_dur = c2.text_input("Dur.", key=f"tes_d_{i}", label_visibility="collapsed", placeholder="10 min")
+                    t     = c1.text_input(f"Item {i+1}",  key=f"tes_t_{i}", label_visibility="collapsed", placeholder=f"Item {i+1}")
+                    d_dur = c2.text_input("Dur.",          key=f"tes_d_{i}", label_visibility="collapsed", placeholder="10 min")
                     tesouros.append({"num": i + 1, "titulo": t, "duracao": d_dur})
 
                 st.markdown("---")
@@ -1295,8 +1275,8 @@ def main():
                 base_min = int(n_tes)
                 for i in range(int(n_min)):
                     c1, c2 = st.columns([4, 1])
-                    t = c1.text_input(f"Item {base_min+i+1}", key=f"min_t_{i}", label_visibility="collapsed", placeholder=f"Item {base_min+i+1}")
-                    d_dur = c2.text_input("Dur.", key=f"min_d_{i}", label_visibility="collapsed", placeholder="")
+                    t     = c1.text_input(f"Item {base_min+i+1}", key=f"min_t_{i}", label_visibility="collapsed", placeholder=f"Item {base_min+i+1}")
+                    d_dur = c2.text_input("Dur.",                  key=f"min_d_{i}", label_visibility="collapsed", placeholder="")
                     ministerio.append({"num": base_min + i + 1, "titulo": t, "duracao": d_dur})
 
                 st.markdown("---")
@@ -1306,15 +1286,15 @@ def main():
                 base_nvc = int(n_tes) + int(n_min)
                 for i in range(int(n_nvc)):
                     c1, c2 = st.columns([4, 1])
-                    t = c1.text_input(f"Item {base_nvc+i+1}", key=f"nvc_t_{i}", label_visibility="collapsed", placeholder=f"Item {base_nvc+i+1}")
-                    d_dur = c2.text_input("Dur.", key=f"nvc_d_{i}", label_visibility="collapsed", placeholder="")
+                    t     = c1.text_input(f"Item {base_nvc+i+1}", key=f"nvc_t_{i}", label_visibility="collapsed", placeholder=f"Item {base_nvc+i+1}")
+                    d_dur = c2.text_input("Dur.",                  key=f"nvc_d_{i}", label_visibility="collapsed", placeholder="")
                     vida_crista.append({"num": base_nvc + i + 1, "titulo": t, "duracao": d_dur})
 
                 st.markdown("---")
                 agenda_dados = {
                     "data_texto": data_texto, "escritura": escritura,
                     "cantico_abertura": cant_ab, "cantico_meio": cant_meio,
-                    "cantico_final": cant_fin,
+                    "cantico_final":    cant_fin,
                     "tesouros": tesouros, "ministerio": ministerio, "vida_crista": vida_crista,
                 }
                 col_prev, col_pub = st.columns(2)
@@ -1343,7 +1323,7 @@ def main():
                 st.caption(f"{len(anuncios)} postagem(ns) · mais recente primeiro")
                 for a in anuncios:
                     tipo_icon = {"texto": "📝", "imagem": "🖼️", "agenda": "📅"}.get(a.get("tipo",""), "📌")
-                    ts = a.get("data_postagem")
+                    ts       = a.get("data_postagem")
                     data_str = ts.strftime("%d/%m/%Y %H:%M") if hasattr(ts, "strftime") else "–"
                     with st.expander(f"{tipo_icon} {a.get('titulo','Sem título')}  ·  {data_str}"):
                         if a.get("renderizar_markdown"):
@@ -1378,70 +1358,47 @@ def main():
                                        if r['cat_oficial'] in categorias_lista else 0)
                             nova_cat = ce1.selectbox("Categoria", categorias_lista,
                                                       index=idx_cat, key=f"e_c_{r['id']}")
-                            novas_h  = ce2.number_input("Horas", value=int(r['horas']),
-                                                         key=f"e_h_{r['id']}")
-                            novos_e  = ce3.number_input("Estudos", value=int(r['estudos_biblicos']),
-                                                         key=f"e_e_{r['id']}")
+                            novas_h  = ce2.number_input("Horas",   value=int(r['horas']),          key=f"e_h_{r['id']}")
+                            novos_e  = ce3.number_input("Estudos", value=int(r['estudos_biblicos']), key=f"e_e_{r['id']}")
+
                             col_save, col_del = st.columns(2)
-                            
+
                             with col_save:
                                 if st.button("💾 Salvar", key=f"s_b_{r['id']}", type="primary", use_container_width=True):
                                     try:
-                                        # Atualiza APENAS o relatório do mês corrente com a categoria de exceção
                                         inicializar_db().collection("relatorios_parque_alianca") \
                                             .document(r['id']).update({
-                                                "horas": novas_h, 
+                                                "horas":           novas_h,
                                                 "estudos_biblicos": novos_e,
-                                                "categoria_mes": nova_cat  # Salva a categoria exclusiva deste mês
+                                                "categoria_mes":   nova_cat,
                                             })
-                                        
-                                        # ❌ REMOVIDO: atualizar_membro(r['nome_oficial'], nova_cat) 
-                                        # Isso garante que a Fonte da Verdade em 'membros_v2' permaneça intacta.
-                            
                                         carregar_relatorios_cached.clear()
                                         st.toast("💾 Alterações salvas com sucesso para este mês!")
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"Erro ao salvar alterações: {e}")
-                                        
-                            # 🌟 LÓGICA DE EXCLUSÃO GLOBAL IMPLEMENTADA AQUI
+
+                            # ─── FIX #6: deleção real via deletar_relatorio() ─
                             with col_del:
                                 with st.popover("🗑️ Deletar", use_container_width=True):
                                     st.error("Atenção! Ação irreversível.")
                                     st.write(f"Deseja apagar definitivamente o relatório de **{r['nome_oficial']}** deste mês?")
-                                    
-                                    # Botão de confirmação de exclusão
                                     if st.button("Sim, Excluir", key=f"conf_del_{r['id']}", type="primary", use_container_width=True):
-                                        try:
-                                            # MUDA AQUI: Em vez de .delete(), atualizamos o status para EXCLUIDO
-                                            inicializar_db().collection("relatorios_parque_alianca").document(r['id']).update({
-                                                "status_validacao": "EXCLUIDO"
-                                            })
-                                            
-                                            # Limpa o cache para que o Streamlit atualize os dados na hora
-                                            carregar_relatorios_cached.clear()
-                                            
-                                            # Dá o aviso de sucesso e recarrega a tela
-                                            st.toast("🗑️ Relatório removido permanentemente do sistema!")
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"Erro ao tentar deletar: {e}")
+                                        deletar_relatorio(r['id'])
 
         # ── Sub-aba 1: GERENCIAR MEMBROS ──────────────────────────────────────
         with sub_cfg[1]:
             st.markdown("#### 👥 Gerenciar Membros")
             st.caption("Categoria aqui é a FONTE DA VERDADE para todos os relatórios.")
 
-            _GENEROS = ["", "Masculino", "Feminino"]
-            _CLASSES = ["", "Outras ovelhas", "Ungido"]
-            _STATUS_OPCOES = ["Ativo", "Inativo"] # Opções de status adicionadas
+            _GENEROS       = ["", "Masculino", "Feminino"]
+            _CLASSES       = ["", "Outras ovelhas", "Ungido"]
+            _STATUS_OPCOES = ["Ativo", "Inativo"]
 
-            # Criando as abas internas para separar Ativos de Inativos
             tab_ativos, tab_inativos = st.tabs(["👥 Membros Ativos", "💤 Membros Inativos"])
 
-            # Função interna para renderizar o formulário do membro sem duplicar código
             def renderizar_formulario_membro(nome):
-                m = membros_db[nome]
+                m        = membros_db[nome]
                 cat_icon = {"PUBLICADOR": "👤", "PIONEIRO AUXILIAR": "🌟",
                             "PIONEIRO REGULAR": "⭐"}.get(m.get('categoria',''), "👤")
 
@@ -1458,28 +1415,27 @@ def main():
                                                  key=f"cat_{nome}")
                         data_nasc = st.text_input("📅 Nascimento", value=m.get('data_nascimento',''),
                                                    placeholder="DD/MM/AAAA", key=f"nasc_{nome}")
-                        data_bat = st.text_input("🕊️ Batismo", value=m.get('data_batismo',''),
-                                                  placeholder="DD/MM/AAAA", key=f"bat_{nome}")
-                        tel_emer = st.text_input("📞 Tel. Emergência",
-                                                  value=m.get('telefone_emergencia',''),
-                                                  placeholder="(XX) XXXXX-XXXX", key=f"tel_{nome}")
+                        data_bat  = st.text_input("🕊️ Batismo",    value=m.get('data_batismo',''),
+                                                   placeholder="DD/MM/AAAA", key=f"bat_{nome}")
+                        tel_emer  = st.text_input("📞 Tel. Emergência",
+                                                   value=m.get('telefone_emergencia',''),
+                                                   placeholder="(XX) XXXXX-XXXX", key=f"tel_{nome}")
 
                     with col_b:
                         st.markdown("##### 🏷️ Classificação & Cargo")
-                        gen_val = m.get('genero','')
+                        gen_val  = m.get('genero','')
                         nova_gen = st.selectbox("Gênero", _GENEROS,
                                                  index=_GENEROS.index(gen_val) if gen_val in _GENEROS else 0,
                                                  key=f"gen_{nome}")
-                        cls_val = m.get('classe','')
+                        cls_val  = m.get('classe','')
                         nova_cls = st.selectbox("Classe", _CLASSES,
                                                  index=_CLASSES.index(cls_val) if cls_val in _CLASSES else 0,
                                                  key=f"cls_{nome}")
-                        
-                        # 🌟 NOVO: Campo para selecionar o Status do membro
-                        status_atual = m.get('status', 'Ativo') # Padrão 'Ativo' se não existir no banco ainda
-                        novo_status = st.selectbox("Status", _STATUS_OPCOES,
-                                                    index=_STATUS_OPCOES.index(status_atual) if status_atual in _STATUS_OPCOES else 0,
-                                                    key=f"status_{nome}")
+
+                        status_atual = m.get('status', 'Ativo')
+                        novo_status  = st.selectbox("Status", _STATUS_OPCOES,
+                                                     index=_STATUS_OPCOES.index(status_atual) if status_atual in _STATUS_OPCOES else 0,
+                                                     key=f"status_{nome}")
 
                         cargos_atuais = cargos_para_lista(m.get('cargo',''))
                         st.markdown("**Cargo(s)**")
@@ -1499,17 +1455,15 @@ def main():
                             "genero":              nova_gen,
                             "classe":              nova_cls,
                             "cargo":               novos_cargos,
-                            "status":              novo_status, # 🌟 NOVO: Gravando o status alterado
+                            "status":              novo_status,
                         }
                         atualizar_membro(nome, nova_cat, extra=extra)
                         st.toast(f"✅ {nome} atualizado!")
                         st.rerun()
 
-            # Organização alfabética e filtragem por Status
             membros_ordenados = sorted(membros_db.keys())
 
             with tab_ativos:
-                # Filtra apenas quem é 'Ativo' (ou quem não tem a propriedade definida ainda)
                 ativos = [n for n in membros_ordenados if membros_db[n].get('status', 'Ativo') == 'Ativo']
                 if ativos:
                     for nome in ativos:
@@ -1518,14 +1472,12 @@ def main():
                     st.info("Nenhum membro ativo cadastrado.")
 
             with tab_inativos:
-                # Filtra apenas quem foi marcado como 'Inativo'
                 inativos = [n for n in membros_ordenados if membros_db[n].get('status', 'Ativo') == 'Inativo']
                 if inativos:
                     for nome in inativos:
                         renderizar_formulario_membro(nome)
                 else:
                     st.info("Nenhum membro inativo.")
-
 
         # ── Sub-aba 2: NOVO MEMBRO ────────────────────────────────────────────
         with sub_cfg[2]:
@@ -1563,7 +1515,7 @@ def main():
                             "genero":              gen_n,
                             "classe":              cls_n,
                             "cargo":               cargos_novos_form,
-                            "status":              "Ativo", # 🌟 NOVO: Todo membro criado nasce Ativo por padrão
+                            "status":              "Ativo",
                         }
                         atualizar_membro(nm.strip(), ct, novo=True, extra=extra_n)
                         st.success(f"✅ {nm.strip()} adicionado!")
@@ -1575,7 +1527,7 @@ def main():
     st.markdown("""
     <div style="text-align:center;padding:2rem 0 0.5rem;
         font-size:0.72rem;color:#374151;letter-spacing:0.05em;">
-        v5.0 · Parque Aliança · Sistema de Gestão
+        v5.1 · Parque Aliança · Sistema de Gestão
     </div>
     """, unsafe_allow_html=True)
 
