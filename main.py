@@ -20,7 +20,7 @@ from reportlab.lib.units import mm
 # CONFIGURAÇÃO DA PÁGINA
 # ═══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="🏢 Parque Aliança · Gestão",
+    page_title="Parque Aliança · Gestão",
     layout="wide",
     page_icon="🏢",
     initial_sidebar_state="expanded",
