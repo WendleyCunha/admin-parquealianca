@@ -1385,7 +1385,23 @@ def main():
                                     st.write(f"Deseja apagar definitivamente o relatório de **{r['nome_oficial']}** deste mês?")
                                     if st.button("Sim, Excluir", key=f"conf_del_{r['id']}", type="primary", use_container_width=True):
                                         deletar_relatorio(r['id'])
-
+                                        
+                                        def deletar_membro(nome):
+                                            """Remove permanentemente um membro do Firestore e limpa o cache."""
+                                            db = inicializar_db()
+                                            if not db:
+                                                st.error("Sem conexão com o banco.")
+                                                return
+                                            try:
+                                                db.collection("membros_v2").document(nome).delete()
+                                            except Exception as e:
+                                                st.error(f"Erro ao deletar membro: {e}")
+                                                return
+                                            carregar_membros_cached.clear()
+                                            carregar_relatorios_cached.clear()
+                                            st.toast(f"🗑️ Membro '{nome}' deletado permanentemente!")
+                                            st.rerun()
+                                        
         # ── Sub-aba 1: GERENCIAR MEMBROS ──────────────────────────────────────
         with sub_cfg[1]:
             st.markdown("#### 👥 Gerenciar Membros")
@@ -1446,20 +1462,31 @@ def main():
                                 novos_cargos.append(cargo_op)
 
                     st.divider()
-                    if st.button("💾 Salvar Alterações", key=f"save_{nome}",
-                                 use_container_width=True, type="primary"):
-                        extra = {
-                            "data_nascimento":     data_nasc,
-                            "data_batismo":        data_bat,
-                            "telefone_emergencia": tel_emer,
-                            "genero":              nova_gen,
-                            "classe":              nova_cls,
-                            "cargo":               novos_cargos,
-                            "status":              novo_status,
-                        }
-                        atualizar_membro(nome, nova_cat, extra=extra)
-                        st.toast(f"✅ {nome} atualizado!")
-                        st.rerun()
+                    col_save_m, col_del_m = st.columns([3, 1])
+
+                    with col_save_m:
+                        if st.button("💾 Salvar Alterações", key=f"save_{nome}",
+                                     use_container_width=True, type="primary"):
+                            extra = {
+                                "data_nascimento":     data_nasc,
+                                "data_batismo":        data_bat,
+                                "telefone_emergencia": tel_emer,
+                                "genero":              nova_gen,
+                                "classe":              nova_cls,
+                                "cargo":               novos_cargos,
+                                "status":              novo_status,
+                            }
+                            atualizar_membro(nome, nova_cat, extra=extra)
+                            st.toast(f"✅ {nome} atualizado!")
+                            st.rerun()
+
+                    with col_del_m:
+                        with st.popover("🗑️ Deletar", use_container_width=True):
+                            st.error("⚠️ Ação irreversível!")
+                            st.write(f"Isso removerá **{nome}** permanentemente do banco de dados.")
+                            if st.button("Sim, excluir membro", key=f"conf_del_m_{nome}",
+                                         type="primary", use_container_width=True):
+                                deletar_membro(nome)
 
             membros_ordenados = sorted(membros_db.keys())
 
