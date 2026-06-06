@@ -867,7 +867,8 @@ def main():
                                if inicio in meses_referencia_ordem else 0)
                     if (d_m.get('categoria') == cat
                             and n not in entregaram
-                            and idx_mes_sel >= idx_ini):
+                            and idx_mes_sel >= idx_ini
+                            and d_m.get('status', 'Ativo') == 'Ativo'):
                         pendentes.append(n)
 
                 pendentes = sorted(pendentes)
