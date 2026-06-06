@@ -16,9 +16,6 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURAÇÃO DA PÁGINA
-# ═══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
     page_title="Parque Aliança · Gestão",
     layout="wide",
@@ -26,9 +23,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# ESTILIZAÇÃO GLOBAL
-# ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -143,9 +137,6 @@ button[kind="primary"], .stButton [kind="primary"] > button {
 """, unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# AUTENTICAÇÃO
-# ═══════════════════════════════════════════════════════════════════════════════
 _AUTH_USERS = {"wendley": "Qmerd@10"}
 
 def tela_login():
@@ -183,9 +174,6 @@ def tela_login():
                 st.error("Usuário ou senha incorretos.")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CONSTANTES PDF S-21
-# ═══════════════════════════════════════════════════════════════════════════════
 PDF_Y_OFFSET    = 0.0
 PDF_NOME_Y      = 272.0
 PDF_NOME_X      = 24.0
@@ -249,9 +237,6 @@ meses_referencia_ordem = [
 ]
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# UTILITÁRIOS
-# ═══════════════════════════════════════════════════════════════════════════════
 def normalizar_texto(texto):
     if not texto:
         return ""
@@ -294,9 +279,6 @@ def ordenar_df_por_mes(df_input):
     return df_sorted
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MOTOR DE TRIAGEM APRIMORADO
-# ═══════════════════════════════════════════════════════════════════════════════
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
     entrada_norm = normalizar_texto(nome_recebido)
     if not entrada_norm or len(entrada_norm) < 2:
@@ -338,9 +320,6 @@ def normalizar_nome_no_banco(nome_recebido, lista_membros):
     return melhor_match if maior_score >= 0.82 else None
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MOTOR DE PDF
-# ═══════════════════════════════════════════════════════════════════════════════
 def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_info=None):
     path_original = os.path.join(os.path.dirname(__file__), "s21.pdf")
     if not os.path.exists(path_original):
@@ -451,9 +430,6 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
     return output.getvalue()
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# BANCO DE DADOS
-# ═══════════════════════════════════════════════════════════════════════════════
 def inicializar_db():
     if "db" not in st.session_state:
         try:
@@ -479,8 +455,6 @@ def carregar_relatorios_cached():
     db = inicializar_db()
     if not db:
         return []
-    # ─── FIX #1: filtra na origem registros marcados como EXCLUIDO ───────────
-    # Isso garante que soft-deletes nunca reapareçam após rerun.
     docs = db.collection("relatorios_parque_alianca").stream()
     return [
         {"id": doc.id, **doc.to_dict()}
@@ -509,8 +483,6 @@ def atualizar_membro(nome, categoria, novo=False, extra=None):
         carregar_membros_cached.clear()
 
 
-# ─── FIX #2: função única e canônica de deleção ──────────────────────────────
-# Usa .delete() real (hard delete). Chamada em TODOS os lugares que deletam.
 def deletar_relatorio(relatorio_id):
     """Remove permanentemente um relatório do Firestore e limpa o cache."""
     db = inicializar_db()
@@ -528,6 +500,23 @@ def deletar_relatorio(relatorio_id):
     st.rerun()
 
 
+def deletar_membro(nome):
+    """Remove permanentemente um membro da coleção membros_v2 no Firestore."""
+    db = inicializar_db()
+    if not db:
+        st.error("Sem conexão com o banco.")
+        return
+    try:
+        db.collection("membros_v2").document(nome).delete()
+    except Exception as e:
+        st.error(f"Erro ao deletar membro: {e}")
+        return
+    carregar_membros_cached.clear()
+    carregar_relatorios_cached.clear()
+    st.toast(f"🗑️ Membro '{nome}' deletado permanentemente!")
+    st.rerun()
+
+
 def salvar_baixa_manual(nome, mes, horas, estudos):
     db = inicializar_db()
     if db:
@@ -541,7 +530,6 @@ def salvar_baixa_manual(nome, mes, horas, estudos):
         st.rerun()
 
 
-# ─── ANÚNCIOS ──────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=120, show_spinner=False)
 def carregar_anuncios_cached():
     db = inicializar_db()
@@ -579,7 +567,6 @@ def deletar_anuncio(anuncio_id):
         st.rerun()
 
 
-# ─── GERADOR DE HTML DE AGENDA ─────────────────────────────────────────────────
 def gerar_html_agenda(d):
     C_CANT  = "#1a78b4"
     C_TES   = "#1a3566"
@@ -649,18 +636,12 @@ def gerar_html_agenda(d):
     return html
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# PROCESSAMENTO DO DATAFRAME
-# ═══════════════════════════════════════════════════════════════════════════════
 def processar_dataframe(relatorios_brutos, membros_db):
     if not relatorios_brutos:
         return pd.DataFrame()
 
     df = pd.DataFrame(relatorios_brutos)
 
-    # ─── FIX #3: garante que registros EXCLUIDO nunca entram no DataFrame ─────
-    # Dupla proteção: carregar_relatorios_cached já filtra, mas se vier lixo
-    # de cache antigo, este filtro elimina antes de qualquer processamento.
     if 'status_validacao' in df.columns:
         df = df[df['status_validacao'] != "EXCLUIDO"].copy()
 
@@ -691,9 +672,6 @@ def processar_dataframe(relatorios_brutos, membros_db):
     return df
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# HELPER: gerar ZIP de pendentes por categoria
-# ═══════════════════════════════════════════════════════════════════════════════
 def gerar_zip_pendentes(pendentes, mes, membros_db, df_todos):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -713,22 +691,16 @@ def gerar_zip_pendentes(pendentes, mes, membros_db, df_todos):
     return buf.getvalue()
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# APP PRINCIPAL
-# ═══════════════════════════════════════════════════════════════════════════════
 def main():
-    # ── Autenticação ──────────────────────────────────────────────────────────
     if not st.session_state.get("autenticado"):
         tela_login()
         st.stop()
 
-    # ── Carregar dados ─────────────────────────────────────────────────────────
     membros_db        = carregar_membros()
     relatorios_brutos = carregar_relatorios()
     df                = processar_dataframe(relatorios_brutos, membros_db)
     mes_vigente       = obter_mes_vigente_str()
 
-    # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
         st.markdown(f"""
         <div class="sidebar-brand">
@@ -811,7 +783,6 @@ def main():
                 st.session_state.pop(k, None)
             st.rerun()
 
-    # ── Header ─────────────────────────────────────────────────────────────────
     col_title, col_mes = st.columns([3, 1])
     with col_title:
         st.markdown("# Parque Aliança")
@@ -828,7 +799,6 @@ def main():
 
     st.markdown("---")
 
-    # ── Tabs principais ────────────────────────────────────────────────────────
     tabs = st.tabs([
         "📋  RELATÓRIOS",
         "⚠️  TRIAGEM",
@@ -841,9 +811,6 @@ def main():
     df_ok      = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
     entregaram = set(df_ok['nome_oficial'].unique()) if not df_ok.empty else set()
 
-    # ════════════════════════════════════════════════════════════════════════════
-    # ABA 0 — RELATÓRIOS
-    # ════════════════════════════════════════════════════════════════════════════
     with tabs[0]:
         st.markdown(f"### 📋 Relatórios de {mes_sel}")
 
@@ -888,7 +855,6 @@ def main():
                                 f'</div>',
                                 unsafe_allow_html=True)
 
-        # ── Pendências ────────────────────────────────────────────────────────
         with sub_rel[3]:
             idx_mes_sel = (meses_referencia_ordem.index(mes_sel)
                            if mes_sel in meses_referencia_ordem else 99)
@@ -940,9 +906,6 @@ def main():
                         if c4.button("✔ Dar Baixa", key=f"btn_man_{p}_{mes_sel}"):
                             salvar_baixa_manual(p, mes_sel, h_manual, e_manual)
 
-    # ════════════════════════════════════════════════════════════════════════════
-    # ABA 1 — TRIAGEM
-    # ════════════════════════════════════════════════════════════════════════════
     with tabs[1]:
         df_triagem = (df_mes[df_mes['status_validacao'] == "TRIAGEM"]
                       if not df_mes.empty else pd.DataFrame())
@@ -969,7 +932,6 @@ def main():
 
             nomes_db = sorted(list(membros_db.keys()))
 
-            # ─── FIX #4: variável do loop é 'row', não 'r' ───────────────────
             for _, row in df_triagem.iterrows():
                 sugestao = normalizar_nome_no_banco(row['nome'], nomes_db)
                 idx_sug  = nomes_db.index(sugestao) + 1 if sugestao else 0
@@ -1014,13 +976,9 @@ def main():
                             carregar_relatorios_cached.clear()
                             st.rerun()
                     with col_del:
-                        # ─── FIX #4 cont.: usa row['id'], não r['id'] ────────
                         if st.button("🗑 Deletar", key=f"del_{row['id']}", use_container_width=True):
                             deletar_relatorio(row['id'])
 
-    # ════════════════════════════════════════════════════════════════════════════
-    # ABA 2 — CONSOLIDADO
-    # ════════════════════════════════════════════════════════════════════════════
     with tabs[2]:
         c1_tab, c2_tab = st.tabs(["👤 INDIVIDUAL (HISTÓRICO)", "📊 POR CATEGORIA"])
 
@@ -1121,13 +1079,6 @@ def main():
                 else:
                     st.info("Nenhum relatório identificado para este publicador.")
 
-        # ════════════════════════════════════════════════════════════════════════
-        # FIX #5 — POR CATEGORIA: total_relatorios visível no PDF
-        # A coluna 'total_relatorios' é gravada em 'horas' no resumo enviado ao
-        # PDF consolidado, pois o cartão S-21 não tem campo próprio para isso.
-        # Em vez disso, imprimimos a contagem na coluna OBS de cada mês,
-        # e o total acumulado no rodapé "Total" do cartão.
-        # ════════════════════════════════════════════════════════════════════════
         with c2_tab:
             cat_sel = st.selectbox("Categoria", categorias_lista)
             df_cons = df[
@@ -1136,7 +1087,6 @@ def main():
             ] if not df.empty else pd.DataFrame()
 
             if not df_cons.empty:
-                # Agrupa por mês: conta relatórios, soma horas, soma estudos
                 resumo = df_cons.groupby('mes_referencia').agg(
                     total_relatorios=('id',              'count'),
                     total_horas     =('horas',           'sum'),
@@ -1145,7 +1095,6 @@ def main():
 
                 resumo_ord = ordenar_df_por_mes(resumo)
 
-                # Observação do mês vigente
                 def obs_col(row):
                     if row['mes_referencia'] == mes_vigente:
                         return f"📌 {int(row['total_relatorios'])} relatórios entregues"
@@ -1153,7 +1102,6 @@ def main():
 
                 resumo_ord['observacao'] = resumo_ord.apply(obs_col, axis=1)
 
-                # Tabela na tela
                 st.dataframe(
                     resumo_ord.rename(columns={
                         'mes_referencia':  'Mês',
@@ -1166,24 +1114,14 @@ def main():
                     hide_index=True,
                 )
 
-                # ─── FIX #5: monta DataFrame especial para o PDF ─────────────
-                # Precisamos que gerar_pdf_padrao_s21 receba:
-                #   - mes_referencia   → para localizar a linha correta no cartão
-                #   - horas            → total de horas (coluna Horas do PDF)
-                #   - estudos_biblicos → total de estudos (coluna Estudos)
-                #   - observacoes      → "N relat." impresso na coluna OBS
-                #   - cat_oficial      → para lógica de Pioneiro Auxiliar
-                # O total de relatórios vai para a coluna OBS de cada linha.
                 df_pdf_consolidado = resumo_ord[['mes_referencia','total_relatorios','total_horas','total_estudos']].copy()
                 df_pdf_consolidado = df_pdf_consolidado.rename(columns={
                     'total_horas':     'horas',
                     'total_estudos':   'estudos_biblicos',
                 })
-                # Imprime a contagem de relatórios na coluna OBS de cada mês
                 df_pdf_consolidado['observacoes'] = df_pdf_consolidado['total_relatorios'].apply(
                     lambda n: f"{int(n)} relat."
                 )
-                # cat_oficial vazio → não marca coluna Pioneiro Auxiliar no consolidado
                 df_pdf_consolidado['cat_oficial'] = cat_sel
 
                 pdf_c = gerar_pdf_padrao_s21(
@@ -1201,9 +1139,6 @@ def main():
             else:
                 st.info("Sem dados para esta categoria.")
 
-    # ════════════════════════════════════════════════════════════════════════════
-    # ABA 3 — ANÚNCIOS
-    # ════════════════════════════════════════════════════════════════════════════
     with tabs[3]:
         sub_an = st.tabs(["✏️ Nova Postagem", "🗂️ Gerenciar Postagens"])
 
@@ -1334,13 +1269,9 @@ def main():
                         if st.button("🗑 Deletar", key=f"del_an_{a['id']}", type="secondary"):
                             deletar_anuncio(a["id"])
 
-    # ════════════════════════════════════════════════════════════════════════════
-    # ABA 4 — CONFIGURAÇÃO
-    # ════════════════════════════════════════════════════════════════════════════
     with tabs[4]:
         sub_cfg = st.tabs(["✏️ EDITAR RELATÓRIOS", "👥 GERENCIAR MEMBROS", "➕ NOVO MEMBRO"])
 
-        # ── Sub-aba 0: Editar Relatórios ──────────────────────────────────────
         with sub_cfg[0]:
             st.markdown(f"#### Relatórios Identificados — {mes_sel}")
             if not df.empty:
@@ -1378,31 +1309,13 @@ def main():
                                     except Exception as e:
                                         st.error(f"Erro ao salvar alterações: {e}")
 
-                            # ─── FIX #6: deleção real via deletar_relatorio() ─
                             with col_del:
                                 with st.popover("🗑️ Deletar", use_container_width=True):
                                     st.error("Atenção! Ação irreversível.")
                                     st.write(f"Deseja apagar definitivamente o relatório de **{r['nome_oficial']}** deste mês?")
                                     if st.button("Sim, Excluir", key=f"conf_del_{r['id']}", type="primary", use_container_width=True):
                                         deletar_relatorio(r['id'])
-                                        
-                                        def deletar_membro(nome):
-                                            """Remove permanentemente um membro do Firestore e limpa o cache."""
-                                            db = inicializar_db()
-                                            if not db:
-                                                st.error("Sem conexão com o banco.")
-                                                return
-                                            try:
-                                                db.collection("membros_v2").document(nome).delete()
-                                            except Exception as e:
-                                                st.error(f"Erro ao deletar membro: {e}")
-                                                return
-                                            carregar_membros_cached.clear()
-                                            carregar_relatorios_cached.clear()
-                                            st.toast(f"🗑️ Membro '{nome}' deletado permanentemente!")
-                                            st.rerun()
-                                        
-        # ── Sub-aba 1: GERENCIAR MEMBROS ──────────────────────────────────────
+
         with sub_cfg[1]:
             st.markdown("#### 👥 Gerenciar Membros")
             st.caption("Categoria aqui é a FONTE DA VERDADE para todos os relatórios.")
@@ -1483,8 +1396,8 @@ def main():
                     with col_del_m:
                         with st.popover("🗑️ Deletar", use_container_width=True):
                             st.error("⚠️ Ação irreversível!")
-                            st.write(f"Isso removerá **{nome}** permanentemente do banco de dados.")
-                            if st.button("Sim, excluir membro", key=f"conf_del_m_{nome}",
+                            st.write(f"Remove **{nome}** permanentemente do banco de dados.")
+                            if st.button(f"Sim, excluir {nome.split()[0]}", key=f"conf_del_m_{nome}",
                                          type="primary", use_container_width=True):
                                 deletar_membro(nome)
 
@@ -1506,7 +1419,6 @@ def main():
                 else:
                     st.info("Nenhum membro inativo.")
 
-        # ── Sub-aba 2: NOVO MEMBRO ────────────────────────────────────────────
         with sub_cfg[2]:
             st.markdown("#### ➕ Cadastrar Novo Membro")
             with st.form("novo_membro", clear_on_submit=True):
@@ -1550,11 +1462,10 @@ def main():
                     else:
                         st.error("Informe o nome completo.")
 
-    # ── Footer ────────────────────────────────────────────────────────────────
     st.markdown("""
     <div style="text-align:center;padding:2rem 0 0.5rem;
         font-size:0.72rem;color:#374151;letter-spacing:0.05em;">
-        v5.1 · Parque Aliança · Sistema de Gestão
+        v5.2 · Parque Aliança · Sistema de Gestão
     </div>
     """, unsafe_allow_html=True)
 
