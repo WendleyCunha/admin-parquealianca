@@ -704,7 +704,7 @@ def main():
     with st.sidebar:
         st.markdown(f"""
         <div class="sidebar-brand">
-            <div style="font-size:2rem;margin-bottom:4px;">⛪</div>
+            <div style="font-size:2rem;margin-bottom:4px🕊️</div>
             <div class="sidebar-brand-title">Parque Aliança</div>
             <div class="sidebar-brand-sub">Gestão · v5.0</div>
         </div>
@@ -876,7 +876,7 @@ def main():
                 if not pendentes:
                     continue
 
-                with st.expander(f"{'👤' if cat=='PUBLICADOR' else '🌟' if 'AUXILIAR' in cat else '⭐'} {cat} — {len(pendentes)} pendente(s)", expanded=False):
+                with st.expander(f"{'👤' if cat=='PUBLICADOR' else '💎' if 'AUXILIAR' in cat else '⭐'} {cat} — {len(pendentes)} pendente(s)", expanded=False):
 
                     col_btn_baixa, _ = st.columns([2, 3])
                     with col_btn_baixa:
@@ -1329,7 +1329,7 @@ def main():
 
             def renderizar_formulario_membro(nome):
                 m        = membros_db[nome]
-                cat_icon = {"PUBLICADOR": "👤", "PIONEIRO AUXILIAR": "🌟",
+                cat_icon = {"PUBLICADOR": "👤", "PIONEIRO AUXILIAR": "💎",
                             "PIONEIRO REGULAR": "⭐"}.get(m.get('categoria',''), "👤")
 
                 with st.expander(f"{cat_icon} **{nome}** — {m.get('categoria','PUBLICADOR')}"):
