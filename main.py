@@ -556,17 +556,17 @@ def deletar_anuncio(anuncio_id):
         st.rerun()
 
 
-def salvar_assistencia(tipo_reuniao, ano_servico, mes, qtd_reunioes, total_assistencia):
+def salvar_assistencia(tipo_reuniao, ano_referencia, mes, qtd_reunioes, total_assistencia):
     """Salva ou atualiza um registro de assistência no Firestore."""
     db = inicializar_db()
     if not db:
         st.error("Sem conexão com o banco.")
         return False
-    doc_id = f"{tipo_reuniao}_{ano_servico}_{mes}".replace(" ", "_").upper()
+    doc_id = f"{tipo_reuniao}_{ano_referencia}_{mes}".replace(" ", "_").upper()
     media = round(total_assistencia / qtd_reunioes, 1) if qtd_reunioes > 0 else 0
     dados = {
         "tipo_reuniao":      tipo_reuniao,
-        "ano_servico":       ano_servico,
+        "ano_referencia":    ano_referencia,
         "mes":               mes,
         "qtd_reunioes":      qtd_reunioes,
         "total_assistencia": total_assistencia,
@@ -823,151 +823,83 @@ def processar_dataframe(relatorios_brutos, membros_db):
 # =============================================================
 # 11. REGISTRO DE ASSISTÊNCIA (lógica da aba)
 # =============================================================
-def _calcular_anos_servico_disponiveis():
-    """Retorna lista de anos de serviço disponíveis (ex: '2025-2026')."""
-    ano_atual = date.today().year
-    return [f"{a}-{a+1}" for a in range(2023, ano_atual + 2)]
-
-
-def _get_dado_assistencia(registros, tipo, ano, mes):
+def _get_dado_assistencia(registros, tipo, ano_ref, mes):
     """Busca um registro de assistência específico."""
     for r in registros:
         if (r.get("tipo_reuniao") == tipo and
-                r.get("ano_servico") == ano and
+                r.get("ano_referencia") == ano_ref and
                 r.get("mes") == mes):
             return r
     return None
 
 
-def _calcular_medias_ano(registros, tipo, ano):
-    """Calcula totais e médias de um ano/tipo."""
-    total_reunioes = 0
-    total_assist   = 0
-    meses_com_dado = 0
+def _gerar_excel_assistencia(tipo_reuniao, ano_ref, dados_linhas):
+    """Gera bytes de um arquivo Excel com os dados de assistência."""
+    import io as _io
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Assistência"
 
-    for mes in _MESES_ANO_SERVICO:
-        r = _get_dado_assistencia(registros, tipo, ano, mes)
-        if r and r.get("qtd_reunioes", 0) > 0:
-            total_reunioes += r["qtd_reunioes"]
-            total_assist   += r.get("total_assistencia", 0)
-            meses_com_dado += 1
+        titulo = f"REGISTRO DA ASSISTÊNCIA ÀS REUNIÕES — {tipo_reuniao.upper()} — {ano_ref}"
+        ws.merge_cells("A1:D1")
+        ws["A1"] = titulo
+        ws["A1"].font = Font(bold=True, size=12)
+        ws["A1"].alignment = Alignment(horizontal="center")
 
-    media_mensal = round(total_assist / meses_com_dado, 1) if meses_com_dado > 0 else 0
-    return total_reunioes, total_assist, media_mensal
-
-
-def renderizar_tabela_assistencia(tipo_reuniao, ano_sel, registros_db):
-    """
-    Renderiza a tabela editável de assistência para um tipo de reunião e ano de serviço.
-    Retorna um dict {mes: {qtd, total, media}} com os valores atuais (editados ou do banco).
-    """
-    chave_estado = f"assist_edit_{tipo_reuniao}_{ano_sel}"
-    if chave_estado not in st.session_state:
-        st.session_state[chave_estado] = {}
-
-    dados_editados = st.session_state[chave_estado]
-
-    # Ano de serviço: Set–Dez do primeiro ano, Jan–Ago do segundo
-    partes_ano = ano_sel.split("-")
-    ano1 = partes_ano[0]  # ex: "2025"
-    ano2 = partes_ano[1] if len(partes_ano) > 1 else str(int(ano1) + 1)
-
-    st.markdown(f"""
-    <div style="margin-bottom: 1rem;">
-      <span style="font-size: 0.75rem; font-weight: 700; color: #C9A227;
-          text-transform: uppercase; letter-spacing: 0.08em;">
-          Ano de Serviço {ano_sel}
-      </span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Cabeçalho da tabela em HTML
-    header_html = f"""
-    <table class="assist-table">
-      <thead>
-        <tr>
-          <th class="col-mes" rowspan="2" style="width:120px;">Mês</th>
-          <th colspan="3" class="ano-header">{ano1}</th>
-          <th colspan="3" class="ano-header">{ano2}</th>
-        </tr>
-        <tr>
-          <th>Qtd. Reuniões</th><th>Assistência Total</th><th>Média / Semana</th>
-          <th>Qtd. Reuniões</th><th>Assistência Total</th><th>Média / Semana</th>
-        </tr>
-      </thead>
-    </table>
-    """
-    st.markdown(header_html, unsafe_allow_html=True)
-
-    # Linhas editáveis — divididas em Set-Dez (ano1) e Jan-Ago (ano2)
-    meses_ano1 = ["Setembro", "Outubro", "Novembro", "Dezembro"]
-    meses_ano2 = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto"]
-
-    resultados = {}
-
-    for mes in _MESES_ANO_SERVICO:
-        banco = _get_dado_assistencia(registros_db, tipo_reuniao, ano_sel, mes)
-        qtd_banco   = banco.get("qtd_reunioes", 0) if banco else 0
-        tot_banco   = banco.get("total_assistencia", 0) if banco else 0
-
-        st.markdown(f"""
-        <div style="display:flex; align-items:center; padding: 4px 0; border-bottom: 1px solid #EBEBEB;">
-          <div style="width: 110px; font-weight: 500; font-size: 0.83rem; color: #333;">{mes}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        col_m, col_q, col_t, col_med, col_sv = st.columns([2, 1.5, 1.5, 1.5, 1])
-
-        col_m.markdown(f"**{mes}**")
-
-        qtd_key = f"qtd_{tipo_reuniao}_{ano_sel}_{mes}"
-        tot_key = f"tot_{tipo_reuniao}_{ano_sel}_{mes}"
-
-        qtd = col_q.number_input(
-            "Reuniões", min_value=0, max_value=10,
-            value=int(dados_editados.get(qtd_key, qtd_banco)),
-            key=qtd_key, label_visibility="collapsed"
+        headers = ["Mês", "Qtd. Reuniões", "Assistência Total", "Média por Semana"]
+        borda = Border(
+            left=Side(style="thin"), right=Side(style="thin"),
+            top=Side(style="thin"), bottom=Side(style="thin")
         )
-        total = col_t.number_input(
-            "Total", min_value=0,
-            value=int(dados_editados.get(tot_key, tot_banco)),
-            key=tot_key, label_visibility="collapsed"
-        )
-        media = round(total / qtd, 1) if qtd > 0 else 0
-        col_med.markdown(
-            f'<div style="padding:8px 0; font-weight:600; color:#C9A227; font-size:0.9rem;">'
-            f'{media if media > 0 else "—"}</div>',
-            unsafe_allow_html=True
-        )
+        cinza = PatternFill("solid", fgColor="DDDDDD")
 
-        if col_sv.button("💾", key=f"sv_{tipo_reuniao}_{ano_sel}_{mes}",
-                         help=f"Salvar {mes}"):
-            ok = salvar_assistencia(tipo_reuniao, ano_sel, mes, qtd, total)
-            if ok:
-                st.toast(f"✅ {mes} salvo!")
-                st.rerun()
+        for col, h in enumerate(headers, 1):
+            c = ws.cell(row=2, column=col, value=h)
+            c.font = Font(bold=True)
+            c.alignment = Alignment(horizontal="center")
+            c.fill = cinza
+            c.border = borda
 
-        dados_editados[qtd_key] = qtd
-        dados_editados[tot_key] = total
-        resultados[mes] = {"qtd": qtd, "total": total, "media": media}
+        ws.column_dimensions["A"].width = 16
+        ws.column_dimensions["B"].width = 16
+        ws.column_dimensions["C"].width = 18
+        ws.column_dimensions["D"].width = 18
 
-    # Linha de totais / média do ano
-    total_reun_ano = sum(v["qtd"]   for v in resultados.values())
-    total_asst_ano = sum(v["total"] for v in resultados.values())
-    meses_preench  = sum(1 for v in resultados.values() if v["qtd"] > 0)
-    media_mensal   = round(total_asst_ano / meses_preench, 1) if meses_preench > 0 else 0
+        soma_qtd = 0
+        soma_tot = 0
+        meses_preench = 0
 
-    st.markdown("---")
-    c1, c2, c3, c4 = st.columns([2, 1.5, 1.5, 1.5])
-    c1.markdown("**Assistência média por mês**")
-    c2.markdown(f"**{total_reun_ano}** reuniões")
-    c3.markdown(f"**{total_asst_ano}** total")
-    c4.markdown(
-        f'<span style="color:#C9A227;font-weight:700;font-size:1rem;">{media_mensal}</span>',
-        unsafe_allow_html=True
-    )
+        for linha_idx, (mes, qtd, total, media) in enumerate(dados_linhas, 3):
+            values = [mes, qtd if qtd > 0 else "", total if total > 0 else "", media if media > 0 else ""]
+            for col, v in enumerate(values, 1):
+                c = ws.cell(row=linha_idx, column=col, value=v)
+                c.alignment = Alignment(horizontal="center" if col > 1 else "left")
+                c.border = borda
+            soma_qtd += qtd
+            soma_tot += total
+            if qtd > 0:
+                meses_preench += 1
 
-    return resultados
+        media_geral = round(soma_tot / meses_preench, 1) if meses_preench > 0 else 0
+        row_tot = len(dados_linhas) + 3
+        ws.merge_cells(f"A{row_tot}:A{row_tot}")
+        totais = ["Assistência média por mês", soma_qtd, soma_tot, media_geral]
+        dourado = PatternFill("solid", fgColor="C9A227")
+        for col, v in enumerate(totais, 1):
+            c = ws.cell(row=row_tot, column=col, value=v)
+            c.font = Font(bold=True)
+            c.alignment = Alignment(horizontal="center" if col > 1 else "left")
+            c.fill = dourado
+            c.border = borda
+
+        buf = _io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+    except ImportError:
+        return None
 
 
 # =============================================================
@@ -1391,74 +1323,130 @@ def aba_consolidado(df, membros_db, mes_vigente, registros_assistencia):
     with c3_tab:
         st.markdown("### 🏛️ Registro da Assistência às Reuniões Congregacionais")
 
-        tipo_reuniao = st.radio(
-            "Tipo de Reunião",
-            ["Reunião do meio de semana", "Reunião de fim de semana"],
-            horizontal=True
-        )
+        # ── Controles: tipo + ano de referência ──────────────────────────────
+        col_tipo, col_ano = st.columns([3, 1])
 
-        anos_disponiveis = _calcular_anos_servico_disponiveis()
-        # Detecta o ano de serviço vigente automaticamente
-        hoje = date.today()
-        if hoje.month >= 9:
-            ano_vigente = f"{hoje.year}-{hoje.year+1}"
-        else:
-            ano_vigente = f"{hoje.year-1}-{hoje.year}"
+        with col_tipo:
+            tipo_reuniao = st.radio(
+                "Tipo de Reunião",
+                ["Reunião do meio de semana", "Reunião de fim de semana"],
+                horizontal=True,
+                key="assist_tipo"
+            )
 
-        idx_ano = anos_disponiveis.index(ano_vigente) if ano_vigente in anos_disponiveis else len(anos_disponiveis) - 1
-        ano_sel = st.selectbox("Ano de Serviço", anos_disponiveis, index=idx_ano)
-
-        st.markdown("---")
-
-        # Resumo do ano selecionado (banco)
-        reun_tot, assist_tot, media_mes = _calcular_medias_ano(registros_assistencia, tipo_reuniao, ano_sel)
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown(f"""
-            <div class="pa-metric">
-              <div class="pa-metric-value">{reun_tot}</div>
-              <div class="pa-metric-label">Total de Reuniões</div>
-            </div>""", unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"""
-            <div class="pa-metric">
-              <div class="pa-metric-value">{assist_tot}</div>
-              <div class="pa-metric-label">Assistência Total</div>
-            </div>""", unsafe_allow_html=True)
-        with c3:
-            st.markdown(f"""
-            <div class="pa-metric">
-              <div class="pa-metric-value" style="color:#C9A227;">{media_mes}</div>
-              <div class="pa-metric-label">Média Mensal</div>
-            </div>""", unsafe_allow_html=True)
+        with col_ano:
+            ano_atual = date.today().year
+            ano_ref   = st.number_input(
+                "Ano de referência", min_value=2020, max_value=ano_atual + 2,
+                value=ano_atual, step=1, key="assist_ano"
+            )
 
         st.markdown("---")
-        st.caption("Preencha os campos abaixo. Use 💾 para salvar linha por linha, ou salve tudo de uma vez.")
 
-        # Botão salvar tudo
-        col_salvar_tudo, _ = st.columns([2, 4])
+        # ── Carregar valores salvos do banco ──────────────────────────────────
+        linhas = []          # (mes, qtd, total, media)
+        vals_editados = {}   # para salvar tudo depois
 
-        # Tabela editável
-        resultados = renderizar_tabela_assistencia(tipo_reuniao, ano_sel, registros_assistencia)
+        # Cabeçalho da tabela
+        st.markdown(f"""
+        <div style="display:grid;grid-template-columns:160px 140px 160px 160px;
+            gap:0;border-bottom:2px solid #1A1A1A;padding-bottom:6px;
+            font-size:0.75rem;font-weight:700;color:#555;text-transform:uppercase;
+            letter-spacing:0.05em;margin-bottom:4px;">
+          <div>Mês</div>
+          <div style="text-align:center;">Qtd. Reuniões</div>
+          <div style="text-align:center;">Assistência Total</div>
+          <div style="text-align:center;">Média por Semana</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with col_salvar_tudo:
-            if st.button("💾 Salvar Tudo", type="primary", use_container_width=True,
-                         key=f"salvar_tudo_{tipo_reuniao}_{ano_sel}"):
+        for mes in _MESES_ANO_SERVICO:
+            banco   = _get_dado_assistencia(registros_assistencia, tipo_reuniao, str(ano_ref), mes)
+            qtd_db  = int(banco.get("qtd_reunioes", 0))      if banco else 0
+            tot_db  = int(banco.get("total_assistencia", 0)) if banco else 0
+
+            col_m, col_q, col_t, col_med = st.columns([2, 1.7, 2, 2])
+
+            col_m.markdown(
+                f'<div style="padding:6px 0;font-weight:500;font-size:0.88rem;">{mes}</div>',
+                unsafe_allow_html=True
+            )
+
+            qtd = col_q.number_input(
+                "Reuniões", min_value=0, max_value=20, value=qtd_db,
+                key=f"ar_q_{tipo_reuniao}_{ano_ref}_{mes}", label_visibility="collapsed"
+            )
+            total = col_t.number_input(
+                "Total", min_value=0, value=tot_db,
+                key=f"ar_t_{tipo_reuniao}_{ano_ref}_{mes}", label_visibility="collapsed"
+            )
+            media = round(total / qtd, 1) if qtd > 0 else 0
+            col_med.markdown(
+                f'<div style="padding:8px 0;font-weight:700;color:#C9A227;'
+                f'font-size:0.92rem;text-align:center;">'
+                f'{"%.1f" % media if media > 0 else "—"}</div>',
+                unsafe_allow_html=True
+            )
+
+            vals_editados[mes] = {"qtd": qtd, "total": total, "media": media}
+            linhas.append((mes, qtd, total, media))
+
+        # ── Linha de totais ───────────────────────────────────────────────────
+        soma_qtd   = sum(v["qtd"]   for v in vals_editados.values())
+        soma_tot   = sum(v["total"] for v in vals_editados.values())
+        n_preench  = sum(1 for v in vals_editados.values() if v["qtd"] > 0)
+        media_ger  = round(soma_tot / n_preench, 1) if n_preench > 0 else 0
+
+        st.markdown(f"""
+        <div style="display:grid;grid-template-columns:160px 140px 160px 160px;
+            gap:0;border-top:2px solid #1A1A1A;margin-top:4px;padding-top:8px;">
+          <div style="font-weight:700;font-size:0.82rem;padding:4px 0;">
+              Assistência média por mês</div>
+          <div style="text-align:center;font-weight:700;font-size:0.92rem;padding:4px 0;">
+              {soma_qtd}</div>
+          <div style="text-align:center;font-weight:700;font-size:0.92rem;padding:4px 0;">
+              {soma_tot}</div>
+          <div style="text-align:center;font-weight:700;font-size:1rem;
+              color:#C9A227;padding:4px 0;">
+              {"%.1f" % media_ger if media_ger > 0 else "—"}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("")
+
+        # ── Botões: Salvar + Baixar ───────────────────────────────────────────
+        col_sv, col_dl, _ = st.columns([1.5, 1.5, 3])
+
+        with col_sv:
+            if st.button("💾 Salvar", type="primary", use_container_width=True,
+                         key=f"salvar_assist_{tipo_reuniao}_{ano_ref}"):
                 erros = 0
                 salvos = 0
-                for mes, vals in resultados.items():
+                for mes, vals in vals_editados.items():
                     if vals["qtd"] > 0 or vals["total"] > 0:
-                        ok = salvar_assistencia(tipo_reuniao, ano_sel, mes,
+                        ok = salvar_assistencia(tipo_reuniao, str(ano_ref), mes,
                                                 vals["qtd"], vals["total"])
                         if ok:
                             salvos += 1
                         else:
                             erros += 1
                 if erros == 0:
-                    st.toast(f"✅ {salvos} mês(es) salvos com sucesso!")
+                    st.toast(f"✅ {salvos} mês(es) salvos!")
                     st.rerun()
                 else:
                     st.error(f"Erro ao salvar {erros} registro(s).")
+
+        with col_dl:
+            excel_bytes = _gerar_excel_assistencia(tipo_reuniao, str(ano_ref), linhas)
+            if excel_bytes:
+                nome_arq = (f"Assistencia_{tipo_reuniao[:3].upper()}_{ano_ref}.xlsx")
+                st.download_button(
+                    "📥 Baixar", data=excel_bytes,
+                    file_name=nome_arq,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key=f"dl_assist_{tipo_reuniao}_{ano_ref}"
+                )
 
 
 # =============================================================
