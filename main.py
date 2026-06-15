@@ -193,26 +193,26 @@ button[kind="primary"], .stButton [kind="primary"] > button {
 # =============================================================
 # 3. CONSTANTES E LISTAS GLOBAIS
 # =============================================================
-_AUTH_USERS = {"wendley": "Qmerd@10"} [cite: 25, 138]
+_AUTH_USERS = {"wendley": "Qmerd@10"}
 
-PDF_Y_OFFSET    = 0.0 [cite: 25, 138]
-PDF_NOME_Y      = 272.0 [cite: 25, 138]
-PDF_NOME_X      = 24.0 [cite: 25, 138]
-PDF_NASCI_Y     = 265.0 [cite: 25, 138]
-PDF_NASCI_X     = 48.0 [cite: 25, 138]
-PDF_BATISM_Y    = 258.0 [cite: 25, 138]
-PDF_BATISM_X    = 48.0 [cite: 25, 138]
-PDF_CARGO_Y     = 252.0 [cite: 25, 138]
-PDF_MASC_X      = 150.0 [cite: 25, 138]
-PDF_FEM_X       = 172.0 [cite: 25, 138]
-PDF_OVELHAS_X   = 150.0 [cite: 25, 138]
-PDF_UNGIDO_X    = 172.0 [cite: 25, 138]
-PDF_ANCIAO_X    = 9.5 [cite: 25, 138]
-PDF_SERVO_X     = 35.0 [cite: 25, 138]
-PDF_PREG_X      = 65.0  # <--- CORRIGIDO AQUI (Linha unificada)
-PDF_PESP_X      = 100.0 [cite: 25, 138]
-PDF_MISS_X      = 140.0 [cite: 25, 138]
-PDF_TEL_HEADER_Y = 232.0 [cite: 25, 138]
+PDF_Y_OFFSET    = 0.0
+PDF_NOME_Y      = 272.0
+PDF_NOME_X      = 24.0
+PDF_NASCI_Y     = 265.0
+PDF_NASCI_X     = 48.0
+PDF_BATISM_Y    = 258.0
+PDF_BATISM_X    = 48.0
+PDF_CARGO_Y     = 252.0
+PDF_MASC_X      = 150.0
+PDF_FEM_X       = 172.0
+PDF_OVELHAS_X   = 150.0
+PDF_UNGIDO_X    = 172.0
+PDF_ANCIAO_X    = 9.5
+PDF_SERVO_X     = 35.0
+PDF_PREG_X      = 65.0
+PDF_PESP_X      = 100.0
+PDF_MISS_X      = 140.0
+PDF_TEL_HEADER_Y = 232.0
 
 _Y_MAP_BASE = {
     "SETEMBRO":  228.5, "OUTUBRO":   220.5, "NOVEMBRO":  212.5, "DEZEMBRO":  204.5,
