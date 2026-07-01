@@ -99,24 +99,48 @@ h2 { font-weight: 600 !important; font-size: 1.3rem !important; }
     border-bottom: 2px solid #C9A227 !important;
 }
 
+/* ---- Cards & Metrics — versão dourada elevada ---- */
 .pa-card, .pa-metric {
-    background: #FFFFFF !important;
-    border: 1px solid #EDEDED !important;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FDFCF7 100%) !important;
+    border: 1px solid #ECE6D2 !important;
+    border-top: 3px solid #C9A227 !important;
     border-radius: 14px !important;
     padding: 1.2rem !important;
     margin-bottom: 0.8rem !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 6px rgba(20,16,4,0.05), 0 1px 2px rgba(201,162,39,0.08);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
-.pa-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+.pa-card:hover, .pa-metric:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 26px rgba(20,16,4,0.10), 0 3px 10px rgba(201,162,39,0.18);
+    border-color: #C9A227 !important;
 }
 
 .pa-metric-value {
-    font-size: 22px !important;
+    font-size: 24px !important;
+    font-weight: 800 !important;
+    color: #1A1A1A !important;
+    letter-spacing: -0.01em !important;
+}
+.pa-metric-label {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    color: #9C8A46 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.07em !important;
+    margin-top: 2px !important;
+}
+
+.pa-card-header {
+    font-size: 0.95rem !important;
     font-weight: 700 !important;
     color: #1A1A1A !important;
+    margin-bottom: 4px !important;
+}
+.pa-card-sub {
+    font-size: 0.8rem !important;
+    color: #6B6B6B !important;
+    font-weight: 500 !important;
 }
 
 [data-testid="stTextInput"] input,
@@ -195,6 +219,14 @@ button[kind="primary"], .stButton [kind="primary"] > button {
 # =============================================================
 _AUTH_USERS = {"wendley": "Qmerd@10"}
 
+# -------------------------------------------------------------
+# COORDENADAS DO CARTÃO S-21 (em mm, origem no canto inferior
+# esquerdo da página A4 — padrão do ReportLab)
+#
+# AJUSTADO com base nas fotos enviadas (cartão do Wendley e o
+# consolidado). Os X's e números estavam caindo fora dos
+# quadradinhos/colunas certas. Ver observações em cada bloco.
+# -------------------------------------------------------------
 PDF_Y_OFFSET    = 0.0
 PDF_NOME_Y      = 272.0
 PDF_NOME_X      = 24.0
@@ -203,16 +235,32 @@ PDF_NASCI_X     = 48.0
 PDF_BATISM_Y    = 258.0
 PDF_BATISM_X    = 48.0
 PDF_CARGO_Y     = 252.0
-PDF_MASC_X      = 150.0
-PDF_FEM_X       = 172.0
-PDF_OVELHAS_X   = 150.0
-PDF_UNGIDO_X    = 172.0
-PDF_ANCIAO_X    = 9.5
-PDF_SERVO_X     = 35.0
-PDF_PREG_X      = 65.0
-PDF_PESP_X      = 100.0
-PDF_MISS_X      = 140.0
-PDF_TEL_HEADER_Y = 232.0
+
+# Checkboxes "Masculino/Feminino" e "Outras ovelhas/Ungido":
+# na foto o X caía dentro da palavra do rótulo (ex.: em cima do
+# "c" de "Masculino"), então trouxemos o X ~6-7mm para a
+# esquerda, de volta para dentro do quadradinho.
+PDF_MASC_X      = 143.0   # era 150.0
+PDF_FEM_X       = 165.0   # era 172.0
+PDF_OVELHAS_X   = 143.0   # era 150.0
+PDF_UNGIDO_X    = 165.0   # era 172.0
+
+# Checkboxes de cargo (Ancião / Servo / Pioneiro reg. / Pioneiro
+# esp. / Missionário): pequeno ajuste para centralizar o X no
+# quadradinho — estava nascendo meio pixel à direita, tocando
+# o começo do rótulo.
+PDF_ANCIAO_X    = 7.0      # era 9.5
+PDF_SERVO_X     = 33.5     # era 35.0
+PDF_PREG_X      = 63.5     # era 65.0
+PDF_PESP_X      = 98.5     # era 100.0
+PDF_MISS_X      = 138.5    # era 140.0
+
+# Telefone de emergência: NÃO fica mais dentro da tabela.
+# Na foto ele sobrepunha o texto "(Se for pioneiro ou
+# missionário em campo)" do cabeçalho da coluna Horas.
+# Movido para o espaço em branco à direita da linha de cargos.
+PDF_TEL_X       = 150.0
+PDF_TEL_Y       = 238.5
 
 _Y_MAP_BASE = {
     "SETEMBRO":  228.5, "OUTUBRO":   220.5, "NOVEMBRO":  212.5, "DEZEMBRO":  204.5,
@@ -221,11 +269,21 @@ _Y_MAP_BASE = {
 }
 
 PDF_TOTAL_Y        = 131.5
-PDF_COL_PARTICIP_X = 53.5
+
+# Colunas da tabela mensal:
+# - PARTICIP: o X do "participou no ministério" estava saindo
+#   do quadradinho e quase tocando a coluna "Estudos" (visto na
+#   linha de Abril e nos meses do consolidado). Trazido ~5.5mm
+#   para a esquerda.
+# - HORAS: pequeno ajuste para centralizar melhor o número.
+# - OBS: um pouco mais à direita para dar respiro em relação à
+#   coluna de Horas (na foto "15" e "Pioneiro Auxiliar"/"63
+#   relat." ficavam quase colados).
+PDF_COL_PARTICIP_X = 48.0   # era 53.5
 PDF_COL_ESTUDOS_X  = 80.5
 PDF_COL_PIAUX_X    = 97.5
-PDF_COL_HORAS_X    = 116.5
-PDF_COL_OBS_X      = 133.0
+PDF_COL_HORAS_X    = 117.5  # era 116.5
+PDF_COL_OBS_X      = 136.0  # era 133.0
 
 _CARGO_X_MAP = {
     "Ancião":               PDF_ANCIAO_X,
@@ -625,8 +683,8 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
 
     tel_emerg = str(mi.get("telefone_emergencia", "")).strip()
     if tel_emerg:
-        can.setFont("Helvetica-Bold", 9)
-        can.drawString(PDF_COL_OBS_X * mm, PDF_TEL_HEADER_Y * mm, f"Tel: {tel_emerg}"[:32])
+        can.setFont("Helvetica-Bold", 8)
+        can.drawString(PDF_TEL_X * mm, PDF_TEL_Y * mm, f"Tel: {tel_emerg}"[:32])
 
     total_horas = 0
     total_estud = 0
