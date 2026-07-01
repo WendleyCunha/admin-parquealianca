@@ -2196,33 +2196,21 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db):
 #   1) Removido o st.set_page_config() e o bloco de <style> do
 #      topo do arquivo original — o app já tem os dois (seção 2),
 #      e chamar set_page_config() duas vezes quebra o Streamlit.
-#   2) A função inicializar_db() do passagens.py tinha o MESMO
-#      NOME da função inicializar_db() do app principal, mas
-#      aponta para um projeto Firestore diferente
-#      ("bancowendley" vs "wendleydesenvolvimento"). Se ficassem
-#      com o mesmo nome, uma delas sobrescreveria a outra e os
-#      dois módulos passariam a usar o banco errado. Por isso ela
-#      foi renomeada para inicializar_db_passagens(), com sua
-#      própria chave de sessão (st.session_state.db_passagens).
+#   2) O passagens.py originalmente usava um Firestore separado
+#      (projeto "bancowendley"), o que exigiria liberar permissão
+#      de IAM para a service account nesse projeto. Por decisão
+#      do usuário, o módulo passou a usar a MESMA conexão/projeto
+#      do app principal (inicializar_db() → "wendleydesenvolvimento").
+#      Os dados que já existiam no "bancowendley" NÃO aparecem
+#      aqui (é um banco físico diferente) — a aba Passagens
+#      começa vazia neste projeto.
 # =============================================================
 
 CAPACIDADE = 46
 
 
-def inicializar_db_passagens():
-    if "db_passagens" not in st.session_state:
-        try:
-            key_dict = json.loads(st.secrets["textkey"])
-            creds = service_account.Credentials.from_service_account_info(key_dict)
-            st.session_state.db_passagens = firestore.Client(credentials=creds, project="bancowendley")
-        except Exception as e:
-            st.error(f"Erro no Firebase (Passagens): {e}")
-            return None
-    return st.session_state.db_passagens
-
-
 def atualizar_cadastro_central(dados_pax):
-    db = inicializar_db_passagens()
+    db = inicializar_db()
     if db:
         pax_id = dados_pax['nome'].lower().replace(" ", "")
         db.collection("cadastro_geral").document(pax_id).set({
@@ -2233,7 +2221,7 @@ def atualizar_cadastro_central(dados_pax):
 
 
 def buscar_pessoa_central(nome_pesquisa):
-    db = inicializar_db_passagens()
+    db = inicializar_db()
     if not db or not nome_pesquisa: return None
     nome_busca = nome_pesquisa.lower().strip()
     for doc in db.collection("cadastro_geral").stream():
@@ -2244,7 +2232,7 @@ def buscar_pessoa_central(nome_pesquisa):
 
 
 def criar_evento(nome, datas, valor_passagem):
-    db = inicializar_db_passagens()
+    db = inicializar_db()
     if db:
         id_evento = f"{nome.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}"
         db.collection("eventos").document(id_evento).set({
@@ -2256,7 +2244,7 @@ def criar_evento(nome, datas, valor_passagem):
 
 
 def adicionar_novo_onibus(id_evento, dia):
-    db = inicializar_db_passagens()
+    db = inicializar_db()
     if db:
         doc_ref = db.collection("eventos").document(id_evento)
         evento  = doc_ref.get().to_dict()
@@ -2266,7 +2254,7 @@ def adicionar_novo_onibus(id_evento, dia):
 
 
 def salvar_passageiro(id_evento, dados_pax):
-    db = inicializar_db_passagens()
+    db = inicializar_db()
     if db:
         sufixo = dados_pax['rg'] if dados_pax.get('rg') else "reserva"
         pax_id = f"{dados_pax['nome']}_{sufixo}".lower().replace(" ", "")
@@ -2276,7 +2264,7 @@ def salvar_passageiro(id_evento, dados_pax):
 
 
 def atualizar_embarque(id_evento, pax, status):
-    db = inicializar_db_passagens()
+    db = inicializar_db()
     if db:
         sufixo = pax['rg'] if pax.get('rg') else "reserva"
         pax_id = f"{pax['nome']}_{sufixo}".lower().replace(" ", "")
@@ -2284,7 +2272,7 @@ def atualizar_embarque(id_evento, pax, status):
 
 
 def deletar_passageiro(id_evento, nome, rg):
-    db = inicializar_db_passagens()
+    db = inicializar_db()
     if db:
         sufixo = rg if rg else "reserva"
         pax_id = f"{nome}_{sufixo}".lower().replace(" ", "")
@@ -2292,12 +2280,12 @@ def deletar_passageiro(id_evento, nome, rg):
 
 
 def carregar_passageiros(id_evento):
-    db = inicializar_db_passagens()
+    db = inicializar_db()
     return [p.to_dict() for p in db.collection("eventos").document(id_evento).collection("passageiros").stream()]
 
 
 def carregar_eventos():
-    db = inicializar_db_passagens()
+    db = inicializar_db()
     if not db: return {}
     return {doc.id: doc.to_dict() for doc in db.collection("eventos").where("status", "==", "ativo").stream()}
 
@@ -2721,7 +2709,7 @@ def exibir_modulo_passagens():
                 confirmacao = st.text_input("Digite o nome do evento para confirmar:", placeholder=evento['nome'])
                 if st.button("🏁 Arquivar Evento", type="primary", use_container_width=True):
                     if confirmacao.strip().lower() == evento['nome'].strip().lower():
-                        inicializar_db_passagens().collection("eventos").document(id_sel).update({"status": "finalizado"})
+                        inicializar_db().collection("eventos").document(id_sel).update({"status": "finalizado"})
                         st.success("Evento arquivado.")
                         st.rerun()
                     else:
