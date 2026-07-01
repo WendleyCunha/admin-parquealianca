@@ -2698,7 +2698,7 @@ def exibir_modulo_passagens():
             st.markdown("**Exportar Dados**")
             if not df.empty:
                 output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
                     df.to_excel(writer, index=False, sheet_name='Passageiros')
                 st.download_button("📥 Baixar Excel", output.getvalue(),
                                    "lista_" + id_sel + ".xlsx", use_container_width=True)
