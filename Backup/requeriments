@@ -1,0 +1,10 @@
+streamlit
+pandas
+google-cloud-firestore
+google-auth
+pdfrw
+reportlab
+pypdf
+pypdf==4.0.1
+PyPDF2
+openpyxl
