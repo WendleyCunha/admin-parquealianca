@@ -25,31 +25,25 @@ from utilitarios import cargos_para_lista, ordenar_df_por_mes
 # COORDENADAS DO CARTÃO S-21 (em mm, origem no canto inferior
 # esquerdo da página A4 — padrão do ReportLab)
 #
-# RECALIBRADO medindo, char a char, um PDF real gerado pelo
-# sistema (com pdfplumber) contra a posição exata dos glifos de
-# checkbox do próprio template (fonte "Ornament" do formulário).
-# Isso substitui os ajustes anteriores feitos "no olho" — agora
-# cada valor abaixo foi validado a <0.5mm de erro.
-#
-# Duas causas principais dos desalinhamentos reportados:
-#   1) Os checkboxes de CARGO (Servo/Pioneiro regular/Pioneiro
-#      especial/Missionário) estavam com X muito longe da coluna
-#      certa — em alguns casos > 20mm de erro (só não aparecia
-#      porque os testes anteriores só marcavam "Ancião").
-#   2) A tabela mensal assumia 8mm entre um mês e outro, mas o
-#      formulário real usa ~7mm. Por isso o erro ia crescendo:
-#      quase imperceptível em Janeiro/Fevereiro (meio da tabela)
-#      e de +5 a +6mm em Setembro/Agosto (pontas da tabela) — e
-#      o "Total" também herdava esse erro acumulado.
+# AJUSTE FINO POR FEEDBACK VISUAL (rodada 2): depois da recalibração
+# por medição acima, o usuário validou o PDF impresso/visualizado e
+# pediu para descer tudo um pouco (bem pouco) e o Nome um pouco mais
+# que o resto. Isso é esperado: a fonte de checkbox do formulário
+# (glifo "Ornament") pode ter o desenho visível não perfeitamente
+# centralizado dentro da caixa que a biblioteca de PDF reporta — o
+# olho humano vendo o arquivo final é a fonte da verdade final,
+# então a pequena descida abaixo prevalece sobre a medição anterior.
+# Se ainda precisar ajustar, mexa só em PDF_Y_OFFSET (afeta a tabela
+# mensal inteira de uma vez) e em PDF_NOME_Y (só o nome).
 # -------------------------------------------------------------
-PDF_Y_OFFSET    = 0.0
-PDF_NOME_Y      = 272.0
+PDF_Y_OFFSET    = -1.5    # desce a tabela mensal inteira ~1.5mm
+PDF_NOME_Y      = 269.0   # era 272.0 — desce ~3mm (pedido extra além do geral)
 PDF_NOME_X      = 24.0
-PDF_NASCI_Y     = 265.0
+PDF_NASCI_Y     = 263.5   # era 265.0 — desce ~1.5mm (ajuste geral)
 PDF_NASCI_X     = 48.0
-PDF_BATISM_Y    = 258.0
+PDF_BATISM_Y    = 256.5   # era 258.0 — desce ~1.5mm (ajuste geral)
 PDF_BATISM_X    = 48.0
-PDF_CARGO_Y     = 253.6    # era 252.0
+PDF_CARGO_Y     = 252.1   # era 253.6 — desce ~1.5mm (ajuste geral)
 
 # Checkboxes "Masculino/Feminino": Masculino já estava certo na
 # vertical (PDF_NASCI_Y), só precisou de ajuste fino horizontal.
@@ -63,7 +57,7 @@ PDF_FEM_X       = 171.9    # era 165.0 — bem fora da coluna real
 # (PDF_CLASSE_Y), agora DESACOPLADA de PDF_BATISM_Y — antes as
 # duas coisas compartilhavam a mesma variável, então qualquer
 # ajuste na data de batismo bagunçava o checkbox (e vice-versa).
-PDF_CLASSE_Y    = 259.3    # NOVO — não confundir com PDF_BATISM_Y (data)
+PDF_CLASSE_Y    = 257.8    # era 259.3 — desce ~1.5mm (ajuste geral)
 PDF_OVELHAS_X   = 136.1    # era 135.0
 PDF_UNGIDO_X    = 171.9    # era 165.0 — mesmo problema do Feminino
 
@@ -81,19 +75,21 @@ PDF_MISS_X      = 161.0    # era 138.5 — erro de +22.5mm
 # Telefone de emergência: posição não mudou (não fazia parte do
 # problema relatado).
 PDF_TEL_X       = 150.0
-PDF_TEL_Y       = 238.5
+PDF_TEL_Y       = 237.0    # era 238.5 — desce ~1.5mm (ajuste geral)
 
 # Mapa de posição Y de cada mês na tabela. O espaçamento real do
 # formulário é de 7.0mm entre linhas (medido diretamente nos
 # checkboxes do template) — o valor antigo usava 8.0mm, por isso
-# o erro crescia mês a mês.
+# o erro crescia mês a mês. Esses valores continuam os medidos
+# (não mexemos aqui); quem desce a tabela toda é o PDF_Y_OFFSET
+# acima.
 _Y_MAP_BASE = {
     "SETEMBRO":  223.0, "OUTUBRO":   216.0, "NOVEMBRO":  209.0, "DEZEMBRO":  202.0,
     "JANEIRO":   195.0, "FEVEREIRO": 188.0, "MARÇO":     181.0, "ABRIL":     174.0,
     "MAIO":      167.0, "JUNHO":     160.0, "JULHO":     153.0, "AGOSTO":    146.0,
 }
 
-PDF_TOTAL_Y        = 137.3  # era 134.5 — herdava o erro acumulado da tabela mensal
+PDF_TOTAL_Y        = 135.8  # era 137.3 — desce ~1.5mm (ajuste geral)
 
 # Colunas da tabela mensal: posições horizontais já estavam boas
 # (confirmadas por medição, erro <0.5mm) — só a coluna de
