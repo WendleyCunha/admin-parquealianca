@@ -50,8 +50,8 @@ def abas_visiveis():
 def aviso_somente_leitura(texto: str = None):
     """Mostra um aviso discreto (não bloqueante) de modo somente-leitura."""
     st.markdown(f"""
-    <div style="background:#FBF1D4;border:1px solid #E9D48E;border-radius:10px;
-        padding:8px 14px;margin-bottom:14px;font-size:0.82rem;color:#8A6D14;
+    <div style="background:#E7F0FA;border:1px solid #BBD3EC;border-radius:10px;
+        padding:8px 14px;margin-bottom:14px;font-size:0.82rem;color:#1F4E86;
         display:flex;align-items:center;gap:8px;">
         👁️ <span>{texto or "Você tem permissão apenas de <strong>visualização</strong> nesta aba."}</span>
     </div>""", unsafe_allow_html=True)
