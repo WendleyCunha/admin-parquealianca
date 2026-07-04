@@ -2,22 +2,23 @@
 # autenticacao.py
 # Tela de login.
 #
-# ATUALIZAÇÃO:
-#  - Login agora consulta a coleção "usuarios_sistema" (Firestore),
-#    criada em CONFIGURAÇÃO → "Usuários e Permissões". Cada usuário
-#    carrega consigo suas permissões por aba.
+# ATUALIZAÇÃO (v6.1): cores agora vêm de tema.py (CORES) em vez de
+# hexadecimais escritos aqui dentro — trocar a paleta do app não
+# exige mais tocar neste arquivo.
+#
+#  - Login consulta a coleção "usuarios_sistema" (Firestore), criada
+#    em CONFIGURAÇÃO → "Usuários e Permissões". Cada usuário carrega
+#    consigo suas permissões por aba.
 #  - Existe um usuário administrador de fábrica (fallback) que
 #    continua funcionando SEMPRE — mesmo depois de já existirem
 #    outros usuários — para garantir que o dono do sistema nunca
 #    fique trancado para fora. Ele tem acesso total (admin=True).
-#  - Removido o texto "Portal de Relatórios". Cabeçalho agora mostra
-#    "Congregação Parque Aliança – 72249" e, abaixo, "Comissão de
-#    Funcionamento".
 # =============================================================
 import streamlit as st
 
 from estilo import get_logo_base64
 from database import autenticar_usuario
+from tema import CORES
 
 _ADMIN_FALLBACK_USER  = "wendley"
 _ADMIN_FALLBACK_SENHA = "Qmerd@10"
@@ -40,9 +41,9 @@ def _tentar_login(usuario: str, senha: str):
 
 
 def tela_login():
-    st.markdown("""
+    st.markdown(f"""
     <style>
-    .stApp { background: linear-gradient(180deg, #EFF5FC 0%, #E7F0FA 100%) !important; }
+    .stApp {{ background: linear-gradient(180deg, {CORES['fundo_pagina_1']} 0%, {CORES['primaria_clara']} 100%) !important; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -55,28 +56,28 @@ def tela_login():
         )
     else:
         badge_html = (
-            '<div style="background: #2E6DA4; border-radius: 12px; width: 54px; height: 54px;'
-            'display: flex; align-items: center; justify-content: center;'
-            'font-weight: 700; font-size: 20px; color: #111;">PA</div>'
+            f'<div style="background: {CORES["primaria"]}; border-radius: 12px; width: 54px; height: 54px;'
+            f'display: flex; align-items: center; justify-content: center;'
+            f'font-weight: 700; font-size: 20px; color: #fff;">PA</div>'
         )
 
     col_left, col_center, col_right = st.columns([1, 1.3, 1])
     with col_center:
         st.markdown(f"""
-        <div style="background: #FFFFFF; border: 1px solid #EEE3B8; border-radius: 16px;
+        <div style="background: {CORES['fundo_card_1']}; border: 1px solid {CORES['primaria_borda']}; border-radius: 16px;
             margin-top: 8vh; text-align: center; overflow: hidden;
-            box-shadow: 0 14px 34px rgba(140,110,20,0.14);">
-          <div style="background: #E7F0FA; padding: 9px 0; border-bottom: 2px solid #2E6DA4;">
-            <span style="color: #1F4E86; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.14em;">
+            box-shadow: 0 14px 34px rgba(30,70,120,0.14);">
+          <div style="background: {CORES['primaria_clara']}; padding: 9px 0; border-bottom: 2px solid {CORES['primaria']};">
+            <span style="color: {CORES['primaria_escura']}; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.14em;">
                 ACESSO RESTRITO</span>
           </div>
           <div style="padding: 2.2rem 2rem 2rem;">
             <div style="display: flex; justify-content: center; margin-bottom: 1.25rem;">
               {badge_html}
             </div>
-            <h2 style="color: #1A1A1A !important; font-size: 21px; font-weight: 700; margin-bottom: 4px;">
+            <h2 style="color: {CORES['texto_principal']} !important; font-size: 21px; font-weight: 700; margin-bottom: 4px;">
                 Congregação Parque Aliança – 72249</h2>
-            <p style="color: #5B7BA6 !important; font-size: 12.5px; font-weight: 700;
+            <p style="color: {CORES['texto_muted']} !important; font-size: 12.5px; font-weight: 700;
                 text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0;">
                 Comissão de Funcionamento</p>
           </div>
