@@ -42,7 +42,7 @@ def _tentar_login(usuario: str, senha: str):
 def tela_login():
     st.markdown("""
     <style>
-    .stApp { background: linear-gradient(180deg, #FAF7EE 0%, #F2ECD6 100%) !important; }
+    .stApp { background: linear-gradient(180deg, #EFF5FC 0%, #E7F0FA 100%) !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -55,7 +55,7 @@ def tela_login():
         )
     else:
         badge_html = (
-            '<div style="background: #C9A227; border-radius: 12px; width: 54px; height: 54px;'
+            '<div style="background: #2E6DA4; border-radius: 12px; width: 54px; height: 54px;'
             'display: flex; align-items: center; justify-content: center;'
             'font-weight: 700; font-size: 20px; color: #111;">PA</div>'
         )
@@ -66,8 +66,8 @@ def tela_login():
         <div style="background: #FFFFFF; border: 1px solid #EEE3B8; border-radius: 16px;
             margin-top: 8vh; text-align: center; overflow: hidden;
             box-shadow: 0 14px 34px rgba(140,110,20,0.14);">
-          <div style="background: #FBF1D4; padding: 9px 0; border-bottom: 2px solid #C9A227;">
-            <span style="color: #8A6D14; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.14em;">
+          <div style="background: #E7F0FA; padding: 9px 0; border-bottom: 2px solid #2E6DA4;">
+            <span style="color: #1F4E86; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.14em;">
                 ACESSO RESTRITO</span>
           </div>
           <div style="padding: 2.2rem 2rem 2rem;">
@@ -76,7 +76,7 @@ def tela_login():
             </div>
             <h2 style="color: #1A1A1A !important; font-size: 21px; font-weight: 700; margin-bottom: 4px;">
                 Congregação Parque Aliança – 72249</h2>
-            <p style="color: #9C8A46 !important; font-size: 12.5px; font-weight: 700;
+            <p style="color: #5B7BA6 !important; font-size: 12.5px; font-weight: 700;
                 text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0;">
                 Comissão de Funcionamento</p>
           </div>
