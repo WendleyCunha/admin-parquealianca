@@ -23,8 +23,8 @@ MESES_ORDEM = [
 
 TIPOS = ["Reunião do Meio de Semana", "Reunião do Fim de Semana"]
 
-_COR_DOURADO = "#C9A227"
-_COR_TEXTO   = "#6B5E3C"
+_COR_DOURADO = "#2E6DA4"
+_COR_TEXTO   = "#2F547E"
 
 # ─────────────────────────────────────────────────────────────
 # FIRESTORE helpers
@@ -155,12 +155,12 @@ def _inject_css():
     st.markdown(f"""
 <style>
 .s88-header {{
-    background: #FBF1D4;
+    background: #E7F0FA;
     color: {_COR_TEXTO};
     padding: 10px 18px 6px;
     border-radius: 8px 8px 0 0;
     margin-bottom: 0;
-    border: 1px solid #E9D48E;
+    border: 1px solid #BBD3EC;
     border-bottom: none;
 }}
 .s88-header h3 {{
@@ -168,7 +168,7 @@ def _inject_css():
     font-size: 1.05rem;
     font-weight: 700;
     letter-spacing: .04em;
-    color: #8A6D14;
+    color: #1F4E86;
 }}
 .s88-header p  {{
     margin: 0;
@@ -182,16 +182,16 @@ def _inject_css():
     font-size: 0.82rem;
 }}
 .s88-table th {{
-    background: #FBF1D4;
-    color: #8A6D14;
+    background: #E7F0FA;
+    color: #1F4E86;
     text-align: center;
     padding: 7px 4px;
     font-size: 0.78rem;
     font-weight: 700;
-    border: 1px solid #E9D48E;
+    border: 1px solid #BBD3EC;
 }}
 .s88-table td {{
-    border: 1px solid #EEE3C7;
+    border: 1px solid #D7E6F4;
     padding: 3px 6px;
     vertical-align: middle;
     text-align: center;
@@ -205,7 +205,7 @@ def _inject_css():
 }}
 .s88-table tr.totais-row td {{
     background: {_COR_DOURADO};
-    color: #1A1A1A;
+    color: #FFFFFF;
     font-weight: 700;
     font-size: 0.8rem;
 }}
@@ -266,7 +266,7 @@ def _bloco_reuniao(db, cong_id: str, tipo: str, ano_ref: str, prefixo: str, pode
             st.markdown(f"""
 <div style="
     padding: 6px 10px; font-weight: 500; font-size: 0.83rem;
-    color: #1A1A1A; border-bottom: 1px solid #EEE3C7;
+    color: #1A1A1A; border-bottom: 1px solid #D7E6F4;
     height: 44px; display: flex; align-items: center;
 ">{mes}</div>""", unsafe_allow_html=True)
 
@@ -289,8 +289,8 @@ def _bloco_reuniao(db, cong_id: str, tipo: str, ano_ref: str, prefixo: str, pode
             st.markdown(f"""
 <div style="
     padding: 6px 10px; font-size: 0.83rem;
-    color: {'#1A1A1A' if media > 0 else '#B5AC8F'};
-    border-bottom: 1px solid #EEE3C7; height: 44px;
+    color: {'#1A1A1A' if media > 0 else '#9FB6D0'};
+    border-bottom: 1px solid #D7E6F4; height: 44px;
     display: flex; align-items: center; justify-content: center;
     font-weight: {'600' if media > 0 else '400'};
 ">{media if media > 0 else '—'}</div>""", unsafe_allow_html=True)
@@ -330,13 +330,13 @@ def render_tab_assistencia(db, congregacao_id: str, pode_editar: bool = True):
 
     st.markdown("""
 <div style="
-    background:#FBF1D4; color:#8A6D14; padding:14px 20px;
-    border-radius:8px; margin-bottom:20px; border:1px solid #E9D48E;
+    background:#E7F0FA; color:#1F4E86; padding:14px 20px;
+    border-radius:8px; margin-bottom:20px; border:1px solid #BBD3EC;
 ">
   <h2 style="margin:0;font-size:1.1rem;letter-spacing:.03em;color:#1A1A1A;">
     📋 REGISTRO DA ASSISTÊNCIA ÀS REUNIÕES CONGREGACIONAIS
   </h2>
-  <p style="margin:4px 0 0;font-size:.78rem;color:#8A6D14">
+  <p style="margin:4px 0 0;font-size:.78rem;color:#1F4E86">
     Formulário S-88-T · Preencha mês a mês e salve no Firestore
   </p>
 </div>
@@ -371,7 +371,7 @@ def render_tab_assistencia(db, congregacao_id: str, pode_editar: bool = True):
 
     with col_gap:
         st.markdown(
-            "<div style='border-left:2px solid #EEE3C7;height:100%;min-height:600px'></div>",
+            "<div style='border-left:2px solid #D7E6F4;height:100%;min-height:600px'></div>",
             unsafe_allow_html=True,
         )
 
@@ -423,8 +423,8 @@ def render_tab_assistencia(db, congregacao_id: str, pode_editar: bool = True):
     with col_imprimir:
         st.markdown("""
 <button onclick="window.print()" style="
-    width:100%; padding:8px 0; background:#FBF1D4; color:#8A6D14;
-    border:1px solid #E9D48E; border-radius:6px; font-size:0.85rem;
+    width:100%; padding:8px 0; background:#E7F0FA; color:#1F4E86;
+    border:1px solid #BBD3EC; border-radius:6px; font-size:0.85rem;
     font-weight:600; cursor:pointer; letter-spacing:.03em;
 ">🖨️ Imprimir</button>
 """, unsafe_allow_html=True)
