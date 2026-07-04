@@ -28,6 +28,7 @@ from modulo.mod_triagem import aba_triagem
 from modulo.mod_consolidado import aba_consolidado
 from modulo.mod_anuncios import aba_anuncios
 from modulo.mod_passagens import exibir_modulo_passagens
+from modulo.mod_manutencao import aba_manutencao
 from modulo.mod_configuracao import aba_configuracao
 
 
@@ -180,6 +181,9 @@ def main():
 
             elif aba_id == "passagens":
                 exibir_modulo_passagens(pode_editar=pode_editar)
+
+            elif aba_id == "manutencao":
+                aba_manutencao(pode_editar=pode_editar)
 
             elif aba_id == "configuracao":
                 aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=pode_editar)
