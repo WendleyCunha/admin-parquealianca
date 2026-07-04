@@ -21,6 +21,7 @@ from database import inicializar_db, atualizar_membro, deletar_relatorio, carreg
 from utilitarios import normalizar_nome_no_banco
 from constantes import categorias_lista
 import permissoes
+from tema import CORES
 
 
 def aba_triagem(df_mes, membros_db, pode_editar=True):
@@ -31,22 +32,22 @@ def aba_triagem(df_mes, membros_db, pode_editar=True):
         permissoes.aviso_somente_leitura()
 
     if df_triagem.empty:
-        st.markdown("""
+        st.markdown(f"""
         <div style="text-align:center;padding:3rem 1rem;">
           <div style="font-size:3rem;margin-bottom:0.5rem;">✅</div>
-          <div style="font-size:1.1rem;font-weight:700;color:#22a35a;">Tudo limpo!</div>
-          <div style="color:#8a8a8a;font-size:0.85rem;margin-top:4px;">
+          <div style="font-size:1.1rem;font-weight:700;color:{CORES['sucesso']};">Tudo limpo!</div>
+          <div style="color:{CORES['texto_muted']};font-size:0.85rem;margin-top:4px;">
               Nenhum relatório em triagem para este mês.</div>
         </div>""", unsafe_allow_html=True)
         return
 
     st.markdown(f"""
     <div style="margin-bottom:1.5rem;">
-      <div style="font-size:0.75rem;font-weight:700;color:#3B6FA0;
+      <div style="font-size:0.75rem;font-weight:700;color:{CORES['texto_muted2']};
           text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">
           ⚠️ Triagem — {len(df_triagem)} item(s)
       </div>
-      <div style="color:#8a8a8a;font-size:0.82rem;">
+      <div style="color:{CORES['texto_muted']};font-size:0.82rem;">
           Estes relatórios precisam de validação manual.
       </div>
     </div>""", unsafe_allow_html=True)
@@ -63,20 +64,20 @@ def aba_triagem(df_mes, membros_db, pode_editar=True):
             with col_info:
                 st.markdown(f"""
                 <div style="margin-bottom:8px;">
-                  <span style="font-weight:700;color:#1A1A1A;font-size:0.95rem;">
+                  <span style="font-weight:700;color:{CORES['texto_principal']};font-size:0.95rem;">
                       "{row['nome']}"</span>
-                  <span style="color:#8a8a8a;font-size:0.8rem;margin-left:8px;">
+                  <span style="color:{CORES['texto_muted']};font-size:0.8rem;margin-left:8px;">
                       · {int(row['horas'])}h · {int(row.get('estudos_biblicos',0))} estudos</span>
                 </div>""", unsafe_allow_html=True)
             with col_badge:
                 st.markdown(
-                    f'<span style="font-size:0.75rem;font-weight:700;color:#3B6FA0;">'
+                    f'<span style="font-size:0.75rem;font-weight:700;color:{CORES["texto_muted2"]}">'
                     f'{conf_str}</span>', unsafe_allow_html=True)
 
             if sugestao:
                 st.markdown(f"""
-                <div style="background:#FFF6E5;border:1px solid #F0D48E;border-radius:8px;
-                    padding:6px 12px;margin-bottom:10px;font-size:0.8rem;color:#1F4E86;">
+                <div style="background:{CORES['atencao_bg']};border:1px solid {CORES['atencao_borda']};border-radius:8px;
+                    padding:6px 12px;margin-bottom:10px;font-size:0.8rem;color:{CORES['atencao']};">
                     💡 Sugestão: <strong>{sugestao}</strong>
                 </div>""", unsafe_allow_html=True)
 
