@@ -15,6 +15,8 @@ import io
 import streamlit as st
 from datetime import datetime
 
+from tema import CORES
+
 MESES_ORDEM = [
     "Setembro", "Outubro", "Novembro", "Dezembro",
     "Janeiro", "Fevereiro", "Março", "Abril",
@@ -23,8 +25,8 @@ MESES_ORDEM = [
 
 TIPOS = ["Reunião do Meio de Semana", "Reunião do Fim de Semana"]
 
-_COR_DOURADO = "#2E6DA4"
-_COR_TEXTO   = "#2F547E"
+_COR_DOURADO = CORES["primaria"]
+_COR_TEXTO   = CORES["texto_muted2"]
 
 # ─────────────────────────────────────────────────────────────
 # FIRESTORE helpers
@@ -155,12 +157,12 @@ def _inject_css():
     st.markdown(f"""
 <style>
 .s88-header {{
-    background: #E7F0FA;
+    background: {CORES['primaria_clara']};
     color: {_COR_TEXTO};
     padding: 10px 18px 6px;
     border-radius: 8px 8px 0 0;
     margin-bottom: 0;
-    border: 1px solid #BBD3EC;
+    border: 1px solid {CORES['primaria_borda_forte']};
     border-bottom: none;
 }}
 .s88-header h3 {{
@@ -168,7 +170,7 @@ def _inject_css():
     font-size: 1.05rem;
     font-weight: 700;
     letter-spacing: .04em;
-    color: #1F4E86;
+    color: {CORES['primaria_escura']};
 }}
 .s88-header p  {{
     margin: 0;
@@ -182,16 +184,16 @@ def _inject_css():
     font-size: 0.82rem;
 }}
 .s88-table th {{
-    background: #E7F0FA;
-    color: #1F4E86;
+    background: {CORES['primaria_clara']};
+    color: {CORES['primaria_escura']};
     text-align: center;
     padding: 7px 4px;
     font-size: 0.78rem;
     font-weight: 700;
-    border: 1px solid #BBD3EC;
+    border: 1px solid {CORES['primaria_borda_forte']};
 }}
 .s88-table td {{
-    border: 1px solid #D7E6F4;
+    border: 1px solid {CORES['primaria_borda']};
     padding: 3px 6px;
     vertical-align: middle;
     text-align: center;
@@ -199,13 +201,13 @@ def _inject_css():
 .s88-table td.mes-label {{
     text-align: left;
     font-weight: 500;
-    color: #1A1A1A;
+    color: {CORES['texto_principal']};
     padding-left: 10px;
     white-space: nowrap;
 }}
 .s88-table tr.totais-row td {{
     background: {_COR_DOURADO};
-    color: #FFFFFF;
+    color: {CORES['fundo_card_1']};
     font-weight: 700;
     font-size: 0.8rem;
 }}
@@ -235,7 +237,7 @@ def _bloco_reuniao(db, cong_id: str, tipo: str, ano_ref: str, prefixo: str, pode
     st.markdown(f"""
 <div class="s88-header">
   <h3>{tipo.upper()}</h3>
-  <p>Ano de serviço: <strong style="color:#1A1A1A">{ano_ref}</strong></p>
+  <p>Ano de serviço: <strong style="color:{CORES['texto_principal']}">{ano_ref}</strong></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -266,7 +268,7 @@ def _bloco_reuniao(db, cong_id: str, tipo: str, ano_ref: str, prefixo: str, pode
             st.markdown(f"""
 <div style="
     padding: 6px 10px; font-weight: 500; font-size: 0.83rem;
-    color: #1A1A1A; border-bottom: 1px solid #D7E6F4;
+    color: {CORES['texto_principal']}; border-bottom: 1px solid {CORES['primaria_borda']};
     height: 44px; display: flex; align-items: center;
 ">{mes}</div>""", unsafe_allow_html=True)
 
@@ -289,8 +291,8 @@ def _bloco_reuniao(db, cong_id: str, tipo: str, ano_ref: str, prefixo: str, pode
             st.markdown(f"""
 <div style="
     padding: 6px 10px; font-size: 0.83rem;
-    color: {'#1A1A1A' if media > 0 else '#9FB6D0'};
-    border-bottom: 1px solid #D7E6F4; height: 44px;
+    color: {CORES['texto_principal'] if media > 0 else CORES['neutro_borda']};
+    border-bottom: 1px solid {CORES['primaria_borda']}; height: 44px;
     display: flex; align-items: center; justify-content: center;
     font-weight: {'600' if media > 0 else '400'};
 ">{media if media > 0 else '—'}</div>""", unsafe_allow_html=True)
@@ -330,13 +332,13 @@ def render_tab_assistencia(db, congregacao_id: str, pode_editar: bool = True):
 
     st.markdown("""
 <div style="
-    background:#E7F0FA; color:#1F4E86; padding:14px 20px;
-    border-radius:8px; margin-bottom:20px; border:1px solid #BBD3EC;
+    background:{CORES['primaria_clara']}; color:{CORES['primaria_escura']}; padding:14px 20px;
+    border-radius:8px; margin-bottom:20px; border:1px solid {CORES['primaria_borda_forte']};
 ">
-  <h2 style="margin:0;font-size:1.1rem;letter-spacing:.03em;color:#1A1A1A;">
+  <h2 style="margin:0;font-size:1.1rem;letter-spacing:.03em;color:{CORES['texto_principal']};">
     📋 REGISTRO DA ASSISTÊNCIA ÀS REUNIÕES CONGREGACIONAIS
   </h2>
-  <p style="margin:4px 0 0;font-size:.78rem;color:#1F4E86">
+  <p style="margin:4px 0 0;font-size:.78rem;color:{CORES['primaria_escura']}">
     Formulário S-88-T · Preencha mês a mês e salve no Firestore
   </p>
 </div>
@@ -371,7 +373,7 @@ def render_tab_assistencia(db, congregacao_id: str, pode_editar: bool = True):
 
     with col_gap:
         st.markdown(
-            "<div style='border-left:2px solid #D7E6F4;height:100%;min-height:600px'></div>",
+            f"<div style='border-left:2px solid {CORES['primaria_borda']};height:100%;min-height:600px'></div>",
             unsafe_allow_html=True,
         )
 
@@ -421,10 +423,10 @@ def render_tab_assistencia(db, congregacao_id: str, pode_editar: bool = True):
             st.info("openpyxl não instalado")
 
     with col_imprimir:
-        st.markdown("""
+        st.markdown(f"""
 <button onclick="window.print()" style="
-    width:100%; padding:8px 0; background:#E7F0FA; color:#1F4E86;
-    border:1px solid #BBD3EC; border-radius:6px; font-size:0.85rem;
+    width:100%; padding:8px 0; background:{CORES['primaria_clara']}; color:{CORES['primaria_escura']};
+    border:1px solid {CORES['primaria_borda_forte']}; border-radius:6px; font-size:0.85rem;
     font-weight:600; cursor:pointer; letter-spacing:.03em;
 ">🖨️ Imprimir</button>
 """, unsafe_allow_html=True)
