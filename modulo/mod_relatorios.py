@@ -2,7 +2,9 @@
 # modulo/mod_relatorios.py
 # Aba "RELATÓRIOS" — publicadores por categoria + pendências do mês.
 #
-# Origem: Seção 13 ("ABA: RELATÓRIOS") do antigo main.py monolítico.
+# ATUALIZAÇÃO: aceita pode_editar=True/False. Quando False (usuário
+# só com permissão de visualização), os botões de "dar baixa" ficam
+# ocultos e um aviso de somente-leitura é exibido.
 # =============================================================
 import os
 import sys
@@ -17,10 +19,14 @@ if _root not in sys.path:
 
 from database import inicializar_db, carregar_relatorios_cached, salvar_baixa_manual
 from constantes import categorias_lista, meses_referencia_ordem
+import permissoes
 
 
-def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df):
+def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, pode_editar=True):
     st.markdown(f"### 📋 Relatórios de {mes_sel}")
+    if not pode_editar:
+        permissoes.aviso_somente_leitura()
+
     sub_rel = st.tabs(["👤 PUBLICADOR", "🌟 P. AUXILIAR", "💎 P. REGULAR", "⏳ PENDÊNCIAS"])
 
     entregaram = set(df_ok['nome_oficial'].unique()) if not df_ok.empty else set()
@@ -86,32 +92,36 @@ def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df):
 
             icone = '👤' if cat == 'PUBLICADOR' else ('💎' if 'AUXILIAR' in cat else '⭐')
             with st.expander(f"{icone} {cat} — {len(pendentes)} pendente(s)", expanded=False):
-                col_btn_baixa, _ = st.columns([2, 3])
-                with col_btn_baixa:
-                    if st.button(f"✔ Dar Baixa em Todos ({len(pendentes)})",
-                                 key=f"baixa_all_{cat}_{mes_sel}", type="primary"):
-                        db = inicializar_db()
-                        if db:
-                            batch = db.batch()
-                            for p in pendentes:
-                                doc_ref = db.collection("relatorios_parque_alianca").document()
-                                batch.set(doc_ref, {
-                                    "nome": p, "mes_referencia": mes_sel,
-                                    "horas": 0, "estudos_biblicos": 0,
-                                    "timestamp": firestore.SERVER_TIMESTAMP
-                                })
-                            batch.commit()
-                            carregar_relatorios_cached.clear()
-                            st.success(f"✅ Baixa realizada para {len(pendentes)} publicadores(as)!")
-                            st.rerun()
+                if pode_editar:
+                    col_btn_baixa, _ = st.columns([2, 3])
+                    with col_btn_baixa:
+                        if st.button(f"✔ Dar Baixa em Todos ({len(pendentes)})",
+                                     key=f"baixa_all_{cat}_{mes_sel}", type="primary"):
+                            db = inicializar_db()
+                            if db:
+                                batch = db.batch()
+                                for p in pendentes:
+                                    doc_ref = db.collection("relatorios_parque_alianca").document()
+                                    batch.set(doc_ref, {
+                                        "nome": p, "mes_referencia": mes_sel,
+                                        "horas": 0, "estudos_biblicos": 0,
+                                        "timestamp": firestore.SERVER_TIMESTAMP
+                                    })
+                                batch.commit()
+                                carregar_relatorios_cached.clear()
+                                st.success(f"✅ Baixa realizada para {len(pendentes)} publicadores(as)!")
+                                st.rerun()
 
                 st.markdown("---")
                 for p in pendentes:
-                    c1, c2, c3, c4 = st.columns([3, 1, 1, 2])
-                    c1.markdown(f"**{p}**")
-                    h_manual = c2.number_input("H", min_value=0, step=1,
-                                               key=f"h_man_{p}_{mes_sel}")
-                    e_manual = c3.number_input("E", min_value=0, step=1,
-                                               key=f"e_man_{p}_{mes_sel}")
-                    if c4.button("✔ Dar Baixa", key=f"btn_man_{p}_{mes_sel}"):
-                        salvar_baixa_manual(p, mes_sel, h_manual, e_manual)
+                    if pode_editar:
+                        c1, c2, c3, c4 = st.columns([3, 1, 1, 2])
+                        c1.markdown(f"**{p}**")
+                        h_manual = c2.number_input("H", min_value=0, step=1,
+                                                   key=f"h_man_{p}_{mes_sel}")
+                        e_manual = c3.number_input("E", min_value=0, step=1,
+                                                   key=f"e_man_{p}_{mes_sel}")
+                        if c4.button("✔ Dar Baixa", key=f"btn_man_{p}_{mes_sel}"):
+                            salvar_baixa_manual(p, mes_sel, h_manual, e_manual)
+                    else:
+                        st.markdown(f"- {p}")
