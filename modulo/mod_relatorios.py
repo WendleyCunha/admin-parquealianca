@@ -2,9 +2,14 @@
 # modulo/mod_relatorios.py
 # Aba "RELATÓRIOS" — publicadores por categoria + pendências do mês.
 #
-# ATUALIZAÇÃO: aceita pode_editar=True/False. Quando False (usuário
-# só com permissão de visualização), os botões de "dar baixa" ficam
-# ocultos e um aviso de somente-leitura é exibido.
+# ATUALIZAÇÃO: Triagem e Consolidado agora vivem AQUI DENTRO, como
+# sub-abas logo depois de "Pendências" — é o mesmo sistema/dados,
+# só fazia sentido juntar. A permissão de "relatorios" (Configuração
+# → Usuários e Permissões) passa a valer para as três sub-abas.
+#
+# Aceita pode_editar=True/False. Quando False (usuário só com
+# permissão de visualização), os botões de edição ficam ocultos e
+# um aviso de somente-leitura é exibido.
 # =============================================================
 import os
 import sys
@@ -20,14 +25,19 @@ if _root not in sys.path:
 from database import inicializar_db, carregar_relatorios_cached, salvar_baixa_manual
 from constantes import categorias_lista, meses_referencia_ordem
 import permissoes
+from modulo.mod_triagem import aba_triagem
+from modulo.mod_consolidado import aba_consolidado
 
 
-def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, pode_editar=True):
+def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registros_assistencia, pode_editar=True):
     st.markdown(f"### 📋 Relatórios de {mes_sel}")
     if not pode_editar:
         permissoes.aviso_somente_leitura()
 
-    sub_rel = st.tabs(["👤 PUBLICADOR", "🌟 P. AUXILIAR", "💎 P. REGULAR", "⏳ PENDÊNCIAS"])
+    sub_rel = st.tabs([
+        "👤 PUBLICADOR", "🌟 P. AUXILIAR", "💎 P. REGULAR", "⏳ PENDÊNCIAS",
+        "⚠️ TRIAGEM", "📈 CONSOLIDADO",
+    ])
 
     entregaram = set(df_ok['nome_oficial'].unique()) if not df_ok.empty else set()
 
@@ -125,3 +135,11 @@ def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, pode_editar=True):
                             salvar_baixa_manual(p, mes_sel, h_manual, e_manual)
                     else:
                         st.markdown(f"- {p}")
+
+    # ---- Sub-aba: Triagem (movida para dentro de Relatórios) ----
+    with sub_rel[4]:
+        aba_triagem(df_mes, membros_db, pode_editar=pode_editar)
+
+    # ---- Sub-aba: Consolidado (movida para dentro de Relatórios) ----
+    with sub_rel[5]:
+        aba_consolidado(df, membros_db, mes_vigente, registros_assistencia, pode_editar=pode_editar)
