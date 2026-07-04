@@ -1,17 +1,23 @@
 # =============================================================
-# modulo/mod_manutencao.py  (NOVO)
+# modulo/mod_manutencao.py
 # Aba "MANUTENÇÃO" — réplica funcional da planilha
-# "Planejamento_para_consertos_no_Salao_do_Reino", com o mesmo
-# catálogo de problemas por categoria, o mesmo cálculo automático
-# de Gravidade/Urgência/Tendência/Prioridade (nota 1-5) e o mesmo
-# teto mensal de orçamento — só que dentro do sistema, sem depender
-# de abrir o Excel.
+# "Planejamento_para_consertos_no_Salao_do_Reino".
 #
-# Segue o padrão dos outros módulos: aceita pode_editar=True/False.
+# ATUALIZAÇÃO:
+#  - "Todos os Reparos" virou duas sub-abas: 🗂️ Pendentes (Planejado
+#    + Em andamento) e ✅ Finalizados (Concluído + Cancelado).
+#  - Pendentes agora tem EDIÇÃO COMPLETA (todos os campos), não só
+#    status — sempre condicionada a pode_editar (perfil definido em
+#    Configuração → Usuários e Permissões).
+#  - Painel de Orçamento ganhou gráficos (Altair, já vem junto do
+#    Streamlit, não precisa instalar nada): barras de custo mensal
+#    com a linha do teto, barras de status e barras empilhadas de
+#    prioridade por mês — no mesmo espírito do painel da planilha.
 # =============================================================
 import os
 import sys
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -35,7 +41,9 @@ _COR_STATUS = {
     "Concluído":    "#2f8f52",
     "Cancelado":    "#9C8A46",
 }
-_COR_PRIORIDADE = {"Alta": "#c14b4b", "Média": "#B4952E", "Baixa": "#2f8f52"}
+_COR_PRIORIDADE = {"Alta": "#c14b4b", "Média": "#e0b23c", "Baixa": "#2f8f52"}
+_STATUS_PENDENTES    = ["Planejado", "Em andamento"]
+_STATUS_FINALIZADOS  = ["Concluído", "Cancelado"]
 
 
 def aba_manutencao(pode_editar=True):
@@ -48,7 +56,9 @@ def aba_manutencao(pode_editar=True):
     reparos = carregar_reparos_manutencao()
     df = pd.DataFrame(reparos) if reparos else pd.DataFrame()
 
-    labels = (["➕ Novo Reparo"] if pode_editar else []) + ["🗂️ Todos os Reparos", "📊 Painel de Orçamento"]
+    labels = (["➕ Novo Reparo"] if pode_editar else []) + [
+        "🗂️ Pendentes", "✅ Finalizados", "📊 Painel de Orçamento",
+    ]
     tabs = st.tabs(labels)
     idx = 0
 
@@ -57,10 +67,18 @@ def aba_manutencao(pode_editar=True):
             _sub_novo_reparo()
         idx = 1
 
+    df_pend = df[df["status"].isin(_STATUS_PENDENTES)] if not df.empty and "status" in df.columns else pd.DataFrame()
+    df_fin  = df[df["status"].isin(_STATUS_FINALIZADOS)] if not df.empty and "status" in df.columns else pd.DataFrame()
+
     with tabs[idx]:
-        _sub_todos_reparos(df, pode_editar)
+        _sub_lista_reparos(df_pend, pode_editar, prefixo="pend",
+                            vazio_msg="Nenhum reparo pendente no momento. 🎉")
 
     with tabs[idx + 1]:
+        _sub_lista_reparos(df_fin, pode_editar, prefixo="fin",
+                            vazio_msg="Nenhum reparo finalizado ainda.", permitir_editar_campos=False)
+
+    with tabs[idx + 2]:
         _sub_painel(df, pode_editar)
 
 
@@ -151,23 +169,26 @@ def _sub_novo_reparo():
 
 
 # ─────────────────────────────────────────────────────────────
-def _sub_todos_reparos(df, pode_editar):
-    st.markdown("#### 🗂️ Todos os reparos lançados")
-
+def _sub_lista_reparos(df, pode_editar, prefixo, vazio_msg, permitir_editar_campos=True):
+    """
+    Lista de reparos com filtros. Quando pode_editar=True e
+    permitir_editar_campos=True (aba de Pendentes), mostra o
+    formulário de edição completo, além de trocar status e excluir.
+    Na aba de Finalizados, mesmo com pode_editar=True, só se pode
+    reabrir (mudar status) ou excluir — não faz sentido reeditar
+    detalhes de um reparo já concluído.
+    """
     if df.empty:
-        st.info("Nenhum reparo lançado ainda.")
+        st.info(vazio_msg)
         return
 
-    col_f1, col_f2, col_f3 = st.columns(3)
-    filtro_mes    = col_f1.selectbox("Filtrar por mês",      ["Todos"] + MESES_MANUTENCAO)
-    filtro_status = col_f2.selectbox("Filtrar por status",   ["Todos"] + STATUS_MANUTENCAO)
-    filtro_cat    = col_f3.selectbox("Filtrar por categoria", ["Todas"] + CATEGORIAS_MANUTENCAO)
+    col_f1, col_f2 = st.columns(2)
+    filtro_mes = col_f1.selectbox("Filtrar por mês", ["Todos"] + MESES_MANUTENCAO, key=f"fmes_{prefixo}")
+    filtro_cat = col_f2.selectbox("Filtrar por categoria", ["Todas"] + CATEGORIAS_MANUTENCAO, key=f"fcat_{prefixo}")
 
     df_f = df.copy()
     if filtro_mes != "Todos":
         df_f = df_f[df_f.get("mes_execucao") == filtro_mes]
-    if filtro_status != "Todos":
-        df_f = df_f[df_f.get("status") == filtro_status]
     if filtro_cat != "Todas":
         df_f = df_f[df_f.get("categoria") == filtro_cat]
 
@@ -180,7 +201,8 @@ def _sub_todos_reparos(df, pode_editar):
     for _, r in df_f.sort_values("mes_execucao").iterrows():
         cor_status = _COR_STATUS.get(r.get("status"), "#8A6D14")
         cor_prio   = _COR_PRIORIDADE.get(r.get("prioridade"), "#8A6D14")
-        titulo = f"{r.get('categoria','')} — {r.get('problema','')[:60]}"
+        titulo = f"{r.get('categoria','')} — {str(r.get('problema',''))[:60]}"
+
         with st.expander(titulo):
             st.markdown(f"""
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
@@ -195,34 +217,187 @@ def _sub_todos_reparos(df, pode_editar):
                   💰 R$ {float(r.get('custo_estimado', 0) or 0):,.2f}</span>
             </div>""", unsafe_allow_html=True)
 
-            st.markdown(f"**Solução recomendada:** {r.get('solucao_recomendada','—')}")
-            if r.get("observacoes"):
-                st.markdown(f"**Observações:** {r.get('observacoes')}")
-            st.markdown(f"**Executor:** {r.get('executor') or '—'}")
-            st.caption(f"Gravidade: {r.get('gravidade','—')} · Urgência: {r.get('urgencia','—')} · "
-                       f"Tendência: {r.get('tendencia','—')}")
+            if not pode_editar:
+                st.markdown(f"**Solução recomendada:** {r.get('solucao_recomendada','—')}")
+                if r.get("observacoes"):
+                    st.markdown(f"**Observações:** {r.get('observacoes')}")
+                st.markdown(f"**Executor:** {r.get('executor') or '—'}")
+                st.caption(f"Gravidade: {r.get('gravidade','—')} · Urgência: {r.get('urgencia','—')} · "
+                           f"Tendência: {r.get('tendencia','—')}")
+                continue
 
-            if pode_editar:
-                st.markdown("---")
+            # ---- MODO EDIÇÃO (só chega aqui se pode_editar=True) ----
+            if permitir_editar_campos:
+                _formulario_edicao_completo(r, prefixo)
+            else:
+                # Finalizados: só reabrir (status) ou excluir, sem reeditar detalhes.
+                st.markdown(f"**Solução recomendada:** {r.get('solucao_recomendada','—')}")
+                if r.get("observacoes"):
+                    st.markdown(f"**Observações:** {r.get('observacoes')}")
+                st.markdown(f"**Executor:** {r.get('executor') or '—'}")
                 col_e1, col_e2, col_e3 = st.columns([2, 1, 1])
                 novo_status = col_e1.selectbox(
-                    "Alterar status", STATUS_MANUTENCAO,
+                    "Status", STATUS_MANUTENCAO,
                     index=STATUS_MANUTENCAO.index(r.get("status")) if r.get("status") in STATUS_MANUTENCAO else 0,
-                    key=f"st_{r['id']}",
+                    key=f"st_{prefixo}_{r['id']}",
                 )
                 with col_e2:
-                    if st.button("💾 Salvar", key=f"save_st_{r['id']}", use_container_width=True, type="primary"):
+                    if st.button("💾 Salvar", key=f"savest_{prefixo}_{r['id']}",
+                                 use_container_width=True, type="primary"):
                         salvar_reparo_manutencao({"status": novo_status}, doc_id=r["id"])
                         st.toast("✅ Status atualizado!")
                         st.rerun()
                 with col_e3:
-                    if st.button("🗑️ Excluir", key=f"del_{r['id']}", use_container_width=True):
+                    if st.button("🗑️ Excluir", key=f"del_{prefixo}_{r['id']}", use_container_width=True):
                         deletar_reparo_manutencao(r["id"])
                         st.toast("🗑️ Reparo excluído.")
                         st.rerun()
 
 
+def _formulario_edicao_completo(r, prefixo):
+    """Formulário com TODOS os campos editáveis — usado na aba Pendentes."""
+    rid = r["id"]
+
+    col1, col2 = st.columns(2)
+    cat_atual = r.get("categoria")
+    categoria_edit = col1.selectbox(
+        "Categoria", CATEGORIAS_MANUTENCAO,
+        index=CATEGORIAS_MANUTENCAO.index(cat_atual) if cat_atual in CATEGORIAS_MANUTENCAO else 0,
+        key=f"cat_edit_{prefixo}_{rid}",
+    )
+    opcoes_problema = [p["problema"] for p in problemas_da_categoria(categoria_edit)]
+    prob_atual = r.get("problema")
+    problema_edit = col2.selectbox(
+        "Problema", opcoes_problema,
+        index=opcoes_problema.index(prob_atual) if prob_atual in opcoes_problema else 0,
+        key=f"prob_edit_{prefixo}_{rid}",
+    )
+
+    info_atual = buscar_problema(categoria_edit, problema_edit)
+    solucao_atual = info_atual["solucao"] if info_atual else r.get("solucao_recomendada", "")
+    st.markdown(f"""<div class="pa-aviso-neutro">💡 <strong>Solução recomendada:</strong> {solucao_atual}</div>""",
+                unsafe_allow_html=True)
+
+    observacoes_edit = st.text_area("Observações adicionais", value=r.get("observacoes", ""),
+                                     key=f"obs_edit_{prefixo}_{rid}")
+
+    col3, col4, col5 = st.columns(3)
+    custo_edit = col3.number_input("Custo estimado (R$)", min_value=0.0, step=10.0, format="%.2f",
+                                    value=float(r.get("custo_estimado", 0) or 0), key=f"custo_edit_{prefixo}_{rid}")
+    risco_alto_edit = col4.radio("Trabalho de alto risco?", ["Não", "Sim"], horizontal=True,
+                                  index=1 if r.get("risco_alto") else 0, key=f"ra_edit_{prefixo}_{rid}")
+    consultar_tm_edit = col5.radio("Precisa consultar o TM?", ["Não", "Sim"], horizontal=True,
+                                    index=1 if r.get("consultar_tm") else 0, key=f"tm_edit_{prefixo}_{rid}")
+
+    nota_atual = r.get("risco", 1) if r.get("risco") in (1, 2, 3, 4, 5) else 1
+    nota_edit = st.select_slider("Nota de gravidade (1 a 5)", options=[1, 2, 3, 4, 5],
+                                  value=nota_atual, key=f"nota_edit_{prefixo}_{rid}")
+    info_grav_edit = TABELA_GRAVIDADE[nota_edit]
+    cor_prio_edit = _COR_PRIORIDADE.get(info_grav_edit["prioridade"], "#8A6D14")
+    st.markdown(f"""
+    <div style="font-size:0.82rem;color:#6B6B6B;margin:4px 0 10px;">
+      {info_grav_edit['gravidade']} · {info_grav_edit['urgencia']} · {info_grav_edit['tendencia']} ·
+      <span style="color:{cor_prio_edit};font-weight:700;">Prioridade {info_grav_edit['prioridade']}</span>
+    </div>""", unsafe_allow_html=True)
+
+    col6, col7, col8 = st.columns(3)
+    mes_atual = r.get("mes_execucao")
+    mes_edit = col6.selectbox("Mês de execução", MESES_MANUTENCAO,
+                               index=MESES_MANUTENCAO.index(mes_atual) if mes_atual in MESES_MANUTENCAO else 0,
+                               key=f"mes_edit_{prefixo}_{rid}")
+    executor_edit = col7.text_input("Nome do executor", value=r.get("executor", ""), key=f"exec_edit_{prefixo}_{rid}")
+    status_atual = r.get("status")
+    status_edit = col8.selectbox("Status", STATUS_MANUTENCAO,
+                                  index=STATUS_MANUTENCAO.index(status_atual) if status_atual in STATUS_MANUTENCAO else 0,
+                                  key=f"status_edit_{prefixo}_{rid}")
+
+    col_save, col_del = st.columns([3, 1])
+    with col_save:
+        if st.button("💾 Salvar alterações", key=f"savefull_{prefixo}_{rid}",
+                     type="primary", use_container_width=True):
+            dados = {
+                "categoria":           categoria_edit,
+                "problema":            problema_edit,
+                "solucao_recomendada": solucao_atual,
+                "observacoes":         observacoes_edit.strip(),
+                "custo_estimado":      float(custo_edit),
+                "risco_alto":          (risco_alto_edit == "Sim"),
+                "consultar_tm":        (consultar_tm_edit == "Sim"),
+                "risco":               nota_edit,
+                "gravidade":           info_grav_edit["gravidade"],
+                "urgencia":            info_grav_edit["urgencia"],
+                "tendencia":           info_grav_edit["tendencia"],
+                "prioridade":          info_grav_edit["prioridade"],
+                "mes_execucao":        mes_edit,
+                "executor":            executor_edit.strip(),
+                "status":              status_edit,
+            }
+            salvar_reparo_manutencao(dados, doc_id=rid)
+            st.toast("✅ Reparo atualizado!")
+            st.rerun()
+    with col_del:
+        if st.button("🗑️ Excluir", key=f"delfull_{prefixo}_{rid}", use_container_width=True):
+            deletar_reparo_manutencao(rid)
+            st.toast("🗑️ Reparo excluído.")
+            st.rerun()
+
+
 # ─────────────────────────────────────────────────────────────
+# Painel de orçamento — KPIs + gráficos
+# ─────────────────────────────────────────────────────────────
+def _grafico_custo_mensal(df, teto):
+    df_mes = df.groupby("mes_execucao")["custo_estimado"].sum().reindex(MESES_MANUTENCAO).fillna(0).reset_index()
+    df_mes.columns = ["mes", "custo"]
+
+    barras = alt.Chart(df_mes).mark_bar(color="#C9A227", cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+        x=alt.X("mes:N", sort=MESES_MANUTENCAO, title=None, axis=alt.Axis(labelAngle=0)),
+        y=alt.Y("custo:Q", title="Custo estimado (R$)"),
+        tooltip=[alt.Tooltip("mes:N", title="Mês"), alt.Tooltip("custo:Q", title="Custo (R$)", format=",.2f")],
+    )
+    rotulos = barras.mark_text(dy=-8, color="#6B5E3C", fontSize=10).encode(
+        text=alt.Text("custo:Q", format=",.0f")
+    )
+    linha_teto = alt.Chart(pd.DataFrame({"teto": [teto]})).mark_rule(
+        color="#c14b4b", strokeDash=[5, 4], size=2
+    ).encode(y="teto:Q")
+
+    st.altair_chart((barras + rotulos + linha_teto).properties(height=280), use_container_width=True)
+    st.caption("🔴 linha tracejada = teto mensal")
+
+
+def _grafico_status(df):
+    contagem = df["status"].value_counts().reindex(STATUS_MANUTENCAO).fillna(0).reset_index()
+    contagem.columns = ["status", "quantidade"]
+    chart = alt.Chart(contagem).mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4).encode(
+        x=alt.X("quantidade:Q", title=None),
+        y=alt.Y("status:N", sort=STATUS_MANUTENCAO, title=None),
+        color=alt.Color("status:N",
+                         scale=alt.Scale(domain=STATUS_MANUTENCAO,
+                                          range=[_COR_STATUS[s] for s in STATUS_MANUTENCAO]),
+                         legend=None),
+        tooltip=["status", "quantidade"],
+    ).properties(height=180)
+    st.altair_chart(chart, use_container_width=True)
+
+
+def _grafico_prioridade_mes(df):
+    base = (df[df["prioridade"].notna()]
+            .groupby(["mes_execucao", "prioridade"]).size().reset_index(name="quantidade"))
+    if base.empty:
+        st.caption("Sem dados suficientes para este gráfico ainda.")
+        return
+    chart = alt.Chart(base).mark_bar().encode(
+        x=alt.X("mes_execucao:N", sort=MESES_MANUTENCAO, title=None, axis=alt.Axis(labelAngle=0)),
+        y=alt.Y("quantidade:Q", title="Qtd. de reparos"),
+        color=alt.Color("prioridade:N",
+                         scale=alt.Scale(domain=["Alta", "Média", "Baixa"],
+                                          range=[_COR_PRIORIDADE["Alta"], _COR_PRIORIDADE["Média"], _COR_PRIORIDADE["Baixa"]]),
+                         title="Prioridade"),
+        tooltip=["mes_execucao", "prioridade", "quantidade"],
+    ).properties(height=280)
+    st.altair_chart(chart, use_container_width=True)
+
+
 def _sub_painel(df, pode_editar):
     st.markdown("#### 📊 Painel de orçamento")
 
@@ -238,75 +413,51 @@ def _sub_painel(df, pode_editar):
                 salvar_teto_mensal_manutencao(novo_teto)
                 st.toast("✅ Teto mensal atualizado!")
                 st.rerun()
-    else:
-        st.markdown(f"""<div class="pa-metric" style="max-width:260px;">
-            <div class="pa-metric-value">R$ {teto_atual:,.2f}</div>
-            <div class="pa-metric-label">Teto mensal</div></div>""", unsafe_allow_html=True)
 
     if df.empty:
         st.info("Ainda não há reparos lançados para calcular o orçamento.")
         return
 
+    df = df.copy()
     df["custo_estimado"] = pd.to_numeric(df.get("custo_estimado", 0), errors="coerce").fillna(0)
 
-    st.markdown("---")
-    st.markdown("##### 💰 Custo estimado por mês x teto")
-    resumo_mes = df.groupby("mes_execucao")["custo_estimado"].sum().reindex(MESES_MANUTENCAO).fillna(0)
-
-    cols = st.columns(4)
-    for i, mes in enumerate(MESES_MANUTENCAO):
-        valor = resumo_mes.get(mes, 0)
-        estourou = valor > teto_atual
-        cor = "#c14b4b" if estourou else "#2f8f52"
-        pct = min(round((valor / teto_atual) * 100), 999) if teto_atual > 0 else 0
-        with cols[i % 4]:
-            st.markdown(f"""
-            <div class="pa-metric">
-              <div class="pa-metric-label">{mes}</div>
-              <div class="pa-metric-value" style="font-size:16px;color:{cor};">R$ {valor:,.0f}</div>
-              <div style="font-size:0.68rem;color:#9C8A46;margin-top:2px;">{pct}% do teto</div>
-            </div>""", unsafe_allow_html=True)
+    total_custos    = df["custo_estimado"].sum()
+    consertos_total = len(df)
+    comunicados_tm  = int(df.get("consultar_tm", pd.Series(dtype=bool)).sum()) if "consultar_tm" in df.columns else 0
 
     st.markdown("---")
-    col_a, col_b = st.columns(2)
+    k1, k2, k3, k4, k5 = st.columns(5)
+    for col, label, valor in [
+        (k1, "Previsão mensal", f"R$ {teto_atual:,.0f}"),
+        (k2, "Previsão anual",  f"R$ {teto_atual*12:,.0f}"),
+        (k3, "Total dos custos", f"R$ {total_custos:,.0f}"),
+        (k4, "Consertos lançados", str(consertos_total)),
+        (k5, "Comunicados ao TM", str(comunicados_tm)),
+    ]:
+        col.markdown(f"""<div class="pa-metric">
+            <div class="pa-metric-value" style="font-size:18px;">{valor}</div>
+            <div class="pa-metric-label">{label}</div></div>""", unsafe_allow_html=True)
 
+    st.markdown("---")
+    st.markdown("##### 💰 Custo mensal estimado x teto")
+    _grafico_custo_mensal(df, teto_atual)
+
+    st.markdown("---")
+    col_a, col_b = st.columns([1, 1.6])
     with col_a:
-        st.markdown("##### 📌 Por status")
-        contagem_status = df["status"].value_counts() if "status" in df.columns else pd.Series(dtype=int)
-        for status in STATUS_MANUTENCAO:
-            qtd = int(contagem_status.get(status, 0))
-            cor = _COR_STATUS.get(status, "#8A6D14")
-            st.markdown(f"""
-            <div style="display:flex;justify-content:space-between;align-items:center;
-                padding:6px 0;border-bottom:1px solid #EEE3C7;">
-              <span style="font-size:0.85rem;color:#1A1A1A;">
-                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
-                    background:{cor};margin-right:8px;"></span>{status}</span>
-              <span style="font-weight:700;color:{cor};">{qtd}</span>
-            </div>""", unsafe_allow_html=True)
-
+        st.markdown("##### 📌 Status dos consertos")
+        _grafico_status(df)
     with col_b:
-        st.markdown("##### 🚦 Por prioridade")
-        contagem_prio = df["prioridade"].value_counts() if "prioridade" in df.columns else pd.Series(dtype=int)
-        for prio in ["Alta", "Média", "Baixa"]:
-            qtd = int(contagem_prio.get(prio, 0))
-            cor = _COR_PRIORIDADE.get(prio, "#8A6D14")
-            st.markdown(f"""
-            <div style="display:flex;justify-content:space-between;align-items:center;
-                padding:6px 0;border-bottom:1px solid #EEE3C7;">
-              <span style="font-size:0.85rem;color:#1A1A1A;">
-                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
-                    background:{cor};margin-right:8px;"></span>{prio}</span>
-              <span style="font-weight:700;color:{cor};">{qtd}</span>
-            </div>""", unsafe_allow_html=True)
+        st.markdown("##### 🚦 Reparos por mês, por prioridade")
+        _grafico_prioridade_mes(df)
 
-    pendentes_alta = df[(df.get("prioridade") == "Alta") & (df.get("status").isin(["Planejado", "Em andamento"]))]
+    pendentes_alta = df[(df.get("prioridade") == "Alta") & (df.get("status").isin(_STATUS_PENDENTES))]
     if not pendentes_alta.empty:
         st.markdown("---")
         st.markdown("##### 🔴 Prioridade alta ainda pendente")
         for _, r in pendentes_alta.iterrows():
             st.markdown(f"""
             <div class="pa-aviso-erro" style="margin-bottom:6px;">
-              <strong>{r.get('categoria','')}</strong> — {r.get('problema','')[:80]}
+              <strong>{r.get('categoria','')}</strong> — {str(r.get('problema',''))[:80]}
               &nbsp;·&nbsp; {r.get('mes_execucao','')}
             </div>""", unsafe_allow_html=True)
