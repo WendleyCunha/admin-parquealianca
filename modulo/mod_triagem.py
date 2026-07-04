@@ -42,7 +42,7 @@ def aba_triagem(df_mes, membros_db, pode_editar=True):
 
     st.markdown(f"""
     <div style="margin-bottom:1.5rem;">
-      <div style="font-size:0.75rem;font-weight:700;color:#B4952E;
+      <div style="font-size:0.75rem;font-weight:700;color:#3B6FA0;
           text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">
           ⚠️ Triagem — {len(df_triagem)} item(s)
       </div>
@@ -70,13 +70,13 @@ def aba_triagem(df_mes, membros_db, pode_editar=True):
                 </div>""", unsafe_allow_html=True)
             with col_badge:
                 st.markdown(
-                    f'<span style="font-size:0.75rem;font-weight:700;color:#B4952E;">'
+                    f'<span style="font-size:0.75rem;font-weight:700;color:#3B6FA0;">'
                     f'{conf_str}</span>', unsafe_allow_html=True)
 
             if sugestao:
                 st.markdown(f"""
                 <div style="background:#FFF6E5;border:1px solid #F0D48E;border-radius:8px;
-                    padding:6px 12px;margin-bottom:10px;font-size:0.8rem;color:#8A6D14;">
+                    padding:6px 12px;margin-bottom:10px;font-size:0.8rem;color:#1F4E86;">
                     💡 Sugestão: <strong>{sugestao}</strong>
                 </div>""", unsafe_allow_html=True)
 
