@@ -7,6 +7,11 @@
 #
 # Origem: Seção 6 ("BANCO DE DADOS — CONEXÃO E CACHE") + Seção 7
 # ("OPERAÇÕES DE ESCRITA NO BANCO") do antigo main.py monolítico.
+#
+# ATUALIZAÇÃO: acrescentada a coleção "usuarios_sistema", usada
+# para criar usuários e definir permissão (sem_acesso / visualizar
+# / editar) por aba — ver permissoes.py e a nova sub-aba "Usuários
+# e Permissões" em modulo/mod_configuracao.py.
 # =============================================================
 import json
 
@@ -78,6 +83,18 @@ def carregar_assistencia_cached():
         return []
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def carregar_usuarios_cached():
+    """Dict {username: {senha, nome_exibicao, admin, permissoes}}."""
+    db = inicializar_db()
+    if not db:
+        return {}
+    try:
+        return {doc.id: doc.to_dict() for doc in db.collection("usuarios_sistema").stream()}
+    except Exception:
+        return {}
+
+
 def carregar_membros():
     return carregar_membros_cached()
 
@@ -92,6 +109,10 @@ def carregar_anuncios():
 
 def carregar_assistencia():
     return carregar_assistencia_cached()
+
+
+def carregar_usuarios():
+    return carregar_usuarios_cached()
 
 
 # ── Escrita ───────────────────────────────────────────────────
@@ -191,3 +212,51 @@ def salvar_assistencia(tipo_reuniao, ano_referencia, mes, qtd_reunioes, total_as
     db.collection("assistencia_reunioes").document(doc_id).set(dados)
     carregar_assistencia_cached.clear()
     return True
+
+
+# ── Usuários e permissões ───────────────────────────────────────
+def salvar_usuario(username, senha, nome_exibicao, permissoes, admin=False):
+    """
+    Cria ou atualiza um usuário do sistema.
+    permissoes: dict {aba_id: "sem_acesso"|"visualizar"|"editar"}
+    Se senha vier vazia em uma edição, mantém a senha já gravada.
+    """
+    db = inicializar_db()
+    if not db:
+        st.error("Sem conexão com o banco.")
+        return False
+
+    uid = (username or "").lower().strip()
+    if not uid:
+        st.error("Informe um nome de usuário.")
+        return False
+
+    dados = {
+        "username":      uid,
+        "nome_exibicao": (nome_exibicao or username).strip(),
+        "permissoes":    permissoes or {},
+        "admin":         bool(admin),
+    }
+    if senha:
+        dados["senha"] = senha
+
+    db.collection("usuarios_sistema").document(uid).set(dados, merge=True)
+    carregar_usuarios_cached.clear()
+    return True
+
+
+def deletar_usuario(username):
+    db = inicializar_db()
+    if db:
+        db.collection("usuarios_sistema").document((username or "").lower().strip()).delete()
+        carregar_usuarios_cached.clear()
+
+
+def autenticar_usuario(username, senha):
+    """Retorna o dict do usuário se usuário+senha baterem, senão None."""
+    usuarios = carregar_usuarios()
+    uid = (username or "").lower().strip()
+    user = usuarios.get(uid)
+    if user and user.get("senha") == senha:
+        return {"username": uid, **user}
+    return None
