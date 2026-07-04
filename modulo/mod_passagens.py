@@ -195,20 +195,20 @@ def renderizar_cabecalho_passagens(evento, df, id_sel, pode_editar=True):
                         if v.get('dia') == dia and v.get('bus') == b:
                             qtd += 1
             perc     = min(round((qtd / CAPACIDADE) * 100), 100)
-            cor      = "#e05c5c" if qtd >= CAPACIDADE else ("#C9A227" if perc > 80 else "#3fae66")
+            cor      = "#e05c5c" if qtd >= CAPACIDADE else ("#2E6DA4" if perc > 80 else "#3fae66")
             lotado   = "<div style='font-size:0.6rem;color:#c14b4b;font-weight:700;margin-top:3px;'>🔴 Lotado</div>" \
                        if qtd >= CAPACIDADE else ""
             frotas_html += (
-                "<div style='background:#FFFFFF;border:1px solid #EFE3B8;"
+                "<div style='background:#FFFFFF;border:1px solid #D7E6F4;"
                 "border-radius:10px;padding:11px 13px;min-width:130px;flex:1;'>"
                 "<div style='display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;'>"
                 "<span style='font-size:0.72rem;font-weight:700;color:#1A1A1A;'>" + dia + " · Ônibus " + str(b) + "</span>"
-                "<span style='font-size:0.65rem;font-weight:600;color:#9C8A46;'>" + str(perc) + "%</span>"
+                "<span style='font-size:0.65rem;font-weight:600;color:#5B7BA6;'>" + str(perc) + "%</span>"
                 "</div>"
-                "<div style='background:#F1EAD2;border-radius:4px;height:6px;overflow:hidden;margin-bottom:5px;'>"
+                "<div style='background:#E7F0FA;border-radius:4px;height:6px;overflow:hidden;margin-bottom:5px;'>"
                 "<div style='width:" + str(perc) + "%;height:100%;background:" + cor + ";border-radius:4px;'></div>"
                 "</div>"
-                "<div style='font-size:0.63rem;color:#9C8A46;'>" + str(qtd) + " / " + str(CAPACIDADE) + " passageiros</div>"
+                "<div style='font-size:0.63rem;color:#5B7BA6;'>" + str(qtd) + " / " + str(CAPACIDADE) + " passageiros</div>"
                 + lotado +
                 "</div>"
             )
@@ -218,21 +218,21 @@ def renderizar_cabecalho_passagens(evento, df, id_sel, pode_editar=True):
     # ---- Montar HTML dos KPIs ----
     def kpi(lbl, val, sub, cor="#1A1A1A"):
         return (
-            "<div style='background:#FFFFFF;border:1px solid #EFE3B8;"
+            "<div style='background:#FFFFFF;border:1px solid #D7E6F4;"
             "border-radius:11px;padding:12px 14px;flex:1;min-width:110px;'>"
-            "<div style='font-size:0.62rem;color:#9C8A46;text-transform:uppercase;"
+            "<div style='font-size:0.62rem;color:#5B7BA6;text-transform:uppercase;"
             "letter-spacing:0.09em;font-weight:700;margin-bottom:5px;'>" + lbl + "</div>"
             "<div style='font-size:1.4rem;font-weight:700;color:" + cor + ";line-height:1;'>" + str(val) + "</div>"
-            "<div style='font-size:0.65rem;color:#B5AC8F;margin-top:3px;'>" + sub + "</div>"
+            "<div style='font-size:0.65rem;color:#9FB6D0;margin-top:3px;'>" + sub + "</div>"
             "</div>"
         )
 
     kpis_html = (
         kpi("Reservas",   total,                            "passageiros")
-      + kpi("Pagos",      pagos,                            str(pct) + "% confirmados", "#8A6D14")
-      + kpi("Pendentes",  pendente,                         "aguardando",                "#B4952E")
-      + kpi("Arrecadado", "R$ {:,.0f}".format(arrecadado),  "recebido",                  "#8A6D14")
-      + kpi("A Receber",  "R$ {:,.0f}".format(a_receber),   "em aberto",                 "#B4952E")
+      + kpi("Pagos",      pagos,                            str(pct) + "% confirmados", "#1F4E86")
+      + kpi("Pendentes",  pendente,                         "aguardando",                "#3B6FA0")
+      + kpi("Arrecadado", "R$ {:,.0f}".format(arrecadado),  "recebido",                  "#1F4E86")
+      + kpi("A Receber",  "R$ {:,.0f}".format(a_receber),   "em aberto",                 "#3B6FA0")
     )
 
     n_frotas_total       = sum(evento.get('frotas', {}).get(d, 1) for d in evento.get('datas', []))
@@ -250,10 +250,10 @@ def renderizar_cabecalho_passagens(evento, df, id_sel, pode_editar=True):
         "<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap' rel='stylesheet'>"
         "<style>* { box-sizing:border-box; } body { background:transparent; overflow:hidden; margin:0; }</style>"
         "<div id='root' style='font-family:Inter,sans-serif;"
-        "background:linear-gradient(180deg,#FFFFFF 0%,#FBF7EA 100%);"
-        "border:1px solid #C9A227;border-radius:16px;padding:24px 24px 20px;color:#1A1A1A;'>"
+        "background:linear-gradient(180deg,#FFFFFF 0%,#F3F8FE 100%);"
+        "border:1px solid #2E6DA4;border-radius:16px;padding:24px 24px 20px;color:#1A1A1A;'>"
 
-        "<div style='font-size:1.5rem;font-weight:700;letter-spacing:-0.5px;color:#8A6D14;'>"
+        "<div style='font-size:1.5rem;font-weight:700;letter-spacing:-0.5px;color:#1F4E86;'>"
         "🕊️ " + nome_ev +
         "</div>"
         "<div style='font-size:0.8rem;color:#6B6B6B;margin-top:4px;font-weight:400;'>"
@@ -265,10 +265,10 @@ def renderizar_cabecalho_passagens(evento, df, id_sel, pode_editar=True):
         + kpis_html +
         "</div>"
 
-        "<div style='border-top:1px solid #EFE3B8;margin:16px 0 14px;'></div>"
+        "<div style='border-top:1px solid #D7E6F4;margin:16px 0 14px;'></div>"
 
         "<div style='font-size:0.6rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;"
-        "color:#9C8A46;margin-bottom:10px;'>Ocupação por Frota</div>"
+        "color:#5B7BA6;margin-bottom:10px;'>Ocupação por Frota</div>"
         "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;'>"
         + frotas_html +
         "</div>"
@@ -306,9 +306,9 @@ def exibir_modulo_passagens(pode_editar=True):
     if not eventos_ativos:
         components.html(
             "<link href='https://fonts.googleapis.com/css2?family=Inter:wght@700&display=swap' rel='stylesheet'>"
-            "<div style='font-family:Inter,sans-serif;background:linear-gradient(180deg,#FFFFFF 0%,#FBF7EA 100%);"
-            "border:1px solid #C9A227;border-radius:16px;padding:24px;color:#1A1A1A;'>"
-            "<div style='font-size:1.5rem;font-weight:700;color:#8A6D14;'>🕊️ VGP Passagens</div>"
+            "<div style='font-family:Inter,sans-serif;background:linear-gradient(180deg,#FFFFFF 0%,#F3F8FE 100%);"
+            "border:1px solid #2E6DA4;border-radius:16px;padding:24px;color:#1A1A1A;'>"
+            "<div style='font-size:1.5rem;font-weight:700;color:#1F4E86;'>🕊️ VGP Passagens</div>"
             "<div style='font-size:0.82rem;color:#6B6B6B;margin-top:4px;'>"
             "Nenhum evento ativo" + ("" if pode_editar else " — contate um administrador") +
             "</div></div>",
@@ -401,7 +401,7 @@ def exibir_modulo_passagens(pode_editar=True):
                 pendentes = df[df['pago'] == False].sort_values('nome')
                 if pendentes.empty:
                     st.markdown(
-                        "<div style='text-align:center;padding:40px 0;color:#9C8A46;'>"
+                        "<div style='text-align:center;padding:40px 0;color:#5B7BA6;'>"
                         "<div style='font-size:2rem;'>✅</div>"
                         "<div style='font-weight:600;margin-top:8px;'>Todos pagos!</div>"
                         "</div>", unsafe_allow_html=True)
@@ -419,13 +419,13 @@ def exibir_modulo_passagens(pode_editar=True):
                             ci = st.container()
                         with ci:
                             st.markdown(
-                                "<div style='background:white;border:1px solid #EFE3B8;"
+                                "<div style='background:white;border:1px solid #D7E6F4;"
                                 "border-left:4px solid #e05c5c;border-radius:10px;"
                                 "padding:10px 13px;margin-bottom:7px;"
                                 "display:flex;justify-content:space-between;align-items:center;'>"
                                 "<div>"
                                 "<div style='font-weight:600;font-size:0.87rem;color:#1A1A1A;'>" + r['nome'] + "</div>"
-                                "<div style='font-size:0.74rem;color:#9C8A46;margin-top:2px;'>"
+                                "<div style='font-size:0.74rem;color:#5B7BA6;margin-top:2px;'>"
                                 "📍 " + grp_tag + " · " + str(len(r.get('dias_onibus') or [])) + " viagem(ns)</div>"
                                 "</div>"
                                 "<div style='font-weight:700;font-size:0.9rem;color:#c14b4b;"
@@ -438,11 +438,11 @@ def exibir_modulo_passagens(pode_editar=True):
                                     gerenciar_pax_dialog(r.to_dict(), id_sel, evento)
 
                     st.markdown(
-                        "<div style='background:#FBF1D4;border:1px solid #E9D48E;border-radius:8px;"
+                        "<div style='background:#E7F0FA;border:1px solid #BBD3EC;border-radius:8px;"
                         "padding:10px 14px;margin-top:10px;font-size:0.85rem;"
                         "display:flex;justify-content:space-between;align-items:center;'>"
                         "<strong>Total em aberto:</strong>"
-                        "<span style='font-weight:700;color:#8A6D14;'>R$ {:,.2f}</span>".format(total_pend) +
+                        "<span style='font-weight:700;color:#1F4E86;'>R$ {:,.2f}</span>".format(total_pend) +
                         "</div>", unsafe_allow_html=True)
             else:
                 st.info("Nenhuma reserva lançada ainda.")
@@ -455,7 +455,7 @@ def exibir_modulo_passagens(pode_editar=True):
             df_pagos = df[df['pago'] == True].copy()
             if df_pagos.empty:
                 st.markdown(
-                    "<div style='text-align:center;padding:60px 0;color:#9C8A46;'>"
+                    "<div style='text-align:center;padding:60px 0;color:#5B7BA6;'>"
                     "<div style='font-size:2.5rem;'>🕊️</div>"
                     "<div style='font-weight:600;margin-top:10px;'>Nenhum pagamento confirmado ainda.</div>"
                     "<div style='font-size:0.82rem;margin-top:6px;'>Só passageiros com pagamento quitado aparecem aqui.</div>"
@@ -466,23 +466,23 @@ def exibir_modulo_passagens(pode_editar=True):
                 falt_t = tot_p - emb_t
                 st.markdown(
                     "<div style='display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;'>"
-                    "<div style='background:white;border:1px solid #EFE3B8;border-radius:10px;"
+                    "<div style='background:white;border:1px solid #D7E6F4;border-radius:10px;"
                     "padding:12px 18px;flex:1;min-width:110px;'>"
-                    "<div style='font-size:0.62rem;color:#9C8A46;text-transform:uppercase;"
+                    "<div style='font-size:0.62rem;color:#5B7BA6;text-transform:uppercase;"
                     "letter-spacing:.08em;font-weight:700;'>Confirmados</div>"
                     "<div style='font-size:1.5rem;font-weight:700;color:#1A1A1A;'>" + str(tot_p) + "</div></div>"
 
-                    "<div style='background:white;border:1px solid #EFE3B8;border-left:3px solid #3fae66;"
+                    "<div style='background:white;border:1px solid #D7E6F4;border-left:3px solid #3fae66;"
                     "border-radius:10px;padding:12px 18px;flex:1;min-width:110px;'>"
-                    "<div style='font-size:0.62rem;color:#9C8A46;text-transform:uppercase;"
+                    "<div style='font-size:0.62rem;color:#5B7BA6;text-transform:uppercase;"
                     "letter-spacing:.08em;font-weight:700;'>Embarcados</div>"
                     "<div style='font-size:1.5rem;font-weight:700;color:#2f8f52;'>" + str(emb_t) + "</div></div>"
 
-                    "<div style='background:white;border:1px solid #EFE3B8;border-left:3px solid #C9A227;"
+                    "<div style='background:white;border:1px solid #D7E6F4;border-left:3px solid #2E6DA4;"
                     "border-radius:10px;padding:12px 18px;flex:1;min-width:110px;'>"
-                    "<div style='font-size:0.62rem;color:#9C8A46;text-transform:uppercase;"
+                    "<div style='font-size:0.62rem;color:#5B7BA6;text-transform:uppercase;"
                     "letter-spacing:.08em;font-weight:700;'>Aguardando</div>"
-                    "<div style='font-size:1.5rem;font-weight:700;color:#B4952E;'>" + str(falt_t) + "</div></div>"
+                    "<div style='font-size:1.5rem;font-weight:700;color:#3B6FA0;'>" + str(falt_t) + "</div></div>"
                     "</div>", unsafe_allow_html=True)
 
                 for grp in sorted(df_pagos['grupo'].unique()):
@@ -493,7 +493,7 @@ def exibir_modulo_passagens(pode_editar=True):
                         cf, co = st.columns(2)
                         with cf:
                             st.markdown("<div style='font-size:0.7rem;font-weight:700;text-transform:uppercase;"
-                                        "letter-spacing:.08em;color:#B4952E;margin-bottom:8px;'>⏳ Aguardando</div>",
+                                        "letter-spacing:.08em;color:#3B6FA0;margin-bottom:8px;'>⏳ Aguardando</div>",
                                         unsafe_allow_html=True)
                             for _, p in df_grp[df_grp['embarcou'] == False].sort_values('nome').iterrows():
                                 if pode_editar:
@@ -501,7 +501,7 @@ def exibir_modulo_passagens(pode_editar=True):
                                 else:
                                     cn = st.container()
                                 cn.markdown("<div style='font-weight:500;font-size:0.87rem;color:#1A1A1A;"
-                                            "padding:6px 0;border-bottom:1px solid #F1EAD2;'>" + p['nome'] + "</div>",
+                                            "padding:6px 0;border-bottom:1px solid #E7F0FA;'>" + p['nome'] + "</div>",
                                             unsafe_allow_html=True)
                                 if pode_editar and cb.button("✅", key="emb_" + grp + "_" + p['nome']):
                                     atualizar_embarque(id_sel, p.to_dict(), True); st.rerun()
@@ -514,9 +514,9 @@ def exibir_modulo_passagens(pode_editar=True):
                                     cn, cb = st.columns([5, 1])
                                 else:
                                     cn = st.container()
-                                cn.markdown("<div style='font-weight:500;font-size:0.87rem;color:#9C8A46;"
+                                cn.markdown("<div style='font-weight:500;font-size:0.87rem;color:#5B7BA6;"
                                             "text-decoration:line-through;padding:6px 0;"
-                                            "border-bottom:1px solid #F1EAD2;'>" + p['nome'] + "</div>",
+                                            "border-bottom:1px solid #E7F0FA;'>" + p['nome'] + "</div>",
                                             unsafe_allow_html=True)
                                 if pode_editar and cb.button("↩️", key="rem_" + grp + "_" + p['nome']):
                                     atualizar_embarque(id_sel, p.to_dict(), False); st.rerun()
