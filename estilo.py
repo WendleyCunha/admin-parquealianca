@@ -67,7 +67,7 @@ def aplicar_estilo():
     }
 
     .stApp {
-        background: linear-gradient(180deg, #FAF7EE 0%, #F4EFDD 100%) !important;
+        background: linear-gradient(180deg, #EFF5FC 0%, #E4EEFA 100%) !important;
         color: #1A1A1A !important;
     }
     .main .block-container {
@@ -80,12 +80,12 @@ def aplicar_estilo():
 
     /* ---- Barra superior clara (nada de preto) ---- */
     header[data-testid="stHeader"] {
-        background: #FFFDF6 !important;
-        border-bottom: 2px solid #E9D48E !important;
+        background: #F7FAFD !important;
+        border-bottom: 2px solid #BBD3EC !important;
         height: 3rem !important;
     }
-    header[data-testid="stHeader"] * { color: #6B5E3C !important; }
-    [data-testid="stToolbar"] { color: #6B5E3C !important; }
+    header[data-testid="stHeader"] * { color: #2F547E !important; }
+    [data-testid="stToolbar"] { color: #2F547E !important; }
 
     /* Sidebar removida do fluxo do app — caso o Streamlit ainda
        renderize o botão de colapsar, escondemos por segurança. */
@@ -110,54 +110,54 @@ def aplicar_estilo():
     }
     .pa-header-brand { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 220px; }
     .pa-header-title { font-size: 1.05rem; font-weight: 800; color: #1A1A1A; line-height: 1.15; }
-    .pa-header-sub   { font-size: 0.72rem; font-weight: 700; color: #B4952E;
+    .pa-header-sub   { font-size: 0.72rem; font-weight: 700; color: #3B6FA0;
         text-transform: uppercase; letter-spacing: 0.07em; margin-top: 1px; }
     @media (min-width: 900px) {
         .pa-header-title { font-size: 1.35rem; }
     }
     .pa-header-user {
         display: flex; align-items: center; gap: 8px;
-        background: #FFFFFF; border: 1px solid #EFE3B8; border-radius: 999px;
+        background: #FFFFFF; border: 1px solid #D7E6F4; border-radius: 999px;
         padding: 5px 8px 5px 6px; flex: 0 0 auto;
     }
     .pa-avatar {
         width: 28px; height: 28px; border-radius: 50%;
-        background: linear-gradient(135deg,#d97706,#f5c451);
+        background: linear-gradient(135deg,#1F4E86,#5B9BD9);
         display: flex; align-items: center; justify-content: center;
         font-weight: 800; font-size: 0.78rem; color: #1A1A1A; flex-shrink: 0;
     }
     .pa-header-user-name { font-size: 0.8rem; font-weight: 700; color: #1A1A1A; line-height: 1.1; }
-    .pa-header-user-role { font-size: 0.63rem; color: #9C8A46; text-transform: uppercase; letter-spacing: 0.05em; }
+    .pa-header-user-role { font-size: 0.63rem; color: #5B7BA6; text-transform: uppercase; letter-spacing: 0.05em; }
 
     /* ---- Barra de filtros dentro da página (substitui a sidebar) ---- */
     .pa-filtros {
-        background: #FFFFFF; border: 1px solid #EFE3B8; border-radius: 14px;
+        background: #FFFFFF; border: 1px solid #D7E6F4; border-radius: 14px;
         padding: 0.9rem 1rem; margin-bottom: 1rem;
         box-shadow: 0 2px 6px rgba(140,110,20,0.06);
     }
     .pa-filtros-label {
-        font-size: 0.68rem; font-weight: 800; color: #9C8A46;
+        font-size: 0.68rem; font-weight: 800; color: #5B7BA6;
         text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;
     }
     .mes-badge {
         display: inline-flex; align-items: center; gap: 6px;
-        background: #FBF1D4; border: 1px solid #E9D48E; border-radius: 999px;
-        padding: 5px 14px; font-size: 0.75rem; font-weight: 700; color: #8A6D14;
+        background: #E7F0FA; border: 1px solid #BBD3EC; border-radius: 999px;
+        padding: 5px 14px; font-size: 0.75rem; font-weight: 700; color: #1F4E86;
     }
     .mes-badge-historico {
         display: inline-flex; align-items: center; gap: 6px;
-        background: #F1EAD2; border: 1px solid #E2D5A0; border-radius: 999px;
-        padding: 5px 14px; font-size: 0.75rem; font-weight: 700; color: #6B6141;
+        background: #E7F0FA; border: 1px solid #C7DCEF; border-radius: 999px;
+        padding: 5px 14px; font-size: 0.75rem; font-weight: 700; color: #3E5E82;
     }
-    .mes-dot { width: 7px; height: 7px; border-radius: 50%; background: #C9A227; display: inline-block; }
+    .mes-dot { width: 7px; height: 7px; border-radius: 50%; background: #2E6DA4; display: inline-block; }
 
     /* ---- Tabs: pílulas claras, quebram linha no mobile ---- */
     [data-testid="stTabs"] [data-baseweb="tab-list"] {
         gap: 4px; flex-wrap: wrap !important; row-gap: 6px;
-        border-bottom: 1px solid #EFE3B8 !important;
+        border-bottom: 1px solid #D7E6F4 !important;
     }
     [data-testid="stTabs"] [data-testid="stTab"] {
-        color: #8A7D55 !important;
+        color: #4E6E93 !important;
         font-weight: 600 !important;
         font-size: 0.82rem !important;
         background: transparent !important;
@@ -166,8 +166,8 @@ def aplicar_estilo():
     }
     [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] {
         color: #1A1A1A !important;
-        background: #FBF1D4 !important;
-        border-bottom: 2px solid #C9A227 !important;
+        background: #E7F0FA !important;
+        border-bottom: 2px solid #2E6DA4 !important;
     }
     @media (max-width: 640px) {
         [data-testid="stTabs"] [data-testid="stTab"] {
@@ -177,9 +177,9 @@ def aplicar_estilo():
 
     /* ---- Cards & Metrics ---- */
     .pa-card, .pa-metric {
-        background: linear-gradient(180deg, #FFFFFF 0%, #FBF7EA 100%) !important;
-        border: 1px solid #EFE3B8 !important;
-        border-top: 3px solid #C9A227 !important;
+        background: linear-gradient(180deg, #FFFFFF 0%, #F3F8FE 100%) !important;
+        border: 1px solid #D7E6F4 !important;
+        border-top: 3px solid #2E6DA4 !important;
         border-radius: 14px !important;
         padding: 1.1rem !important;
         margin-bottom: 0.8rem !important;
@@ -189,7 +189,7 @@ def aplicar_estilo():
     .pa-card:hover, .pa-metric:hover {
         transform: translateY(-2px);
         box-shadow: 0 12px 26px rgba(140,110,20,0.14), 0 3px 10px rgba(201,162,39,0.22);
-        border-color: #C9A227 !important;
+        border-color: #2E6DA4 !important;
     }
     .pa-metric-value {
         font-size: 22px !important;
@@ -200,7 +200,7 @@ def aplicar_estilo():
     .pa-metric-label {
         font-size: 10.5px !important;
         font-weight: 700 !important;
-        color: #9C8A46 !important;
+        color: #5B7BA6 !important;
         text-transform: uppercase !important;
         letter-spacing: 0.07em !important;
         margin-top: 2px !important;
@@ -224,15 +224,15 @@ def aplicar_estilo():
     }
     .pa-aviso-atencao {
         background: #FFF6E5; border: 1px solid #F0D48E; border-radius: 10px;
-        padding: 10px 14px; color: #8A6D14; font-size: 0.85rem;
+        padding: 10px 14px; color: #1F4E86; font-size: 0.85rem;
     }
     .pa-aviso-erro {
         background: #FDECEC; border: 1px solid #F3B8B8; border-radius: 10px;
         padding: 10px 14px; color: #A32A2A; font-size: 0.85rem;
     }
     .pa-aviso-neutro {
-        background: #F4F1E4; border: 1px solid #E6DEC2; border-radius: 10px;
-        padding: 10px 14px; color: #5B5540; font-size: 0.85rem;
+        background: #F2F4F7; border: 1px solid #DDE3EA; border-radius: 10px;
+        padding: 10px 14px; color: #55606B; font-size: 0.85rem;
     }
 
     [data-testid="stTextInput"] input,
@@ -246,14 +246,14 @@ def aplicar_estilo():
 
     .stButton > button {
         background: transparent !important;
-        color: #B4952E !important;
-        border: 1.5px solid #C9A227 !important;
+        color: #3B6FA0 !important;
+        border: 1.5px solid #2E6DA4 !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
     }
     button[kind="primary"], .stButton [kind="primary"] > button {
-        background: #C9A227 !important;
-        color: #111111 !important;
+        background: #2E6DA4 !important;
+        color: #FFFFFF !important;
         border: none !important;
     }
 
@@ -265,21 +265,21 @@ def aplicar_estilo():
         font-size: 0.8rem;
     }
     .assist-table th {
-        background: #FBF1D4;
-        color: #6B5E3C;
+        background: #E7F0FA;
+        color: #2F547E;
         padding: 8px 10px;
         text-align: center;
         font-weight: 700;
         font-size: 0.74rem;
-        border: 1px solid #EFE3B8;
+        border: 1px solid #D7E6F4;
     }
     .assist-table th.col-mes {
-        background: #F5E8B8;
+        background: #DCEBFA;
         text-align: left;
     }
     .assist-table td {
         padding: 7px 10px;
-        border: 1px solid #EEE3C7;
+        border: 1px solid #D7E6F4;
         text-align: center;
         background: #FFFFFF;
         color: #1A1A1A;
@@ -287,16 +287,16 @@ def aplicar_estilo():
     .assist-table td.col-mes {
         text-align: left;
         font-weight: 500;
-        background: #FFFDF6;
+        background: #F7FAFD;
     }
     .assist-table tr.row-total td {
-        background: #FBF1D4;
+        background: #E7F0FA;
         font-weight: 700;
-        border-top: 2px solid #C9A227;
+        border-top: 2px solid #2E6DA4;
     }
     .assist-table .ano-header {
-        background: #C9A227;
-        color: #111;
+        background: #2E6DA4;
+        color: #FFFFFF;
         font-size: 1.05rem;
         font-weight: 800;
         text-align: center;
