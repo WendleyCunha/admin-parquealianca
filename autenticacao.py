@@ -1,17 +1,42 @@
 # =============================================================
 # autenticacao.py
-# Credenciais e tela de login.
+# Tela de login.
 #
-# Origem: Seção 4 ("AUTENTICAÇÃO") do antigo main.py monolítico.
-# Único ajuste: agora usa o logo personalizado (estilo.get_logo_base64)
-# quando existe um arquivo de logo na raiz do projeto — se não
-# houver, cai de volta no badge "PA" original, sem quebrar nada.
+# ATUALIZAÇÃO:
+#  - Login agora consulta a coleção "usuarios_sistema" (Firestore),
+#    criada em CONFIGURAÇÃO → "Usuários e Permissões". Cada usuário
+#    carrega consigo suas permissões por aba.
+#  - Existe um usuário administrador de fábrica (fallback) que
+#    continua funcionando SEMPRE — mesmo depois de já existirem
+#    outros usuários — para garantir que o dono do sistema nunca
+#    fique trancado para fora. Ele tem acesso total (admin=True).
+#  - Removido o texto "Portal de Relatórios". Cabeçalho agora mostra
+#    "Congregação Parque Aliança – 72249" e, abaixo, "Comissão de
+#    Funcionamento".
 # =============================================================
 import streamlit as st
 
 from estilo import get_logo_base64
+from database import autenticar_usuario
 
-_AUTH_USERS = {"wendley": "Qmerd@10"}
+_ADMIN_FALLBACK_USER  = "wendley"
+_ADMIN_FALLBACK_SENHA = "Qmerd@10"
+
+
+def _tentar_login(usuario: str, senha: str):
+    """Retorna o dict de dados do usuário autenticado, ou None."""
+    uid_digitado = (usuario or "").lower().strip()
+
+    # Admin de fábrica: sempre válido, independente do que estiver no banco.
+    if uid_digitado == _ADMIN_FALLBACK_USER and senha == _ADMIN_FALLBACK_SENHA:
+        return {
+            "username": _ADMIN_FALLBACK_USER,
+            "nome_exibicao": "Administrador",
+            "admin": True,
+            "permissoes": {},
+        }
+
+    return autenticar_usuario(usuario, senha)
 
 
 def tela_login():
@@ -35,24 +60,25 @@ def tela_login():
             'font-weight: 700; font-size: 20px; color: #111;">PA</div>'
         )
 
-    col_left, col_center, col_right = st.columns([1, 1.2, 1])
+    col_left, col_center, col_right = st.columns([1, 1.3, 1])
     with col_center:
         st.markdown(f"""
         <div style="background: #FFFFFF; border: 1px solid #EEE3B8; border-radius: 16px;
-            margin-top: 12vh; text-align: center; overflow: hidden;
+            margin-top: 8vh; text-align: center; overflow: hidden;
             box-shadow: 0 14px 34px rgba(140,110,20,0.14);">
-          <div style="background: #111111; padding: 9px 0; border-bottom: 3px solid #C9A227;">
-            <span style="color: #E9CF6B; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.14em;">
-                PARQUE ALIANÇA · PORTAL</span>
+          <div style="background: #FBF1D4; padding: 9px 0; border-bottom: 2px solid #C9A227;">
+            <span style="color: #8A6D14; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.14em;">
+                ACESSO RESTRITO</span>
           </div>
-          <div style="padding: 2.2rem 2rem 2.4rem;">
+          <div style="padding: 2.2rem 2rem 2rem;">
             <div style="display: flex; justify-content: center; margin-bottom: 1.25rem;">
               {badge_html}
             </div>
-            <h2 style="color: #1A1A1A !important; font-size: 22px; font-weight: 700; margin-bottom: 6px;">
-                Portal de Relatórios</h2>
-            <p style="color: #9C8A46 !important; font-size: 13px; margin-bottom: 0.5rem;">
-                Congregação Parque Aliança – 72249</p>
+            <h2 style="color: #1A1A1A !important; font-size: 21px; font-weight: 700; margin-bottom: 4px;">
+                Congregação Parque Aliança – 72249</h2>
+            <p style="color: #9C8A46 !important; font-size: 12.5px; font-weight: 700;
+                text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0;">
+                Comissão de Funcionamento</p>
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -65,9 +91,11 @@ def tela_login():
             entrar = st.button("Acessar Portal", use_container_width=True, type="primary")
 
         if entrar:
-            if _AUTH_USERS.get(user.lower().strip()) == senha:
-                st.session_state["autenticado"]    = True
-                st.session_state["usuario_logado"] = user.strip().title()
+            dados_usuario = _tentar_login(user, senha)
+            if dados_usuario:
+                st.session_state["autenticado"]          = True
+                st.session_state["usuario_logado"]       = dados_usuario.get("nome_exibicao") or user.strip().title()
+                st.session_state["usuario_logado_dados"] = dados_usuario
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
