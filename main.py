@@ -24,8 +24,6 @@ from constantes import ABAS_SISTEMA
 import permissoes
 
 from modulo.mod_relatorios import aba_relatorios
-from modulo.mod_triagem import aba_triagem
-from modulo.mod_consolidado import aba_consolidado
 from modulo.mod_anuncios import aba_anuncios
 from modulo.mod_passagens import exibir_modulo_passagens
 from modulo.mod_manutencao import aba_manutencao
@@ -168,13 +166,8 @@ def main():
 
         with tab:
             if aba_id == "relatorios":
-                aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, pode_editar=pode_editar)
-
-            elif aba_id == "triagem":
-                aba_triagem(df_mes, membros_db, pode_editar=pode_editar)
-
-            elif aba_id == "consolidado":
-                aba_consolidado(df, membros_db, mes_vigente, registros_assist, pode_editar=pode_editar)
+                aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df,
+                               mes_vigente, registros_assist, pode_editar=pode_editar)
 
             elif aba_id == "anuncios":
                 aba_anuncios(pode_editar=pode_editar)
