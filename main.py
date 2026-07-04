@@ -191,7 +191,7 @@ def main():
     # Rodapé
     st.markdown("""
     <div style="text-align:center;padding:2rem 0 0.5rem;
-        font-size:0.72rem;color:#9C8A46;letter-spacing:0.05em;">
+        font-size:0.72rem;color:#5B7BA6;letter-spacing:0.05em;">
         v6.0 · Parque Aliança · Sistema de Gestão
     </div>""", unsafe_allow_html=True)
 
