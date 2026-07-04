@@ -260,3 +260,71 @@ def autenticar_usuario(username, senha):
     if user and user.get("senha") == senha:
         return {"username": uid, **user}
     return None
+
+
+# ── Manutenção / consertos do Salão ─────────────────────────────
+@st.cache_data(ttl=30, show_spinner=False)
+def carregar_reparos_manutencao_cached():
+    db = inicializar_db()
+    if not db:
+        return []
+    try:
+        docs = db.collection("manutencao_reparos").stream()
+        return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+    except Exception:
+        return []
+
+
+def carregar_reparos_manutencao():
+    return carregar_reparos_manutencao_cached()
+
+
+def salvar_reparo_manutencao(dados, doc_id=None):
+    db = inicializar_db()
+    if not db:
+        st.error("Sem conexão com o banco.")
+        return False
+    dados = {**dados, "atualizado_em": firestore.SERVER_TIMESTAMP}
+    if doc_id:
+        db.collection("manutencao_reparos").document(doc_id).set(dados, merge=True)
+    else:
+        dados["criado_em"] = firestore.SERVER_TIMESTAMP
+        db.collection("manutencao_reparos").add(dados)
+    carregar_reparos_manutencao_cached.clear()
+    return True
+
+
+def deletar_reparo_manutencao(doc_id):
+    db = inicializar_db()
+    if db:
+        db.collection("manutencao_reparos").document(doc_id).delete()
+        carregar_reparos_manutencao_cached.clear()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def obter_teto_mensal_manutencao_cached():
+    db = inicializar_db()
+    if not db:
+        return None
+    try:
+        doc = db.collection("manutencao_config").document("orcamento").get()
+        if doc.exists:
+            return doc.to_dict().get("teto_mensal")
+    except Exception:
+        pass
+    return None
+
+
+def obter_teto_mensal_manutencao():
+    from catalogo_manutencao import TETO_MENSAL_PADRAO
+    valor = obter_teto_mensal_manutencao_cached()
+    return valor if valor is not None else TETO_MENSAL_PADRAO
+
+
+def salvar_teto_mensal_manutencao(valor):
+    db = inicializar_db()
+    if not db:
+        return False
+    db.collection("manutencao_config").document("orcamento").set({"teto_mensal": float(valor)})
+    obter_teto_mensal_manutencao_cached.clear()
+    return True
