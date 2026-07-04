@@ -59,10 +59,12 @@ _STATUS_OPCOES = ["Ativo", "Inativo"]
 # ── Controle de acesso por usuário ──────────────────────────────
 # "id" é a chave usada em todo lugar (permissões, roteamento das
 # abas em main.py). "label" e "icone" são só exibição.
+#
+# Triagem e Consolidado NÃO aparecem mais aqui — viraram sub-abas
+# dentro de "Relatórios" (mesmo sistema, mesmos dados). A permissão
+# de "relatorios" agora vale para as três juntas. Ver mod_relatorios.py.
 ABAS_SISTEMA = [
     {"id": "relatorios",   "label": "Relatórios",   "icone": "📋"},
-    {"id": "triagem",      "label": "Triagem",      "icone": "⚠️"},
-    {"id": "consolidado",  "label": "Consolidado",  "icone": "📈"},
     {"id": "anuncios",     "label": "Anúncios",     "icone": "📢"},
     {"id": "passagens",    "label": "Passagens",    "icone": "🚌"},
     {"id": "manutencao",   "label": "Manutenção",   "icone": "🔧"},
