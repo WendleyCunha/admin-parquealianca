@@ -65,6 +65,7 @@ ABAS_SISTEMA = [
     {"id": "consolidado",  "label": "Consolidado",  "icone": "📈"},
     {"id": "anuncios",     "label": "Anúncios",     "icone": "📢"},
     {"id": "passagens",    "label": "Passagens",    "icone": "🚌"},
+    {"id": "manutencao",   "label": "Manutenção",   "icone": "🔧"},
     {"id": "configuracao", "label": "Configuração", "icone": "⚙️"},
 ]
 
