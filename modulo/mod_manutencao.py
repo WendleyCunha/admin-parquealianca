@@ -36,10 +36,10 @@ from catalogo_manutencao import (
 import permissoes
 
 _COR_STATUS = {
-    "Planejado":    "#B4952E",
+    "Planejado":    "#64748B",
     "Em andamento": "#2f7fb8",
     "Concluído":    "#2f8f52",
-    "Cancelado":    "#9C8A46",
+    "Cancelado":    "#9AA5B1",
 }
 _COR_PRIORIDADE = {"Alta": "#c14b4b", "Média": "#e0b23c", "Baixa": "#2f8f52"}
 _STATUS_PENDENTES    = ["Planejado", "Em andamento"]
@@ -122,7 +122,7 @@ def _sub_novo_reparo():
             key="man_nota",
         )
     info_grav = TABELA_GRAVIDADE[nota_gravidade]
-    cor_prio = _COR_PRIORIDADE.get(info_grav["prioridade"], "#8A6D14")
+    cor_prio = _COR_PRIORIDADE.get(info_grav["prioridade"], "#1F4E86")
     with col7:
         st.markdown(f"""
         <div class="pa-card" style="margin-top:0;">
@@ -199,8 +199,8 @@ def _sub_lista_reparos(df, pode_editar, prefixo, vazio_msg, permitir_editar_camp
     st.caption(f"{len(df_f)} reparo(s) encontrado(s)")
 
     for _, r in df_f.sort_values("mes_execucao").iterrows():
-        cor_status = _COR_STATUS.get(r.get("status"), "#8A6D14")
-        cor_prio   = _COR_PRIORIDADE.get(r.get("prioridade"), "#8A6D14")
+        cor_status = _COR_STATUS.get(r.get("status"), "#1F4E86")
+        cor_prio   = _COR_PRIORIDADE.get(r.get("prioridade"), "#1F4E86")
         titulo = f"{r.get('categoria','')} — {str(r.get('problema',''))[:60]}"
 
         with st.expander(titulo):
@@ -210,9 +210,9 @@ def _sub_lista_reparos(df, pode_editar, prefixo, vazio_msg, permitir_editar_camp
                   font-size:0.72rem;padding:3px 10px;border-radius:999px;">{r.get('status','')}</span>
               <span style="background:{cor_prio}22;color:{cor_prio};font-weight:700;
                   font-size:0.72rem;padding:3px 10px;border-radius:999px;">Prioridade {r.get('prioridade','')}</span>
-              <span style="background:#F1EAD2;color:#6B5E3C;font-weight:700;
+              <span style="background:#E7F0FA;color:#2F547E;font-weight:700;
                   font-size:0.72rem;padding:3px 10px;border-radius:999px;">📅 {r.get('mes_execucao','')}</span>
-              <span style="background:#F1EAD2;color:#6B5E3C;font-weight:700;
+              <span style="background:#E7F0FA;color:#2F547E;font-weight:700;
                   font-size:0.72rem;padding:3px 10px;border-radius:999px;">
                   💰 R$ {float(r.get('custo_estimado', 0) or 0):,.2f}</span>
             </div>""", unsafe_allow_html=True)
@@ -293,7 +293,7 @@ def _formulario_edicao_completo(r, prefixo):
     nota_edit = st.select_slider("Nota de gravidade (1 a 5)", options=[1, 2, 3, 4, 5],
                                   value=nota_atual, key=f"nota_edit_{prefixo}_{rid}")
     info_grav_edit = TABELA_GRAVIDADE[nota_edit]
-    cor_prio_edit = _COR_PRIORIDADE.get(info_grav_edit["prioridade"], "#8A6D14")
+    cor_prio_edit = _COR_PRIORIDADE.get(info_grav_edit["prioridade"], "#1F4E86")
     st.markdown(f"""
     <div style="font-size:0.82rem;color:#6B6B6B;margin:4px 0 10px;">
       {info_grav_edit['gravidade']} · {info_grav_edit['urgencia']} · {info_grav_edit['tendencia']} ·
@@ -349,12 +349,12 @@ def _grafico_custo_mensal(df, teto):
     df_mes = df.groupby("mes_execucao")["custo_estimado"].sum().reindex(MESES_MANUTENCAO).fillna(0).reset_index()
     df_mes.columns = ["mes", "custo"]
 
-    barras = alt.Chart(df_mes).mark_bar(color="#C9A227", cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+    barras = alt.Chart(df_mes).mark_bar(color="#2E6DA4", cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
         x=alt.X("mes:N", sort=MESES_MANUTENCAO, title=None, axis=alt.Axis(labelAngle=0)),
         y=alt.Y("custo:Q", title="Custo estimado (R$)"),
         tooltip=[alt.Tooltip("mes:N", title="Mês"), alt.Tooltip("custo:Q", title="Custo (R$)", format=",.2f")],
     )
-    rotulos = barras.mark_text(dy=-8, color="#6B5E3C", fontSize=10).encode(
+    rotulos = barras.mark_text(dy=-8, color="#2F547E", fontSize=10).encode(
         text=alt.Text("custo:Q", format=",.0f")
     )
     linha_teto = alt.Chart(pd.DataFrame({"teto": [teto]})).mark_rule(
