@@ -4,7 +4,10 @@
 # por categoria e o formulário de assistência às reuniões (que
 # vive em modulo/mod_assistencia.py).
 #
-# Origem: Seção 15 ("ABA: CONSOLIDADO") do antigo main.py monolítico.
+# ATUALIZAÇÃO: aceita pode_editar=True/False e repassa para a
+# sub-aba de Assistência (a geração/download de PDFs e Excel
+# continua liberada mesmo em modo visualização, pois não altera
+# dados — apenas a gravação no Firestore é bloqueada).
 # =============================================================
 import io
 import os
@@ -26,7 +29,7 @@ from pdf_s21 import gerar_pdf_padrao_s21
 from modulo.mod_assistencia import render_tab_assistencia
 
 
-def aba_consolidado(df, membros_db, mes_vigente, registros_assistencia):
+def aba_consolidado(df, membros_db, mes_vigente, registros_assistencia, pode_editar=True):
     c1_tab, c2_tab, c3_tab = st.tabs([
         "👤 INDIVIDUAL (HISTÓRICO)",
         "📊 POR CATEGORIA",
@@ -178,4 +181,4 @@ def aba_consolidado(df, membros_db, mes_vigente, registros_assistencia):
     # ---- Sub-aba 3: Registro de Assistência ----
     with c3_tab:
         db = inicializar_db()
-        render_tab_assistencia(db, congregacao_id="parque_alianca")
+        render_tab_assistencia(db, congregacao_id="parque_alianca", pode_editar=pode_editar)
