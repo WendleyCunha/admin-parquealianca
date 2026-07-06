@@ -8,3 +8,4 @@ pypdf
 pypdf==4.0.1
 PyPDF2
 openpyxl
+xlsxwriter
