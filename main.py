@@ -12,6 +12,17 @@
 #    (ver permissoes.py e a nova sub-aba "Usuários e Permissões"
 #    em CONFIGURAÇÃO). Quem não tem acesso a uma aba simplesmente
 #    não a vê.
+#
+# ATUALIZAÇÃO (v6.1):
+#  - CORREÇÃO DE VAZAMENTO DE DADOS: a barra "📅 Mês de análise"
+#    (com os KPIs de Identificados / Em Triagem, que pertencem ao
+#    módulo de RELATÓRIOS) era renderizada para QUALQUER usuário
+#    logado, ANTES de checar as permissões dele — inclusive para
+#    quem só tinha acesso à aba Passagens. Agora essa barra (e o
+#    carregamento de membros/relatórios/assistência que a alimenta)
+#    só roda se o usuário tiver permissão em "relatorios" e/ou
+#    "configuracao" — as únicas abas que de fato usam mes_sel/df.
+#    Passagens, Anúncios e Manutenção nunca precisaram desses dados.
 # =============================================================
 import pandas as pd
 import streamlit as st
@@ -41,6 +52,11 @@ st.set_page_config(
 )
 
 aplicar_estilo()
+
+# Abas que realmente usam o "Mês de Análise" (mes_sel / df / df_ok / df_mes /
+# membros_db). Se o usuário não tiver acesso a nenhuma delas, a barra de
+# filtro e os KPIs de Identificados/Em Triagem nem são carregados.
+ABAS_QUE_USAM_FILTRO_MES = {"relatorios", "configuracao"}
 
 
 def _renderizar_cabecalho():
@@ -83,7 +99,9 @@ def _renderizar_cabecalho():
 
 
 def _renderizar_filtros(df, mes_vigente):
-    """Barra de filtros dentro da página — substitui a antiga sidebar."""
+    """Barra de filtros dentro da página — substitui a antiga sidebar.
+    Só deve ser chamada quando o usuário tem acesso a Relatórios e/ou
+    Configuração (ver ABAS_QUE_USAM_FILTRO_MES)."""
     st.markdown('<div class="pa-filtros">', unsafe_allow_html=True)
     st.markdown('<div class="pa-filtros-label">📅 Mês de análise</div>', unsafe_allow_html=True)
 
@@ -132,22 +150,10 @@ def main():
         tela_login()
         st.stop()
 
-    # Carregar dados
-    membros_db        = carregar_membros()
-    relatorios_brutos = carregar_relatorios()
-    registros_assist  = carregar_assistencia()
-    df                = processar_dataframe(relatorios_brutos, membros_db)
-    mes_vigente       = obter_mes_vigente_str()
+    # ---- Permissões PRIMEIRO: define o que este usuário pode ver ----
+    abas_permitidas = permissoes.abas_visiveis()
 
     _renderizar_cabecalho()
-    mes_sel = _renderizar_filtros(df, mes_vigente)
-
-    # DataFrames derivados
-    df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
-    df_ok  = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
-
-    # Abas que o usuário logado pode ao menos visualizar
-    abas_permitidas = permissoes.abas_visiveis()
 
     if not abas_permitidas:
         st.markdown("""
@@ -156,6 +162,32 @@ def main():
         para liberar as permissões em <strong>Configuração → Usuários e Permissões</strong>.
         </div>""", unsafe_allow_html=True)
         return
+
+    ids_permitidos = {a["id"] for a in abas_permitidas}
+    precisa_filtro_mes = bool(ids_permitidos & ABAS_QUE_USAM_FILTRO_MES)
+
+    # ---- Só carrega dados de Relatórios e mostra a barra de Mês/KPIs ----
+    # ---- se o usuário realmente tiver acesso a uma aba que usa isso. ----
+    mes_vigente = obter_mes_vigente_str()
+    if precisa_filtro_mes:
+        membros_db        = carregar_membros()
+        relatorios_brutos = carregar_relatorios()
+        registros_assist  = carregar_assistencia()
+        df                = processar_dataframe(relatorios_brutos, membros_db)
+
+        mes_sel = _renderizar_filtros(df, mes_vigente)
+
+        df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
+        df_ok  = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+    else:
+        # Usuário sem acesso a Relatórios/Configuração: nenhum dado de
+        # relatório é carregado nem exibido — nem a barra, nem os KPIs.
+        membros_db       = {}
+        registros_assist = None
+        df     = pd.DataFrame()
+        df_mes = pd.DataFrame()
+        df_ok  = pd.DataFrame()
+        mes_sel = mes_vigente
 
     labels_abas = [f"{a['icone']}  {a['label'].upper()}" for a in abas_permitidas]
     tabs = st.tabs(labels_abas)
@@ -185,7 +217,7 @@ def main():
     st.markdown("""
     <div style="text-align:center;padding:2rem 0 0.5rem;
         font-size:0.72rem;color:#5B7BA6;letter-spacing:0.05em;">
-        v6.0 · Parque Aliança · Sistema de Gestão
+        v6.1 · Parque Aliança · Sistema de Gestão
     </div>""", unsafe_allow_html=True)
 
 
