@@ -235,6 +235,14 @@ div[data-testid="stNumberInput"] input {{
 div[data-testid="stNumberInput"] button {{ display: none !important; }}
 [data-testid="stNumberInputStepUp"],
 [data-testid="stNumberInputStepDown"] {{ display: none !important; }}
+
+/* CORREÇÃO (tentativa 2): label_visibility="collapsed" era o único
+   lugar do sistema que escondia o rótulo dessa forma (em todo o
+   resto do app o number_input sempre mostra o rótulo). Trocamos
+   para rótulo visível por padrão + escondido só visualmente via
+   CSS, evitando depender do modo "collapsed" interno do Streamlit,
+   que aparenta estar com problema neste ambiente. */
+div[data-testid="stNumberInput"] label {{ display: none !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -290,15 +298,17 @@ def _bloco_reuniao(db, cong_id: str, tipo: str, ano_ref: str, prefixo: str, pode
 
         with col_qtd:
             qtd = st.number_input(
-                "qtd", min_value=0, max_value=9999, value=val_qtd, step=1,
-                label_visibility="collapsed", key=f"{prefixo}_{mes}_qtd",
+                "Qtd", min_value=0, max_value=9999,
+                value=val_qtd, step=1,
+                key=f"{prefixo}_{mes}_qtd",
                 disabled=not pode_editar,
             )
 
         with col_tot:
             total = st.number_input(
-                "tot", min_value=0, max_value=99999, value=val_total, step=1,
-                label_visibility="collapsed", key=f"{prefixo}_{mes}_tot",
+                "Total", min_value=0, max_value=99999,
+                value=val_total, step=1,
+                key=f"{prefixo}_{mes}_tot",
                 disabled=not pode_editar,
             )
 
