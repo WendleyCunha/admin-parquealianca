@@ -172,27 +172,50 @@ h3 { font-weight: 700 !important; font-size: 1.02rem !important; }
 }
 .mes-dot { width: 7px; height: 7px; border-radius: 50%; background: __PRIMARIA__; display: inline-block; }
 
-/* ---- Tabs: pílulas claras, quebram linha no mobile ---- */
+/* ---- Tabs: segmented control moderno (pílulas), não risquinho ---- */
 [data-testid="stTabs"] [data-baseweb="tab-list"] {
-    gap: 4px; flex-wrap: wrap !important; row-gap: 6px;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+    row-gap: 8px;
+    background: __CARD_2__ !important;
+    border: 1px solid __BORDA__ !important;
     border-bottom: 1px solid __BORDA__ !important;
+    border-radius: 14px !important;
+    padding: 6px !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+[data-testid="stTabs"] [data-baseweb="tab-border"] {
+    display: none !important;
 }
 [data-testid="stTabs"] [data-testid="stTab"] {
     color: __TAB_INATIVA__ !important;
     font-weight: 600 !important;
     font-size: 0.82rem !important;
     background: transparent !important;
-    border-radius: 8px 8px 0 0 !important;
-    padding: 8px 12px !important;
+    border-radius: 10px !important;
+    padding: 9px 16px !important;
+    border: 1px solid transparent !important;
+    transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease !important;
+}
+[data-testid="stTabs"] [data-testid="stTab"]:hover {
+    background: __PRIMARIA_CLARA__ !important;
+    color: __PRIMARIA_ESCURA__ !important;
 }
 [data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"] {
-    color: __TEXTO__ !important;
-    background: __PRIMARIA_CLARA__ !important;
-    border-bottom: 2px solid __PRIMARIA__ !important;
+    color: __CARD_1__ !important;
+    background: __PRIMARIA__ !important;
+    border: 1px solid __PRIMARIA__ !important;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.14), 0 1px 3px rgba(0,0,0,0.10) !important;
+    font-weight: 800 !important;
+    transform: translateY(-1px);
+}
+[data-testid="stTabs"] [data-testid="stTab"][aria-selected="true"]:hover {
+    background: __PRIMARIA__ !important;
+    color: __CARD_1__ !important;
 }
 @media (max-width: 640px) {
     [data-testid="stTabs"] [data-testid="stTab"] {
-        font-size: 0.74rem !important; padding: 6px 9px !important;
+        font-size: 0.74rem !important; padding: 7px 11px !important;
     }
 }
 
