@@ -46,7 +46,6 @@ import os
 import base64
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from tema import CORES, GRADIENTE_AVATAR, FONTE, FONTE_GOOGLE_IMPORT
 
@@ -219,14 +218,15 @@ h3 { font-weight: 700 !important; font-size: 1.02rem !important; }
     }
 }
 
-/* NOTA (v6.3): a correção do vazamento de conteúdo entre abas deixou
-   de ser feita via CSS aqui (a suposição de que o Streamlit usa o
-   atributo "hidden" no painel inativo se mostrou errada nesta versão/
-   ambiente, e a regra chegou a forçar o efeito contrário — todos os
-   painéis visíveis ao mesmo tempo). A correção agora é feita via
-   JavaScript, em aplicar_fix_abas() logo abaixo, que usa o atributo
-   padrão de acessibilidade "aria-selected" (estável entre versões do
-   Streamlit) em vez de tentar adivinhar a estrutura interna do HTML. */
+/* NOTA (v6.4): o bloco de CSS acima (pílulas para [data-testid="stTab"])
+   estilizava as abas NATIVAS do Streamlit (st.tabs()). Como todo o
+   sistema migrou para abas_persistentes() (botões st.button, não mais
+   st.tabs()), esse seletor não encontra mais nenhum elemento — é CSS
+   inofensivo mas sem efeito algum hoje. O visual da aba ativa/inativa
+   em abas_persistentes() vem do estilo geral de botões mais abaixo
+   (.stButton > button e button[kind="primary"]). Mantido aqui só como
+   referência caso st.tabs() nativo volte a ser usado em algum lugar
+   novo no futuro. */
 @keyframes pa-fade-in {
     from { opacity: 0; transform: translateY(2px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -420,70 +420,12 @@ def aplicar_estilo():
     st.markdown(_montar_css(), unsafe_allow_html=True)
 
 
-# =============================================================
-# CORREÇÃO DEFINITIVA — vazamento de conteúdo entre abas (v6.3)
-# =============================================================
-# Em vez de tentar adivinhar via CSS qual atributo/estrutura interna
-# o Streamlit usa para esconder o painel de abas inativas (isso já
-# se mostrou frágil e dependente de versão), este JS usa o atributo
-# padrão de acessibilidade ARIA "aria-selected" — que é garantido
-# pelo padrão de abas (WAI-ARIA Tabs Pattern) e não muda entre
-# versões do Streamlit/BaseWeb.
-#
-# Como funciona:
-#  1. Encontra todo container de abas ([data-testid="stTabs"]).
-#  2. Para cada botão de aba (role="tab"), lê seu aria-controls —
-#     que aponta pro id do painel correspondente — e o aria-selected.
-#  3. Se aria-selected="true", mostra o painel; senão, esconde com
-#     display:none em !important (via style.setProperty, que tem
-#     prioridade máxima, acima até de CSS !important em folha de
-#     estilo externa).
-#  4. Um MutationObserver reaplica isso sempre que o Streamlit
-#     alterar o aria-selected (ao trocar de aba) ou o DOM mudar.
-#  5. Um setInterval de reforço garante que, mesmo que o observer
-#     perca algum evento (ex: re-render do React que substitui nós
-#     inteiros em vez de só mudar atributos), a tela se autocorrige
-#     em no máximo 300ms.
-#
-# Chame esta função UMA VEZ no main.py, logo após aplicar_estilo().
-# =============================================================
-def aplicar_fix_abas():
-    components.html("""
-    <script>
-    (function() {
-        function fixTabs() {
-            try {
-                var doc = window.parent.document;
-                var containers = doc.querySelectorAll('[data-testid="stTabs"]');
-                containers.forEach(function(container) {
-                    var botoes = container.querySelectorAll('[role="tab"]');
-                    botoes.forEach(function(btn) {
-                        var painelId = btn.getAttribute('aria-controls');
-                        if (!painelId) return;
-                        var painel = doc.getElementById(painelId);
-                        if (!painel) return;
-                        var selecionada = btn.getAttribute('aria-selected') === 'true';
-                        painel.style.setProperty('display', selecionada ? '' : 'none', 'important');
-                    });
-                });
-            } catch (e) {
-                /* silencioso — ambiente pode restringir acesso ao parent */
-            }
-        }
-
-        fixTabs();
-
-        try {
-            var mo = new MutationObserver(function() { fixTabs(); });
-            mo.observe(window.parent.document.body, {
-                attributes: true,
-                attributeFilter: ['aria-selected'],
-                subtree: true,
-                childList: true,
-            });
-        } catch (e) {}
-
-        setInterval(fixTabs, 300);
-    })();
-    </script>
-    """, height=0)
+# NOTA (v6.4): a função aplicar_fix_abas() (JS via components.html para
+# corrigir vazamento de conteúdo em st.tabs() nativo) foi REMOVIDA daqui.
+# Desde que todo o sistema migrou para abas_persistentes()
+# (tabs_persistentes.py), não existe mais nenhum st.tabs() nativo no
+# app — a função não tinha mais nada pra corrigir e só consumia recursos
+# à toa em todo rerun (iframe + observer + polling de 300ms). Se algum
+# dia voltar a usar st.tabs() nativo em algum lugar novo, essa técnica
+# (JS baseado em aria-selected) pode ser resgatada do histórico do
+# projeto.
