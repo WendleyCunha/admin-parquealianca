@@ -1,13 +1,22 @@
 # =============================================================
 # modulo/mod_consolidado.py
-# Aba "CONSOLIDADO" — histórico individual (cartão S-21), resumo
-# por categoria e o formulário de assistência às reuniões (que
-# vive em modulo/mod_assistencia.py).
+# Aba "CONSOLIDADO" — histórico individual (cartão S-21) e resumo
+# por categoria.
 #
-# ATUALIZAÇÃO: aceita pode_editar=True/False e repassa para a
-# sub-aba de Assistência (a geração/download de PDFs e Excel
-# continua liberada mesmo em modo visualização, pois não altera
-# dados — apenas a gravação no Firestore é bloqueada).
+# ATUALIZAÇÃO: aceita pode_editar=True/False.
+#
+# ATUALIZAÇÃO (v1.1) — CORREÇÃO DO SUMIÇO DOS CAMPOS DE ASSISTÊNCIA:
+#  - A sub-aba "🏛️ Registro de Assistência" foi REMOVIDA daqui e
+#    promovida para uma sub-aba direta de Relatórios (mod_relatorios.py),
+#    no mesmo nível de Triagem/Consolidado. O motivo: com ela aqui
+#    dentro, o formulário ficava 3 níveis de abas aninhadas abaixo
+#    da tela principal (Relatórios > Consolidado > Assistência), e
+#    nessa profundidade os campos number_input do formulário
+#    deixavam de renderizar (limitação conhecida do Streamlit com
+#    abas/colunas aninhadas demais). Um nível a menos resolve.
+#  - O parâmetro registros_assistencia continua aceito por
+#    compatibilidade com quem chama esta função, mas não é mais
+#    usado aqui (a sub-aba que o usava foi movida).
 # =============================================================
 import io
 import os
@@ -22,18 +31,15 @@ _root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
-from database import inicializar_db
 from utilitarios import ordenar_df_por_mes
 from constantes import categorias_lista
 from pdf_s21 import gerar_pdf_padrao_s21
-from modulo.mod_assistencia import render_tab_assistencia
 
 
 def aba_consolidado(df, membros_db, mes_vigente, registros_assistencia, pode_editar=True):
-    c1_tab, c2_tab, c3_tab = st.tabs([
+    c1_tab, c2_tab = st.tabs([
         "👤 INDIVIDUAL (HISTÓRICO)",
         "📊 POR CATEGORIA",
-        "🏛️ REGISTRO DE ASSISTÊNCIA",
     ])
 
     # ---- Sub-aba 1: Individual ----
@@ -177,8 +183,3 @@ def aba_consolidado(df, membros_db, mes_vigente, registros_assistencia, pode_edi
                 )
         else:
             st.info("Sem dados para esta categoria.")
-
-    # ---- Sub-aba 3: Registro de Assistência ----
-    with c3_tab:
-        db = inicializar_db()
-        render_tab_assistencia(db, congregacao_id="parque_alianca", pode_editar=pode_editar)
