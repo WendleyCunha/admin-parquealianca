@@ -24,8 +24,14 @@
 #    sub-abas cuja lista muda dinamicamente conforme a permissão
 #    do usuário (pode_editar), essa posição varia entre execuções
 #    e o Streamlit deixa de montar o widget, sem lançar erro.
-#    Corrigido adicionando key="man_custo" e value=0.0 explícito,
-#    igual ao padrão já usado nos outros campos.
+# CORREÇÃO (v1.2):
+#  - As sub-abas desta tela (Novo Reparo/Pendentes/Finalizados/Painel)
+#    usavam st.tabs(), que perde a aba selecionada sempre que uma ação
+#    chama st.rerun() — e aqui quase toda ação chama (salvar, excluir,
+#    mudar status). O sintoma era: depois de salvar algo, a tela
+#    "jogava" o conteúdo de todas as sub-abas na tela ao mesmo tempo.
+#    Trocado por abas_persistentes() (tabs_persistentes.py), que guarda
+#    a aba ativa em st.session_state — sobrevive a qualquer rerun.
 # =============================================================
 import os
 import sys
@@ -48,6 +54,7 @@ from catalogo_manutencao import (
 )
 import permissoes
 from tema import CORES
+from tabs_persistentes import abas_persistentes
 
 _COR_STATUS = {
     "Planejado":    "#64748B",
@@ -73,26 +80,26 @@ def aba_manutencao(pode_editar=True):
     labels = (["➕ Novo Reparo"] if pode_editar else []) + [
         "🗂️ Pendentes", "✅ Finalizados", "📊 Painel de Orçamento",
     ]
-    tabs = st.tabs(labels)
+    idx_ativa = abas_persistentes(labels, key="abas_manutencao")
     idx = 0
 
     if pode_editar:
-        with tabs[0]:
+        if idx_ativa == 0:
             _sub_novo_reparo()
         idx = 1
 
     df_pend = df[df["status"].isin(_STATUS_PENDENTES)] if not df.empty and "status" in df.columns else pd.DataFrame()
     df_fin  = df[df["status"].isin(_STATUS_FINALIZADOS)] if not df.empty and "status" in df.columns else pd.DataFrame()
 
-    with tabs[idx]:
+    if idx_ativa == idx:
         _sub_lista_reparos(df_pend, pode_editar, prefixo="pend",
                             vazio_msg="Nenhum reparo pendente no momento. 🎉")
 
-    with tabs[idx + 1]:
+    elif idx_ativa == idx + 1:
         _sub_lista_reparos(df_fin, pode_editar, prefixo="fin",
                             vazio_msg="Nenhum reparo finalizado ainda.", permitir_editar_campos=False)
 
-    with tabs[idx + 2]:
+    elif idx_ativa == idx + 2:
         _sub_painel(df, pode_editar)
 
 
