@@ -13,6 +13,19 @@
 #    Streamlit, não precisa instalar nada): barras de custo mensal
 #    com a linha do teto, barras de status e barras empilhadas de
 #    prioridade por mês — no mesmo espírito do painel da planilha.
+#
+# CORREÇÃO (v1.1):
+#  - O campo "Custo estimado (R$)" em Novo Reparo não aparecia na
+#    tela (rótulo era exibido, mas a caixa de input, não). Era o
+#    único widget desta tela sem "key" explícita — nos demais
+#    (categoria, problema, mês, status, etc.) sempre foi usado
+#    key=... Sem key, a identidade do widget fica presa à posição
+#    dele na árvore de elementos; como esta tela vive dentro de
+#    sub-abas cuja lista muda dinamicamente conforme a permissão
+#    do usuário (pode_editar), essa posição varia entre execuções
+#    e o Streamlit deixa de montar o widget, sem lançar erro.
+#    Corrigido adicionando key="man_custo" e value=0.0 explícito,
+#    igual ao padrão já usado nos outros campos.
 # =============================================================
 import os
 import sys
@@ -107,10 +120,23 @@ def _sub_novo_reparo():
         "Observações adicionais" + (" *" if eh_outro else ""),
         placeholder="Detalhe o problema específico encontrado no salão"
                      + (" (obrigatório para itens 'Outro Problema...')" if eh_outro else ""),
+        key="man_obs",
     )
 
     col3, col4, col5 = st.columns(3)
-    custo        = col3.number_input("Custo estimado (R$)", min_value=0.0, step=10.0, format="%.2f")
+    # CORREÇÃO: key + value explícitos — era o único campo desta tela
+    # sem "key", e por isso deixava de ser renderizado (ver nota no
+    # topo do arquivo). Esse valor é o que alimenta o Painel de
+    # Orçamento (KPIs e gráfico de custo mensal x teto).
+    custo = col3.number_input(
+        "Custo estimado (R$)",
+        min_value=0.0,
+        value=0.0,
+        step=10.0,
+        format="%.2f",
+        key="man_custo",
+        help="Valor estimado do reparo, em reais. Alimenta o Painel de Orçamento.",
+    )
     risco_alto   = col4.radio("Trabalho de alto risco? (DC-82)", ["Não", "Sim"], horizontal=True, key="man_risco_alto")
     consultar_tm = col5.radio("Precisa consultar o TM?",         ["Não", "Sim"], horizontal=True, key="man_tm")
 
@@ -140,10 +166,10 @@ def _sub_novo_reparo():
     st.markdown("---")
     col8, col9, col10 = st.columns(3)
     mes_exec = col8.selectbox("Mês de execução", MESES_MANUTENCAO, key="man_mes")
-    executor = col9.text_input("Nome do executor", placeholder="Opcional")
+    executor = col9.text_input("Nome do executor", placeholder="Opcional", key="man_executor")
     status   = col10.selectbox("Status", STATUS_MANUTENCAO, key="man_status")
 
-    if st.button("💾 Salvar Reparo", type="primary", use_container_width=True):
+    if st.button("💾 Salvar Reparo", type="primary", use_container_width=True, key="man_salvar_btn"):
         if eh_outro and not observacoes.strip():
             st.error("Para 'Outro Problema', descreva nas observações adicionais.")
         else:
@@ -407,10 +433,11 @@ def _sub_painel(df, pode_editar):
         col_teto, col_btn = st.columns([2, 1])
         with col_teto:
             novo_teto = st.number_input("Teto mensal de orçamento (R$)", min_value=0.0,
-                                         value=float(teto_atual), step=50.0, format="%.2f")
+                                         value=float(teto_atual), step=50.0, format="%.2f",
+                                         key="man_teto_mensal")
         with col_btn:
             st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
-            if st.button("💾 Salvar teto", use_container_width=True):
+            if st.button("💾 Salvar teto", use_container_width=True, key="man_salvar_teto_btn"):
                 salvar_teto_mensal_manutencao(novo_teto)
                 st.toast("✅ Teto mensal atualizado!")
                 st.rerun()
