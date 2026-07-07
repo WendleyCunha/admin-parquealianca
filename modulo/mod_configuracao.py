@@ -10,6 +10,19 @@
 #    somente visualizar, ou visualizar e editar.
 #  - aceita pode_editar=True/False (permissão da própria aba
 #    Configuração). Sem edição, tudo aparece só para consulta.
+#
+# CORREÇÃO (v1.1):
+#  - Os dois conjuntos de sub-abas deste arquivo (o principal — Editar
+#    Relatórios/Gerenciar Membros/Novo Membro/Usuários e Permissões —
+#    e o aninhado dentro de Gerenciar Membros — Ativos/Inativos) usavam
+#    st.tabs(), que perde a aba selecionada sempre que uma ação chama
+#    st.rerun(). E quase toda ação aqui chama (salvar relatório,
+#    excluir, salvar membro, criar/editar usuário). O sintoma era o
+#    conteúdo de todas as sub-abas aparecendo junto depois de qualquer
+#    uma dessas ações.
+#    Trocado por abas_persistentes() (tabs_persistentes.py) nos dois
+#    conjuntos — a aba ativa fica em st.session_state e sobrevive a
+#    qualquer rerun.
 # =============================================================
 import os
 import sys
@@ -30,21 +43,22 @@ from constantes import (
     ABAS_SISTEMA, NIVEIS_PERMISSAO, NIVEIS_PERMISSAO_LABELS,
 )
 import permissoes
+from tabs_persistentes import abas_persistentes
 
 
 def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
-    sub_cfg = st.tabs([
+    idx_cfg = abas_persistentes([
         "✏️ EDITAR RELATÓRIOS",
         "👥 GERENCIAR MEMBROS",
         "➕ NOVO MEMBRO",
         "🔐 USUÁRIOS E PERMISSÕES",
-    ])
+    ], key="abas_configuracao")
 
     if not pode_editar:
         permissoes.aviso_somente_leitura()
 
     # ---- Sub-aba: Editar Relatórios ----
-    with sub_cfg[0]:
+    if idx_cfg == 0:
         st.markdown(f"#### Relatórios Identificados — {mes_sel}")
         if not df.empty:
             df_ok_mes = df[
@@ -94,11 +108,13 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
                                         deletar_relatorio(r['id'])
 
     # ---- Sub-aba: Gerenciar Membros ----
-    with sub_cfg[1]:
+    elif idx_cfg == 1:
         st.markdown("#### 👥 Gerenciar Membros")
         st.caption("Categoria aqui é a FONTE DA VERDADE para todos os relatórios.")
 
-        tab_ativos, tab_inativos = st.tabs(["👥 Membros Ativos", "💤 Membros Inativos"])
+        idx_membros = abas_persistentes(
+            ["👥 Membros Ativos", "💤 Membros Inativos"], key="abas_membros"
+        )
 
         def renderizar_formulario_membro(nome):
             m        = membros_db[nome]
@@ -179,7 +195,7 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
 
         membros_ordenados = sorted(membros_db.keys())
 
-        with tab_ativos:
+        if idx_membros == 0:
             ativos = [n for n in membros_ordenados if membros_db[n].get('status', 'Ativo') == 'Ativo']
             if ativos:
                 for nome in ativos:
@@ -187,7 +203,7 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
             else:
                 st.info("Nenhum membro ativo cadastrado.")
 
-        with tab_inativos:
+        elif idx_membros == 1:
             inativos = [n for n in membros_ordenados if membros_db[n].get('status', 'Ativo') == 'Inativo']
             if inativos:
                 for nome in inativos:
@@ -196,7 +212,7 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
                 st.info("Nenhum membro inativo.")
 
     # ---- Sub-aba: Novo Membro ----
-    with sub_cfg[2]:
+    elif idx_cfg == 2:
         st.markdown("#### ➕ Cadastrar Novo Membro")
         if not pode_editar:
             st.caption("Sem permissão de edição nesta aba.")
@@ -242,8 +258,8 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
                     else:
                         st.error("Informe o nome completo.")
 
-    # ---- Sub-aba: Usuários e Permissões (NOVA) ----
-    with sub_cfg[3]:
+    # ---- Sub-aba: Usuários e Permissões ----
+    elif idx_cfg == 3:
         _sub_usuarios_e_permissoes(pode_editar=pode_editar)
 
 
