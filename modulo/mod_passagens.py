@@ -1,77 +1,56 @@
-import streamlit as st
-import streamlit.components.v1 as components
-from google.cloud import firestore
-from google.oauth2 import service_account
-import json
-import pandas as pd
-from datetime import datetime
+# =============================================================
+# modulo/mod_passagens.py
+# Aba "PASSAGENS" (VGP) — controle de reservas, pagamentos e
+# embarque para eventos/excursões da congregação.
+#
+# CORREÇÃO (v2.0) — INTEGRAÇÃO COMPLETA AO SISTEMA:
+#  - Este arquivo era originalmente um app Streamlit standalone
+#    (tinha seu próprio st.set_page_config() e bloco <style>, e se
+#    conectava a um projeto Firestore separado, "bancowendley").
+#    Isso quebrava a integração de duas formas:
+#      1) st.set_page_config() só pode ser chamado UMA VEZ por app —
+#         como o main.py já chama, essa segunda chamada aqui geraria
+#         erro do Streamlit.
+#      2) Rodava num banco de dados diferente do resto do sistema
+#         (bancowendley em vez de wendleydesenvolvimento), então os
+#         dados de passageiros ficavam isolados dos outros módulos.
+#    Corrigido: removido o set_page_config() e o <style> duplicados
+#    (o estilo.py central já cobre isso), e trocado o Firestore
+#    próprio pelo inicializar_db() de database.py — o mesmo banco
+#    usado por todo o resto do app.
+#    ATENÇÃO: como o banco muda, dados que existiam no projeto antigo
+#    (bancowendley) não aparecem automaticamente aqui — são bancos
+#    físicos diferentes. Use o bloco "Importar Passageiros de
+#    Planilha" (já existente neste arquivo) para trazê-los de volta,
+#    se necessário.
+#
+#  - As abas (Reserva & Pagamentos / Chamada de Embarque / Ajustes)
+#    usavam st.tabs(), que perde a aba selecionada em qualquer rerun
+#    — e aqui quase toda ação causa rerun (confirmar reserva, marcar
+#    embarque, salvar no diálogo de gerenciar reserva, importar
+#    planilha). Trocado por abas_persistentes() (tabs_persistentes.py).
+# =============================================================
+import os
+import sys
 import io
 import time
 import ast
 from collections import Counter
+from datetime import datetime
 
-# =========================================================
-# CONFIGURAÇÃO
-# =========================================================
+import streamlit as st
+import streamlit.components.v1 as components
+import pandas as pd
 
-st.set_page_config(
-    page_title="VGP Passagens",
-    layout="wide",
-    page_icon="🕊️",
-    initial_sidebar_state="collapsed"
-)
+_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-.stApp { background-color: #f7f8fc; }
-[data-testid="collapsedControl"] { display: none !important; }
-.stTabs [data-baseweb="tab-list"] {
-    gap: 4px; background: white; padding: 5px;
-    border-radius: 12px; border: 1px solid #e8eaf0;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-}
-.stTabs [data-baseweb="tab"] {
-    height: 38px; background: transparent; border-radius: 8px;
-    padding: 0 16px; font-weight: 500; font-size: 0.84rem; color: #64748b; border: none;
-}
-.stTabs [aria-selected="true"] {
-    background: #1a3a6b !important; color: white !important;
-    box-shadow: 0 2px 8px rgba(26,58,107,0.25);
-}
-.stButton > button { border-radius: 8px; font-weight: 500; }
-.stButton > button[kind="primary"] { background: #1a3a6b !important; border-color: #1a3a6b !important; }
-.stButton > button[kind="primary"]:hover { background: #2456a4 !important; border-color: #2456a4 !important; }
-.stTextInput > div > div > input,
-.stSelectbox > div > div > div,
-.stNumberInput > div > div > input { border-radius: 8px !important; border-color: #e2e8f0 !important; }
-.stForm { border: none !important; padding: 0 !important; }
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
-@media (max-width: 600px) {
-    .block-container { padding-left: 10px !important; padding-right: 10px !important; padding-top: 10px !important; }
-}
-</style>
-""", unsafe_allow_html=True)
+from database import inicializar_db
+from tabs_persistentes import abas_persistentes
 
 CAPACIDADE = 46
 GRUPOS_PADRAO = ["Rosas", "Engenho", "Cohab", "Geral"]
-
-# =========================================================
-# DB
-# =========================================================
-
-def inicializar_db():
-    if "db" not in st.session_state:
-        try:
-            key_dict = json.loads(st.secrets["textkey"])
-            creds = service_account.Credentials.from_service_account_info(key_dict)
-            st.session_state.db = firestore.Client(credentials=creds, project="bancowendley")
-        except Exception as e:
-            st.error(f"Erro no Firebase: {e}")
-            return None
-    return st.session_state.db
 
 # =========================================================
 # DADOS
@@ -142,6 +121,8 @@ def deletar_passageiro(id_evento, nome, rg):
 
 def carregar_passageiros(id_evento):
     db = inicializar_db()
+    if not db:
+        return []
     return [p.to_dict() for p in db.collection("eventos").document(id_evento).collection("passageiros").stream()]
 
 def carregar_eventos():
@@ -425,14 +406,13 @@ def renderizar_cabecalho(evento, df, id_sel, pode_editar=True):
 
     # ---- Calcular altura conservadora (pior caso = mobile 1 coluna) ----
     n_frotas_total       = sum(evento.get('frotas', {}).get(d, 1) for d in evento.get('datas', []))
-    # No mobile mais estreito, cada frota pode ocupar linha própria (1 col)
-    linhas_frota_mobile  = n_frotas_total   # worst case: 1 por linha
+    linhas_frota_mobile  = n_frotas_total
     altura = (
-        72                            # título + subtítulo
-        + 3 * 78                      # KPIs mobile: 5 cards em 2 col = 3 linhas
-        + 50                          # divisor + label frotas
-        + linhas_frota_mobile * 82    # cards frota (worst: 1 col)
-        + 56                          # padding top+bottom + margem extra
+        72
+        + 3 * 78
+        + 50
+        + linhas_frota_mobile * 82
+        + 56
     )
 
     # ---- HTML completo com JS de auto-resize ----
@@ -546,16 +526,16 @@ def exibir_modulo_passagens(pode_editar=True):
     renderizar_cabecalho(evento, df, id_sel, pode_editar)
 
     # ABAS
-    tab_reserva, tab_chamada, tab_ajustes = st.tabs([
+    idx_ativa = abas_persistentes([
         "📝 Reserva & Pagamentos",
         "🚌 Chamada de Embarque",
-        "⚙️ Ajustes"
-    ])
+        "⚙️ Ajustes",
+    ], key="abas_passagens")
 
     # -------------------------------------------------------
     # ABA 1: RESERVA + PENDENTES
     # -------------------------------------------------------
-    with tab_reserva:
+    if idx_ativa == 0:
         col_form, col_pend = st.columns([1, 1], gap="large")
 
         with col_form:
@@ -647,7 +627,7 @@ def exibir_modulo_passagens(pode_editar=True):
     # -------------------------------------------------------
     # ABA 2: CHAMADA
     # -------------------------------------------------------
-    with tab_chamada:
+    elif idx_ativa == 1:
         if df.empty:
             st.info("Nenhuma reserva para exibir.")
         else:
@@ -721,7 +701,7 @@ def exibir_modulo_passagens(pode_editar=True):
     # -------------------------------------------------------
     # ABA 3: AJUSTES
     # -------------------------------------------------------
-    with tab_ajustes:
+    elif idx_ativa == 2:
         ca1, ca2 = st.columns(2)
         with ca1:
             st.markdown("**Novo Evento**")
@@ -830,7 +810,3 @@ def _bloco_importar_planilha():
                     st.rerun()
                 else:
                     st.error("Não foi possível conectar ao banco de dados para importar.")
-
-
-if __name__ == "__main__":
-    exibir_modulo_passagens()
