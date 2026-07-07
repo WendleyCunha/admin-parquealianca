@@ -25,6 +25,14 @@
 #    aqui em Relatórios (mesmo nível de Triagem/Consolidado), em vez
 #    de morar dentro de Consolidado. Isso devolve a profundidade de
 #    2 níveis que funcionava antes. Removido de mod_consolidado.py.
+#
+# CORREÇÃO (v1.2):
+#  - As 7 sub-abas desta tela usavam st.tabs(), que perde a aba
+#    selecionada em qualquer rerun — e "Dar Baixa em Todos"/"Dar Baixa"
+#    (na sub-aba Pendências) chamam st.rerun() diretamente. Era esse
+#    o principal gerador do "todas as abas aparecem juntas" relatado,
+#    já que esta é a tela mais usada e com mais sub-abas do sistema.
+#    Trocado por abas_persistentes() (tabs_persistentes.py).
 # =============================================================
 import os
 import sys
@@ -43,6 +51,7 @@ import permissoes
 from modulo.mod_triagem import aba_triagem
 from modulo.mod_consolidado import aba_consolidado
 from modulo.mod_assistencia import render_tab_assistencia
+from tabs_persistentes import abas_persistentes
 
 
 def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registros_assistencia, pode_editar=True):
@@ -50,15 +59,15 @@ def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registro
     if not pode_editar:
         permissoes.aviso_somente_leitura()
 
-    sub_rel = st.tabs([
+    idx_rel = abas_persistentes([
         "👤 PUBLICADOR", "🌟 P. AUXILIAR", "💎 P. REGULAR", "⏳ PENDÊNCIAS",
         "⚠️ TRIAGEM", "📈 CONSOLIDADO", "🏛️ ASSISTÊNCIA",
-    ])
+    ], key="abas_relatorios")
 
     entregaram = set(df_ok['nome_oficial'].unique()) if not df_ok.empty else set()
 
     for i, cat in enumerate(categorias_lista):
-        with sub_rel[i]:
+        if idx_rel == i:
             df_cat = df_ok[df_ok['cat_oficial'] == cat] if not df_ok.empty else pd.DataFrame()
 
             if df_cat.empty:
@@ -96,7 +105,7 @@ def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registro
                             f'</div>',
                             unsafe_allow_html=True)
 
-    with sub_rel[3]:
+    if idx_rel == 3:
         idx_mes_sel = (meses_referencia_ordem.index(mes_sel)
                        if mes_sel in meses_referencia_ordem else 99)
 
@@ -153,16 +162,16 @@ def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registro
                         st.markdown(f"- {p}")
 
     # ---- Sub-aba: Triagem (movida para dentro de Relatórios) ----
-    with sub_rel[4]:
+    if idx_rel == 4:
         aba_triagem(df_mes, membros_db, pode_editar=pode_editar)
 
     # ---- Sub-aba: Consolidado (movida para dentro de Relatórios) ----
-    with sub_rel[5]:
+    if idx_rel == 5:
         aba_consolidado(df, membros_db, mes_vigente, registros_assistencia, pode_editar=pode_editar)
 
     # ---- Sub-aba: Registro de Assistência ----
     # CORREÇÃO: promovida para cá (mesmo nível de Triagem/Consolidado)
     # em vez de morar dentro de Consolidado. Ver nota no topo do arquivo.
-    with sub_rel[6]:
+    if idx_rel == 6:
         db = inicializar_db()
         render_tab_assistencia(db, congregacao_id="parque_alianca", pode_editar=pode_editar)
