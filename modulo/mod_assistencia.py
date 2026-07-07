@@ -226,7 +226,15 @@ div[data-testid="stNumberInput"] input {{
     font-size: 0.82rem !important;
     text-align: center !important;
 }}
-div[data-testid="stNumberInput"] > div > div:last-child {{ display: none !important; }}
+/* CORREÇÃO: a regra antiga "> div > div:last-child" tentava esconder
+   só os botões +/- do number_input, mas com label_visibility="collapsed"
+   (usado nos campos de Qtd./Assistência Total) o Streamlit reorganiza
+   os divs internos e esse seletor acabava pegando o PRÓPRIO campo de
+   texto, deixando a caixa inteira invisível. Trocado por seletores que
+   miram só os botões de incremento/decremento. */
+div[data-testid="stNumberInput"] button {{ display: none !important; }}
+[data-testid="stNumberInputStepUp"],
+[data-testid="stNumberInputStepDown"] {{ display: none !important; }}
 </style>
 """, unsafe_allow_html=True)
 
