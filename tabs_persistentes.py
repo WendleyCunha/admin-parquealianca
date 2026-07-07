@@ -80,9 +80,17 @@ def abas_persistentes(labels, key):
                 use_container_width=True,
                 type="primary" if ativa else "secondary",
             ):
+                # CORREÇÃO (performance): st.button() JÁ dispara um rerun
+                # sozinho ao ser clicado — chamar st.rerun() aqui de novo
+                # causava um SEGUNDO rerun redundante a cada troca de aba
+                # (dois round-trips com o servidor em vez de um), o que
+                # dava aquela sensação de lentidão/"conectando...".
+                # Como o session_state já é atualizado dentro do mesmo
+                # rerun que detectou o clique, o restante do script já
+                # enxerga o valor novo imediatamente — não precisa forçar
+                # outro rerun.
                 if not ativa:
                     st.session_state[state_key] = i
-                    st.rerun()
 
     st.markdown("<div style='margin-bottom:0.6rem;'></div>", unsafe_allow_html=True)
     return st.session_state[state_key]
