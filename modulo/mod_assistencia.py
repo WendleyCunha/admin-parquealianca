@@ -10,6 +10,14 @@
 # (congregacoes/{congregacao_id}/assistencia), diferente da
 # coleção "assistencia_reunioes" usada em database.py — isso já
 # era assim no arquivo original e foi mantido exatamente igual.
+#
+# CORREÇÃO:
+#  - O cabeçalho azul do topo (render_tab_assistencia) usava
+#    st.markdown("""...{CORES[...]}...""") SEM o prefixo "f" antes
+#    das aspas triplas. Sem o "f", o Python não substitui nada:
+#    o texto "{CORES['primaria_clara']}" aparecia literalmente
+#    dentro do style="", quebrando a aparência do cabeçalho.
+#    Corrigido para st.markdown(f"""...""").
 # =============================================================
 import io
 import streamlit as st
@@ -330,7 +338,10 @@ def _bloco_reuniao(db, cong_id: str, tipo: str, ano_ref: str, prefixo: str, pode
 def render_tab_assistencia(db, congregacao_id: str, pode_editar: bool = True):
     _inject_css()
 
-    st.markdown("""
+    # CORREÇÃO: faltava o prefixo "f" antes das aspas triplas — sem ele,
+    # o Python não substitui {CORES[...]} pelos valores reais, e o texto
+    # aparecia literalmente dentro do style="", quebrando o card do topo.
+    st.markdown(f"""
 <div style="
     background:{CORES['primaria_clara']}; color:{CORES['primaria_escura']}; padding:14px 20px;
     border-radius:8px; margin-bottom:20px; border:1px solid {CORES['primaria_borda_forte']};
