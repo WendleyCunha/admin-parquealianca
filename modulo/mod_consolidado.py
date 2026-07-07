@@ -8,15 +8,21 @@
 # ATUALIZAÇÃO (v1.1) — CORREÇÃO DO SUMIÇO DOS CAMPOS DE ASSISTÊNCIA:
 #  - A sub-aba "🏛️ Registro de Assistência" foi REMOVIDA daqui e
 #    promovida para uma sub-aba direta de Relatórios (mod_relatorios.py),
-#    no mesmo nível de Triagem/Consolidado. O motivo: com ela aqui
-#    dentro, o formulário ficava 3 níveis de abas aninhadas abaixo
-#    da tela principal (Relatórios > Consolidado > Assistência), e
-#    nessa profundidade os campos number_input do formulário
-#    deixavam de renderizar (limitação conhecida do Streamlit com
-#    abas/colunas aninhadas demais). Um nível a menos resolve.
+#    no mesmo nível de Triagem/Consolidado.
 #  - O parâmetro registros_assistencia continua aceito por
 #    compatibilidade com quem chama esta função, mas não é mais
 #    usado aqui (a sub-aba que o usava foi movida).
+#
+# CORREÇÃO (v1.2):
+#  - As sub-abas "Individual" e "Por Categoria" usavam st.tabs(), que
+#    perde a aba selecionada em qualquer rerun. E aqui NÃO precisa nem
+#    de um botão com st.rerun() explícito para o problema aparecer:
+#    trocar o "Publicador" no selectbox da aba Individual, ou trocar a
+#    "Categoria" na aba Por Categoria, já dispara um rerun automático
+#    do Streamlit (é assim que todo widget funciona, com ou sem
+#    st.rerun() escrito no código). Era exatamente isso que causava o
+#    "puxar dados de um cartão jogando todas as abas na tela".
+#    Trocado por abas_persistentes() (tabs_persistentes.py).
 # =============================================================
 import io
 import os
@@ -34,16 +40,17 @@ if _root not in sys.path:
 from utilitarios import ordenar_df_por_mes
 from constantes import categorias_lista
 from pdf_s21 import gerar_pdf_padrao_s21
+from tabs_persistentes import abas_persistentes
 
 
 def aba_consolidado(df, membros_db, mes_vigente, registros_assistencia, pode_editar=True):
-    c1_tab, c2_tab = st.tabs([
+    idx_ativa = abas_persistentes([
         "👤 INDIVIDUAL (HISTÓRICO)",
         "📊 POR CATEGORIA",
-    ])
+    ], key="abas_consolidado")
 
     # ---- Sub-aba 1: Individual ----
-    with c1_tab:
+    if idx_ativa == 0:
         membros_ord = sorted(list(membros_db.keys()))
         publicador  = st.selectbox("Publicador", membros_ord)
 
@@ -134,7 +141,7 @@ def aba_consolidado(df, membros_db, mes_vigente, registros_assistencia, pode_edi
                 st.info("Nenhum relatório identificado para este publicador.")
 
     # ---- Sub-aba 2: Por Categoria ----
-    with c2_tab:
+    elif idx_ativa == 1:
         cat_sel = st.selectbox("Categoria", categorias_lista)
         df_cons = df[
             (df['status_validacao'] == "IDENTIFICADO") &
