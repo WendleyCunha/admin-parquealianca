@@ -5,6 +5,16 @@
 # ATUALIZAÇÃO: aceita pode_editar=True/False. Sem permissão de
 # edição, a sub-aba "Nova Postagem" fica oculta e o botão de
 # deletar some em "Gerenciar Postagens".
+#
+# CORREÇÃO (v1.1):
+#  - As sub-abas usavam st.tabs(), que perde a aba selecionada
+#    sempre que uma ação chama st.rerun() (publicar texto, imagem,
+#    agenda, ou deletar postagem — todas chamam). O sintoma era o
+#    conteúdo de todas as sub-abas aparecendo junto na tela depois
+#    de qualquer uma dessas ações.
+#    Trocado por abas_persistentes() (tabs_persistentes.py), que
+#    guarda a aba ativa em st.session_state — sobrevive a qualquer
+#    rerun.
 # =============================================================
 import os
 import sys
@@ -18,6 +28,7 @@ if _root not in sys.path:
 
 from database import carregar_anuncios, salvar_anuncio, deletar_anuncio
 import permissoes
+from tabs_persistentes import abas_persistentes
 
 
 def gerar_html_agenda(d):
@@ -96,131 +107,130 @@ def aba_anuncios(pode_editar=True):
     else:
         abas_labels = ["✏️ Nova Postagem", "🗂️ Gerenciar Postagens"]
 
-    sub_an = st.tabs(abas_labels)
+    idx_ativa = abas_persistentes(abas_labels, key="abas_anuncios")
 
-    if pode_editar:
-        with sub_an[0]:
-            tipo = st.radio(
-                "Tipo",
-                ["📝 Texto / Markdown", "🖼️ Imagem (JPEG/PNG)", "📅 Agenda de Reunião"],
-                horizontal=True
-            )
+    if pode_editar and idx_ativa == 0:
+        tipo = st.radio(
+            "Tipo",
+            ["📝 Texto / Markdown", "🖼️ Imagem (JPEG/PNG)", "📅 Agenda de Reunião"],
+            horizontal=True
+        )
 
-            if tipo == "📝 Texto / Markdown":
-                titulo_txt  = st.text_input("Título (opcional)")
-                conteudo_md = st.text_area("Conteúdo", height=200)
-                if conteudo_md:
-                    with st.expander("Pré-visualização"):
-                        st.markdown(conteudo_md)
-                if st.button("📤 Publicar", type="primary", use_container_width=True):
-                    if conteudo_md.strip():
-                        salvar_anuncio({"tipo": "texto", "titulo": titulo_txt or "Anúncio",
-                                        "conteudo_html": conteudo_md, "renderizar_markdown": True})
-                        st.success("✅ Publicado!")
-                        st.rerun()
+        if tipo == "📝 Texto / Markdown":
+            titulo_txt  = st.text_input("Título (opcional)")
+            conteudo_md = st.text_area("Conteúdo", height=200)
+            if conteudo_md:
+                with st.expander("Pré-visualização"):
+                    st.markdown(conteudo_md)
+            if st.button("📤 Publicar", type="primary", use_container_width=True):
+                if conteudo_md.strip():
+                    salvar_anuncio({"tipo": "texto", "titulo": titulo_txt or "Anúncio",
+                                    "conteudo_html": conteudo_md, "renderizar_markdown": True})
+                    st.success("✅ Publicado!")
+                    st.rerun()
+                else:
+                    st.error("Conteúdo vazio.")
+
+        elif tipo == "🖼️ Imagem (JPEG/PNG)":
+            titulo_img = st.text_input("Legenda (opcional)")
+            arquivo    = st.file_uploader("Imagem", type=["jpg","jpeg","png"])
+            if arquivo:
+                st.image(arquivo, use_column_width=True)
+                if st.button("📤 Publicar Imagem", type="primary", use_container_width=True):
+                    img_bytes = arquivo.read()
+                    mime  = "image/png" if arquivo.name.endswith(".png") else "image/jpeg"
+                    b64   = base64.b64encode(img_bytes).decode("utf-8")
+                    html_img = (f'<div style="text-align:center;padding:10px;">'
+                                f'<img src="data:{mime};base64,{b64}" '
+                                f'style="max-width:100%;border-radius:8px;" />'
+                                + (f'<p style="margin-top:8px;color:#555;">{titulo_img}</p>'
+                                   if titulo_img else "") + '</div>')
+                    salvar_anuncio({"tipo": "imagem", "titulo": titulo_img or arquivo.name,
+                                    "conteudo_html": html_img, "renderizar_markdown": False})
+                    st.success("✅ Imagem publicada!")
+                    st.rerun()
+
+        elif tipo == "📅 Agenda de Reunião":
+            col_a, col_b = st.columns(2)
+            data_texto = col_a.text_input("Período", placeholder="18-24 DE MAIO")
+            escritura  = col_b.text_input("Escritura", placeholder="ISAÍAS 62-64")
+
+            col_c, col_d, col_e = st.columns(3)
+            cant_ab   = col_c.text_input("Cântico Abertura", placeholder="44")
+            cant_meio = col_d.text_input("Cântico NVC",      placeholder="115")
+            cant_fin  = col_e.text_input("Cântico Final",    placeholder="151")
+
+            st.markdown("---")
+            st.markdown('<div style="background:#1a3566;color:white;padding:7px 12px;'
+                        'border-radius:5px;font-weight:bold;margin-bottom:6px;">'
+                        'TESOUROS DA PALAVRA DE DEUS</div>', unsafe_allow_html=True)
+            n_tes = st.number_input("Nº itens", 1, 6, 3, key="n_tes")
+            tesouros = []
+            for i in range(int(n_tes)):
+                c1, c2 = st.columns([4, 1])
+                t     = c1.text_input(f"Item {i+1}", key=f"tes_t_{i}",
+                                      label_visibility="collapsed", placeholder=f"Item {i+1}")
+                d_dur = c2.text_input("Dur.", key=f"tes_d_{i}",
+                                      label_visibility="collapsed", placeholder="10 min")
+                tesouros.append({"num": i + 1, "titulo": t, "duracao": d_dur})
+
+            st.markdown("---")
+            st.markdown('<div style="background:#8a6200;color:white;padding:7px 12px;'
+                        'border-radius:5px;font-weight:bold;margin-bottom:6px;">'
+                        'FAÇA SEU MELHOR NO MINISTÉRIO</div>', unsafe_allow_html=True)
+            n_min = st.number_input("Nº itens", 1, 6, 3, key="n_min")
+            ministerio = []
+            base_min = int(n_tes)
+            for i in range(int(n_min)):
+                c1, c2 = st.columns([4, 1])
+                t     = c1.text_input(f"Item {base_min+i+1}", key=f"min_t_{i}",
+                                      label_visibility="collapsed", placeholder=f"Item {base_min+i+1}")
+                d_dur = c2.text_input("Dur.", key=f"min_d_{i}",
+                                      label_visibility="collapsed", placeholder="")
+                ministerio.append({"num": base_min + i + 1, "titulo": t, "duracao": d_dur})
+
+            st.markdown("---")
+            st.markdown('<div style="background:#cc0000;color:white;padding:7px 12px;'
+                        'border-radius:5px;font-weight:bold;margin-bottom:6px;">'
+                        'NOSSA VIDA CRISTÃ</div>', unsafe_allow_html=True)
+            n_nvc = st.number_input("Nº itens", 1, 10, 2, key="n_nvc")
+            vida_crista = []
+            base_nvc = int(n_tes) + int(n_min)
+            for i in range(int(n_nvc)):
+                c1, c2 = st.columns([4, 1])
+                t     = c1.text_input(f"Item {base_nvc+i+1}", key=f"nvc_t_{i}",
+                                      label_visibility="collapsed", placeholder=f"Item {base_nvc+i+1}")
+                d_dur = c2.text_input("Dur.", key=f"nvc_d_{i}",
+                                      label_visibility="collapsed", placeholder="")
+                vida_crista.append({"num": base_nvc + i + 1, "titulo": t, "duracao": d_dur})
+
+            st.markdown("---")
+            agenda_dados = {
+                "data_texto": data_texto, "escritura": escritura,
+                "cantico_abertura": cant_ab, "cantico_meio": cant_meio,
+                "cantico_final":    cant_fin,
+                "tesouros": tesouros, "ministerio": ministerio, "vida_crista": vida_crista,
+            }
+            col_prev, col_pub = st.columns(2)
+            with col_prev:
+                if st.button("👁 Pré-visualizar", use_container_width=True):
+                    st.markdown(gerar_html_agenda(agenda_dados), unsafe_allow_html=True)
+            with col_pub:
+                if st.button("📤 Publicar Agenda", use_container_width=True, type="primary"):
+                    if not data_texto.strip():
+                        st.error("Informe o período.")
                     else:
-                        st.error("Conteúdo vazio.")
-
-            elif tipo == "🖼️ Imagem (JPEG/PNG)":
-                titulo_img = st.text_input("Legenda (opcional)")
-                arquivo    = st.file_uploader("Imagem", type=["jpg","jpeg","png"])
-                if arquivo:
-                    st.image(arquivo, use_column_width=True)
-                    if st.button("📤 Publicar Imagem", type="primary", use_container_width=True):
-                        img_bytes = arquivo.read()
-                        mime  = "image/png" if arquivo.name.endswith(".png") else "image/jpeg"
-                        b64   = base64.b64encode(img_bytes).decode("utf-8")
-                        html_img = (f'<div style="text-align:center;padding:10px;">'
-                                    f'<img src="data:{mime};base64,{b64}" '
-                                    f'style="max-width:100%;border-radius:8px;" />'
-                                    + (f'<p style="margin-top:8px;color:#555;">{titulo_img}</p>'
-                                       if titulo_img else "") + '</div>')
-                        salvar_anuncio({"tipo": "imagem", "titulo": titulo_img or arquivo.name,
-                                        "conteudo_html": html_img, "renderizar_markdown": False})
-                        st.success("✅ Imagem publicada!")
+                        salvar_anuncio({
+                            "tipo": "agenda", "titulo": data_texto,
+                            "conteudo_html": gerar_html_agenda(agenda_dados),
+                            "renderizar_markdown": False,
+                            "dados_agenda": agenda_dados,
+                        })
+                        st.success(f"✅ Agenda '{data_texto}' publicada!")
                         st.rerun()
-
-            elif tipo == "📅 Agenda de Reunião":
-                col_a, col_b = st.columns(2)
-                data_texto = col_a.text_input("Período", placeholder="18-24 DE MAIO")
-                escritura  = col_b.text_input("Escritura", placeholder="ISAÍAS 62-64")
-
-                col_c, col_d, col_e = st.columns(3)
-                cant_ab   = col_c.text_input("Cântico Abertura", placeholder="44")
-                cant_meio = col_d.text_input("Cântico NVC",      placeholder="115")
-                cant_fin  = col_e.text_input("Cântico Final",    placeholder="151")
-
-                st.markdown("---")
-                st.markdown('<div style="background:#1a3566;color:white;padding:7px 12px;'
-                            'border-radius:5px;font-weight:bold;margin-bottom:6px;">'
-                            'TESOUROS DA PALAVRA DE DEUS</div>', unsafe_allow_html=True)
-                n_tes = st.number_input("Nº itens", 1, 6, 3, key="n_tes")
-                tesouros = []
-                for i in range(int(n_tes)):
-                    c1, c2 = st.columns([4, 1])
-                    t     = c1.text_input(f"Item {i+1}", key=f"tes_t_{i}",
-                                          label_visibility="collapsed", placeholder=f"Item {i+1}")
-                    d_dur = c2.text_input("Dur.", key=f"tes_d_{i}",
-                                          label_visibility="collapsed", placeholder="10 min")
-                    tesouros.append({"num": i + 1, "titulo": t, "duracao": d_dur})
-
-                st.markdown("---")
-                st.markdown('<div style="background:#8a6200;color:white;padding:7px 12px;'
-                            'border-radius:5px;font-weight:bold;margin-bottom:6px;">'
-                            'FAÇA SEU MELHOR NO MINISTÉRIO</div>', unsafe_allow_html=True)
-                n_min = st.number_input("Nº itens", 1, 6, 3, key="n_min")
-                ministerio = []
-                base_min = int(n_tes)
-                for i in range(int(n_min)):
-                    c1, c2 = st.columns([4, 1])
-                    t     = c1.text_input(f"Item {base_min+i+1}", key=f"min_t_{i}",
-                                          label_visibility="collapsed", placeholder=f"Item {base_min+i+1}")
-                    d_dur = c2.text_input("Dur.", key=f"min_d_{i}",
-                                          label_visibility="collapsed", placeholder="")
-                    ministerio.append({"num": base_min + i + 1, "titulo": t, "duracao": d_dur})
-
-                st.markdown("---")
-                st.markdown('<div style="background:#cc0000;color:white;padding:7px 12px;'
-                            'border-radius:5px;font-weight:bold;margin-bottom:6px;">'
-                            'NOSSA VIDA CRISTÃ</div>', unsafe_allow_html=True)
-                n_nvc = st.number_input("Nº itens", 1, 10, 2, key="n_nvc")
-                vida_crista = []
-                base_nvc = int(n_tes) + int(n_min)
-                for i in range(int(n_nvc)):
-                    c1, c2 = st.columns([4, 1])
-                    t     = c1.text_input(f"Item {base_nvc+i+1}", key=f"nvc_t_{i}",
-                                          label_visibility="collapsed", placeholder=f"Item {base_nvc+i+1}")
-                    d_dur = c2.text_input("Dur.", key=f"nvc_d_{i}",
-                                          label_visibility="collapsed", placeholder="")
-                    vida_crista.append({"num": base_nvc + i + 1, "titulo": t, "duracao": d_dur})
-
-                st.markdown("---")
-                agenda_dados = {
-                    "data_texto": data_texto, "escritura": escritura,
-                    "cantico_abertura": cant_ab, "cantico_meio": cant_meio,
-                    "cantico_final":    cant_fin,
-                    "tesouros": tesouros, "ministerio": ministerio, "vida_crista": vida_crista,
-                }
-                col_prev, col_pub = st.columns(2)
-                with col_prev:
-                    if st.button("👁 Pré-visualizar", use_container_width=True):
-                        st.markdown(gerar_html_agenda(agenda_dados), unsafe_allow_html=True)
-                with col_pub:
-                    if st.button("📤 Publicar Agenda", use_container_width=True, type="primary"):
-                        if not data_texto.strip():
-                            st.error("Informe o período.")
-                        else:
-                            salvar_anuncio({
-                                "tipo": "agenda", "titulo": data_texto,
-                                "conteudo_html": gerar_html_agenda(agenda_dados),
-                                "renderizar_markdown": False,
-                                "dados_agenda": agenda_dados,
-                            })
-                            st.success(f"✅ Agenda '{data_texto}' publicada!")
-                            st.rerun()
 
     idx_lista = 1 if pode_editar else 0
-    with sub_an[idx_lista]:
+    if idx_ativa == idx_lista:
         anuncios = carregar_anuncios()
         if not anuncios:
             st.info("Nenhuma postagem encontrada.")
