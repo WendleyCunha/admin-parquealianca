@@ -24,17 +24,24 @@
 #    "configuracao" — as únicas abas que de fato usam mes_sel/df.
 #    Passagens, Anúncios e Manutenção nunca precisaram desses dados.
 #
-# ATUALIZAÇÃO (v6.3):
-#  - CORREÇÃO DEFINITIVA DO VAZAMENTO ENTRE ABAS: chamada nova
-#    aplicar_fix_abas() logo após aplicar_estilo(). Ela injeta um
-#    JavaScript que garante que só o conteúdo da aba selecionada
-#    apareça na tela — em qualquer nível de aninhamento (abas dentro
-#    de abas). Ver comentários em estilo.py para o detalhe técnico.
+# ATUALIZAÇÃO (v6.3, revisada em v6.4):
+#  - Todo o sistema (main.py e todos os módulos) migrou de st.tabs()
+#    nativo para abas_persistentes() (tabs_persistentes.py), que guarda
+#    a aba ativa em st.session_state — resolve de vez o vazamento de
+#    conteúdo entre abas depois de qualquer ação que causa rerun.
+#  - v6.3 chegou a introduzir uma função aplicar_fix_abas() (JS via
+#    components.html) para corrigir o mesmo problema no st.tabs()
+#    nativo. Com a migração completa para abas_persistentes() em
+#    todos os módulos, não sobrou nenhum st.tabs() nativo no sistema
+#    — então essa função virou trabalho gasto à toa a cada rerun
+#    (iframe + observer + polling de 300ms procurando por elementos
+#    que não existem mais) e foi REMOVIDA daqui (v6.4), melhorando a
+#    fluidez ao trocar de aba.
 # =============================================================
 import pandas as pd
 import streamlit as st
 
-from estilo import aplicar_estilo, aplicar_fix_abas, get_logo_path, get_logo_base64
+from estilo import aplicar_estilo, get_logo_path, get_logo_base64
 from tabs_persistentes import abas_persistentes
 from autenticacao import tela_login
 from database import carregar_membros, carregar_relatorios, carregar_assistencia
@@ -60,12 +67,31 @@ st.set_page_config(
 )
 
 aplicar_estilo()
-aplicar_fix_abas()  # CORREÇÃO (v6.3): garante que só a aba selecionada apareça na tela
+# CORREÇÃO (fluidez): aplicar_fix_abas() foi removida daqui. Ela existia
+# para corrigir o vazamento de conteúdo do st.tabs() NATIVO do Streamlit
+# — mas desde que todo o sistema passou a usar abas_persistentes()
+# (tabs_persistentes.py), não sobrou nenhum st.tabs() nativo em lugar
+# nenhum. A função rodava, a cada rerun (ou seja, a cada clique de aba),
+# um components.html() com iframe + observer + polling a cada 300ms
+# procurando por elementos que não existem mais — trabalho gasto à toa
+# que contribuía para a sensação de lentidão ao trocar de aba.
 
 # Abas que realmente usam o "Mês de Análise" (mes_sel / df / df_ok / df_mes /
 # membros_db). Se o usuário não tiver acesso a nenhuma delas, a barra de
 # filtro e os KPIs de Identificados/Em Triagem nem são carregados.
 ABAS_QUE_USAM_FILTRO_MES = {"relatorios", "configuracao"}
+
+
+# CORREÇÃO (fluidez): processar_dataframe() faz correspondência de nomes
+# com fuzzy matching (SequenceMatcher) linha a linha — sem cache, isso
+# era recalculado do zero a cada rerun, ou seja, a cada clique de aba,
+# mesmo quando relatórios/membros não mudaram desde a última vez. Com
+# @st.cache_data, só recalcula quando os dados de entrada realmente
+# mudam (novo relatório, membro editado, etc.) — o resto do tempo é
+# instantâneo.
+@st.cache_data(ttl=60, show_spinner=False)
+def _processar_dataframe_cached(relatorios_brutos, membros_db):
+    return processar_dataframe(relatorios_brutos, membros_db)
 
 
 def _renderizar_cabecalho():
@@ -182,7 +208,7 @@ def main():
         membros_db        = carregar_membros()
         relatorios_brutos = carregar_relatorios()
         registros_assist  = carregar_assistencia()
-        df                = processar_dataframe(relatorios_brutos, membros_db)
+        df                = _processar_dataframe_cached(relatorios_brutos, membros_db)
 
         mes_sel = _renderizar_filtros(df, mes_vigente)
 
