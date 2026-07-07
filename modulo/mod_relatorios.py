@@ -10,6 +10,21 @@
 # Aceita pode_editar=True/False. Quando False (usuário só com
 # permissão de visualização), os botões de edição ficam ocultos e
 # um aviso de somente-leitura é exibido.
+#
+# ATUALIZAÇÃO (v1.1) — CORREÇÃO DO SUMIÇO DOS CAMPOS DE ASSISTÊNCIA:
+#  - "Registro de Assistência" (formulário S-88-T) estava dentro de
+#    "Consolidado", que por sua vez está dentro de "Relatórios" —
+#    ou seja, 3 níveis de abas aninhadas (Relatórios > Consolidado >
+#    Registro de Assistência). O Streamlit tem uma limitação
+#    conhecida: widgets como number_input deixam de renderizar
+#    quando ficam profundos demais dentro de abas aninhadas + colunas
+#    aninhadas, mesmo com "key" correta. No arquivo original (antes
+#    da modularização) esse formulário vivia só 2 níveis abaixo, e
+#    funcionava.
+#    Corrigido promovendo "🏛️ ASSISTÊNCIA" para uma sub-aba direta
+#    aqui em Relatórios (mesmo nível de Triagem/Consolidado), em vez
+#    de morar dentro de Consolidado. Isso devolve a profundidade de
+#    2 níveis que funcionava antes. Removido de mod_consolidado.py.
 # =============================================================
 import os
 import sys
@@ -27,6 +42,7 @@ from constantes import categorias_lista, meses_referencia_ordem
 import permissoes
 from modulo.mod_triagem import aba_triagem
 from modulo.mod_consolidado import aba_consolidado
+from modulo.mod_assistencia import render_tab_assistencia
 
 
 def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registros_assistencia, pode_editar=True):
@@ -36,7 +52,7 @@ def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registro
 
     sub_rel = st.tabs([
         "👤 PUBLICADOR", "🌟 P. AUXILIAR", "💎 P. REGULAR", "⏳ PENDÊNCIAS",
-        "⚠️ TRIAGEM", "📈 CONSOLIDADO",
+        "⚠️ TRIAGEM", "📈 CONSOLIDADO", "🏛️ ASSISTÊNCIA",
     ])
 
     entregaram = set(df_ok['nome_oficial'].unique()) if not df_ok.empty else set()
@@ -143,3 +159,10 @@ def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registro
     # ---- Sub-aba: Consolidado (movida para dentro de Relatórios) ----
     with sub_rel[5]:
         aba_consolidado(df, membros_db, mes_vigente, registros_assistencia, pode_editar=pode_editar)
+
+    # ---- Sub-aba: Registro de Assistência ----
+    # CORREÇÃO: promovida para cá (mesmo nível de Triagem/Consolidado)
+    # em vez de morar dentro de Consolidado. Ver nota no topo do arquivo.
+    with sub_rel[6]:
+        db = inicializar_db()
+        render_tab_assistencia(db, congregacao_id="parque_alianca", pode_editar=pode_editar)
