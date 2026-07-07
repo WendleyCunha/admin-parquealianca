@@ -7,20 +7,15 @@
 # Origem: coordenadas PDF_* da Seção 3 ("CONSTANTES") + Seção 8
 # ("GERAÇÃO DE PDF (S-21)") do antigo main.py monolítico.
 # Nada foi recalibrado — só movido de lugar.
-# =============================================================
-import io
-import os
-import zipfile
-
-import pandas as pd
-import streamlit as st
-from pypdf import PdfReader, PdfWriter
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-
-from utilitarios import cargos_para_lista, ordenar_df_por_mes
-
+#
+# AJUSTE (rodada 3):
+#  - Data de batismo (PDF_BATISM_Y) e telefone (PDF_TEL_Y) subidos
+#    ~2mm a pedido do usuário, depois de conferir o PDF gerado.
+#    PDF_CLASSE_Y (checkbox Outras ovelhas/Ungido) já estava
+#    desacoplado de PDF_BATISM_Y desde a rodada anterior, então
+#    essa mudança não bagunça os checkboxes.
+#  - Rótulo do telefone mudou de "Tel:" para "Telefone de contato:",
+#    a pedido do usuário.
 # -------------------------------------------------------------
 # COORDENADAS DO CARTÃO S-21 (em mm, origem no canto inferior
 # esquerdo da página A4 — padrão do ReportLab)
@@ -35,13 +30,26 @@ from utilitarios import cargos_para_lista, ordenar_df_por_mes
 # então a pequena descida abaixo prevalece sobre a medição anterior.
 # Se ainda precisar ajustar, mexa só em PDF_Y_OFFSET (afeta a tabela
 # mensal inteira de uma vez) e em PDF_NOME_Y (só o nome).
-# -------------------------------------------------------------
+# =============================================================
+import io
+import os
+import zipfile
+
+import pandas as pd
+import streamlit as st
+from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+
+from utilitarios import cargos_para_lista, ordenar_df_por_mes
+
 PDF_Y_OFFSET    = -1.5    # desce a tabela mensal inteira ~1.5mm
 PDF_NOME_Y      = 269.0   # era 272.0 — desce ~3mm (pedido extra além do geral)
 PDF_NOME_X      = 24.0
 PDF_NASCI_Y     = 263.5   # era 265.0 — desce ~1.5mm (ajuste geral)
 PDF_NASCI_X     = 48.0
-PDF_BATISM_Y    = 256.5   # era 258.0 — desce ~1.5mm (ajuste geral)
+PDF_BATISM_Y    = 258.5   # AJUSTE (rodada 3): era 256.5 — sobe ~2mm
 PDF_BATISM_X    = 48.0
 PDF_CARGO_Y     = 252.1   # era 253.6 — desce ~1.5mm (ajuste geral)
 
@@ -54,9 +62,10 @@ PDF_MASC_X      = 136.1    # era 135.0
 PDF_FEM_X       = 171.9    # era 165.0 — bem fora da coluna real
 
 # Checkboxes "Outras ovelhas/Ungido": usam a própria linha Y
-# (PDF_CLASSE_Y), agora DESACOPLADA de PDF_BATISM_Y — antes as
-# duas coisas compartilhavam a mesma variável, então qualquer
-# ajuste na data de batismo bagunçava o checkbox (e vice-versa).
+# (PDF_CLASSE_Y), DESACOPLADA de PDF_BATISM_Y — antes as duas
+# coisas compartilhavam a mesma variável, então qualquer ajuste na
+# data de batismo bagunçava o checkbox (e vice-versa). Continua
+# desacoplada agora que PDF_BATISM_Y subiu na rodada 3.
 PDF_CLASSE_Y    = 257.8    # era 259.3 — desce ~1.5mm (ajuste geral)
 PDF_OVELHAS_X   = 136.1    # era 135.0
 PDF_UNGIDO_X    = 171.9    # era 165.0 — mesmo problema do Feminino
@@ -72,10 +81,9 @@ PDF_PREG_X      = 74.8     # era 63.5  — erro de +11mm
 PDF_PESP_X      = 117.2    # era 98.5  — erro de +18.7mm
 PDF_MISS_X      = 161.0    # era 138.5 — erro de +22.5mm
 
-# Telefone de emergência: posição não mudou (não fazia parte do
-# problema relatado).
+# Telefone de emergência.
 PDF_TEL_X       = 150.0
-PDF_TEL_Y       = 237.0    # era 238.5 — desce ~1.5mm (ajuste geral)
+PDF_TEL_Y       = 239.0    # AJUSTE (rodada 3): era 237.0 — sobe ~2mm
 
 # Mapa de posição Y de cada mês na tabela. O espaçamento real do
 # formulário é de 7.0mm entre linhas (medido diretamente nos
@@ -153,8 +161,10 @@ def gerar_pdf_padrao_s21(nome_cabecalho, categoria_label, dados_rows, membro_inf
 
     tel_emerg = str(mi.get("telefone_emergencia", "")).strip()
     if tel_emerg:
+        # AJUSTE (rodada 3): rótulo mudou de "Tel:" para
+        # "Telefone de contato:", a pedido do usuário.
         can.setFont("Helvetica-Bold", 8)
-        can.drawString(PDF_TEL_X * mm, PDF_TEL_Y * mm, f"Tel: {tel_emerg}"[:32])
+        can.drawString(PDF_TEL_X * mm, PDF_TEL_Y * mm, f"Telefone de contato: {tel_emerg}"[:40])
 
     total_horas = 0
     total_estud = 0
