@@ -23,11 +23,19 @@
 #    só roda se o usuário tiver permissão em "relatorios" e/ou
 #    "configuracao" — as únicas abas que de fato usam mes_sel/df.
 #    Passagens, Anúncios e Manutenção nunca precisaram desses dados.
+#
+# ATUALIZAÇÃO (v6.3):
+#  - CORREÇÃO DEFINITIVA DO VAZAMENTO ENTRE ABAS: chamada nova
+#    aplicar_fix_abas() logo após aplicar_estilo(). Ela injeta um
+#    JavaScript que garante que só o conteúdo da aba selecionada
+#    apareça na tela — em qualquer nível de aninhamento (abas dentro
+#    de abas). Ver comentários em estilo.py para o detalhe técnico.
 # =============================================================
 import pandas as pd
 import streamlit as st
 
-from estilo import aplicar_estilo, get_logo_path, get_logo_base64
+from estilo import aplicar_estilo, aplicar_fix_abas, get_logo_path, get_logo_base64
+from tabs_persistentes import abas_persistentes
 from autenticacao import tela_login
 from database import carregar_membros, carregar_relatorios, carregar_assistencia
 from utilitarios import obter_mes_vigente_str, processar_dataframe
@@ -52,6 +60,7 @@ st.set_page_config(
 )
 
 aplicar_estilo()
+aplicar_fix_abas()  # CORREÇÃO (v6.3): garante que só a aba selecionada apareça na tela
 
 # Abas que realmente usam o "Mês de Análise" (mes_sel / df / df_ok / df_mes /
 # membros_db). Se o usuário não tiver acesso a nenhuma delas, a barra de
@@ -190,34 +199,32 @@ def main():
         mes_sel = mes_vigente
 
     labels_abas = [f"{a['icone']}  {a['label'].upper()}" for a in abas_permitidas]
-    tabs = st.tabs(labels_abas)
+    idx_aba_ativa = abas_persistentes(labels_abas, key="abas_principais")
+    aba_ativa   = abas_permitidas[idx_aba_ativa]
+    aba_id      = aba_ativa["id"]
+    pode_editar = permissoes.pode_editar(aba_id)
 
-    for tab, aba in zip(tabs, abas_permitidas):
-        aba_id      = aba["id"]
-        pode_editar = permissoes.pode_editar(aba_id)
+    if aba_id == "relatorios":
+        aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df,
+                       mes_vigente, registros_assist, pode_editar=pode_editar)
 
-        with tab:
-            if aba_id == "relatorios":
-                aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df,
-                               mes_vigente, registros_assist, pode_editar=pode_editar)
+    elif aba_id == "anuncios":
+        aba_anuncios(pode_editar=pode_editar)
 
-            elif aba_id == "anuncios":
-                aba_anuncios(pode_editar=pode_editar)
+    elif aba_id == "passagens":
+        exibir_modulo_passagens(pode_editar=pode_editar)
 
-            elif aba_id == "passagens":
-                exibir_modulo_passagens(pode_editar=pode_editar)
+    elif aba_id == "manutencao":
+        aba_manutencao(pode_editar=pode_editar)
 
-            elif aba_id == "manutencao":
-                aba_manutencao(pode_editar=pode_editar)
-
-            elif aba_id == "configuracao":
-                aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=pode_editar)
+    elif aba_id == "configuracao":
+        aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=pode_editar)
 
     # Rodapé
     st.markdown("""
     <div style="text-align:center;padding:2rem 0 0.5rem;
         font-size:0.72rem;color:#5B7BA6;letter-spacing:0.05em;">
-        v6.1 · Parque Aliança · Sistema de Gestão
+        v6.3 · Parque Aliança · Sistema de Gestão
     </div>""", unsafe_allow_html=True)
 
 
