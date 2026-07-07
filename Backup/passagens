@@ -6,6 +6,9 @@ import json
 import pandas as pd
 from datetime import datetime
 import io
+import time
+import ast
+from collections import Counter
 
 # =========================================================
 # CONFIGURAÇÃO
@@ -53,6 +56,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
 """, unsafe_allow_html=True)
 
 CAPACIDADE = 46
+GRUPOS_PADRAO = ["Rosas", "Engenho", "Cohab", "Geral"]
 
 # =========================================================
 # DB
@@ -146,6 +150,134 @@ def carregar_eventos():
     return {doc.id: doc.to_dict() for doc in db.collection("eventos").where("status", "==", "ativo").stream()}
 
 # =========================================================
+# IMPORTAÇÃO DE PLANILHA (evento antigo → Firestore novo)
+# =========================================================
+# A planilha aceita é a mesma exportada pela própria aba "Exportar Dados"
+# do sistema (colunas: grupo, cpf, nome, valor_pago, embarcou, valor_total,
+# dias_onibus, rg, pago). "dias_onibus" vem como texto no formato
+# "[{'bus': 1, 'dia': 'Sábado'}, ...]" — por isso usamos ast.literal_eval
+# para transformar de volta em lista de dicionários.
+
+def _parse_dias_onibus(valor):
+    """Converte a coluna 'dias_onibus' (string tipo lista de dict) de volta
+    para lista de dicts [{'dia':..., 'bus':...}, ...]. Tolerante a células
+    vazias, NaN ou já-lista."""
+    if isinstance(valor, list):
+        return valor
+    if valor is None:
+        return []
+    try:
+        if pd.isna(valor):
+            return []
+    except (TypeError, ValueError):
+        pass
+    texto = str(valor).strip()
+    if not texto or texto == "[]":
+        return []
+    try:
+        parsed = ast.literal_eval(texto)
+        if isinstance(parsed, list):
+            return [v for v in parsed if isinstance(v, dict) and v.get("dia")]
+    except Exception:
+        pass
+    return []
+
+def _texto_ou_vazio(valor) -> str:
+    try:
+        if pd.isna(valor):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(valor).strip()
+
+def detectar_datas_frotas_valor(df_import: pd.DataFrame):
+    """Varre a planilha e descobre sozinho: quais dias aparecem, quantos
+    ônibus (frotas) cada dia teve, e qual foi o valor cobrado por dia de
+    passagem (o mais comum entre as linhas preenchidas)."""
+    datas_encontradas = []
+    frotas = {}
+    valores_por_dia = []
+    for _, row in df_import.iterrows():
+        dias = _parse_dias_onibus(row.get("dias_onibus"))
+        vt = row.get("valor_total") or 0
+        try:
+            vt = float(vt)
+        except (TypeError, ValueError):
+            vt = 0.0
+        if dias and vt:
+            valores_por_dia.append(round(vt / len(dias), 2))
+        for v in dias:
+            dia = v.get("dia")
+            bus = v.get("bus", 1) or 1
+            if dia and dia not in datas_encontradas:
+                datas_encontradas.append(dia)
+            if dia:
+                frotas[dia] = max(frotas.get(dia, 1), int(bus))
+    valor_padrao = Counter(valores_por_dia).most_common(1)[0][0] if valores_por_dia else 50.0
+    return datas_encontradas, frotas, valor_padrao
+
+def linha_para_passageiro(row):
+    """Converte uma linha da planilha num dict de passageiro pronto para
+    salvar_passageiro(). Retorna None se a linha não tiver nome (linha
+    vazia/decorativa que às vezes sobra na exportação)."""
+    nome = _texto_ou_vazio(row.get("nome"))
+    if not nome:
+        return None
+    grupo = _texto_ou_vazio(row.get("grupo")) or "Geral"
+    if grupo not in GRUPOS_PADRAO:
+        grupo = "Geral"
+    pago_raw = row.get("pago")
+    embarcou_raw = row.get("embarcou")
+    try:
+        pago = bool(pago_raw) if not pd.isna(pago_raw) else False
+    except (TypeError, ValueError):
+        pago = bool(pago_raw)
+    try:
+        embarcou = bool(embarcou_raw) if not pd.isna(embarcou_raw) else False
+    except (TypeError, ValueError):
+        embarcou = bool(embarcou_raw)
+    try:
+        valor_total = float(row.get("valor_total") or 0)
+    except (TypeError, ValueError):
+        valor_total = 0.0
+    try:
+        valor_pago = float(row.get("valor_pago") or 0)
+    except (TypeError, ValueError):
+        valor_pago = 0.0
+    return {
+        "nome": nome,
+        "rg": _texto_ou_vazio(row.get("rg")),
+        "cpf": _texto_ou_vazio(row.get("cpf")),
+        "grupo": grupo,
+        "dias_onibus": _parse_dias_onibus(row.get("dias_onibus")),
+        "pago": pago,
+        "embarcou": embarcou,
+        "valor_total": valor_total,
+        "valor_pago": valor_pago,
+    }
+
+def importar_evento_de_planilha(nome_evento: str, datas: list, valor_passagem: float,
+                                 frotas: dict, passageiros: list):
+    """Cria um evento NOVO no Firestore e importa cada passageiro da
+    planilha antiga para dentro dele — é o 'subir os dados' do relatório
+    antigo para o sistema novo."""
+    db = inicializar_db()
+    if not db:
+        return None, 0
+    id_evento = f"{nome_evento.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    db.collection("eventos").document(id_evento).set({
+        "nome": nome_evento, "datas": datas, "valor": valor_passagem,
+        "status": "ativo", "criado_em": datetime.now(),
+        "frotas": frotas or {d: 1 for d in datas},
+        "origem": "importado_planilha",
+    })
+    qtd = 0
+    for pax in passageiros:
+        salvar_passageiro(id_evento, pax)
+        qtd += 1
+    return id_evento, qtd
+
+# =========================================================
 # DIÁLOGO
 # =========================================================
 
@@ -158,22 +290,35 @@ def gerenciar_pax_dialog(pax, id_evento, evento_atual):
     c1.metric("Total da Passagem", "R$ %.2f" % total_devido)
     c2.metric("Saldo Pendente",    "R$ %.2f" % (total_devido - pago_atualmente), delta_color="inverse")
 
+    if pax.get('pago') or pax.get('embarcou'):
+        tags = []
+        if pax.get('pago'): tags.append("💰 pago")
+        if pax.get('embarcou'): tags.append("🚌 embarcado")
+        st.caption("Situação atual: " + " · ".join(tags) +
+                   " — você pode alterar tudo abaixo (estornar pagamento, cancelar embarque, "
+                   "trocar viagens etc.) e salvar normalmente.")
+
     with st.form("edit_pax_final"):
         nome = st.text_input("Nome", value=pax['nome'])
         cc1, cc2 = st.columns(2)
         rg  = cc1.text_input("RG",  value=pax.get('rg', ""))
         cpf = cc2.text_input("CPF", value=pax.get('cpf', ""))
-        grupos = ["Rosas", "Engenho", "Cohab", "Geral"]
+        grupos = GRUPOS_PADRAO
         g_atual = pax.get('grupo', 'Geral')
         grupo = st.selectbox("Grupo", grupos, index=grupos.index(g_atual) if g_atual in grupos else 3)
 
         st.divider()
-        st.markdown("**💰 Registrar Recebimento**")
+        st.markdown("**💰 Ajustar Pagamento**")
+        st.caption("Use valor positivo para registrar um novo recebimento, ou "
+                   "**negativo** para devolver/estornar valor já pago.")
         cr1, cr2, cr3 = st.columns(3)
-        valor_recebido = cr1.number_input("Recebido agora", min_value=0.0, value=0.0, step=5.0)
+        valor_recebido = cr1.number_input("Recebido agora (± )", value=0.0, step=5.0,
+                                          help="Positivo = recebendo agora. Negativo = devolvendo dinheiro ao passageiro.")
         valor_entregue = cr2.number_input("Troco entregue", min_value=0.0, value=0.0)
         if valor_entregue > 0 and valor_recebido > 0:
             cr3.success("Troco: R$ %.2f" % max(valor_entregue - valor_recebido, 0))
+        if valor_recebido < 0:
+            cr3.warning("Estornando R$ %.2f" % abs(valor_recebido))
 
         st.divider()
         st.markdown("**🗓 Viagens**")
@@ -190,9 +335,11 @@ def gerenciar_pax_dialog(pax, id_evento, evento_atual):
                 novas_viagens.append({"dia": dia, "bus": bus_sel})
 
         st.divider()
-        novo_total_pago = pago_atualmente + valor_recebido
-        pago     = st.toggle("💰 Pagamento quitado", value=pax.get('pago', False) or (novo_total_pago >= total_devido))
+        novo_total_pago = max(pago_atualmente + valor_recebido, 0.0)
+        pago     = st.toggle("💰 Pagamento quitado", value=pax.get('pago', False))
         embarque = st.toggle("🚌 Embarcou",           value=pax.get('embarcou', False))
+        st.caption("Os toggles acima refletem o estado salvo — desmarque para cancelar "
+                   "embarque ou reabrir como pendente após um estorno.")
 
         cb1, cb2 = st.columns(2)
         if cb1.form_submit_button("💾 Salvar", use_container_width=True, type="primary"):
@@ -212,7 +359,7 @@ def gerenciar_pax_dialog(pax, id_evento, evento_atual):
 # CABEÇALHO — usa components.html para garantir render
 # =========================================================
 
-def renderizar_cabecalho(evento, df, id_sel):
+def renderizar_cabecalho(evento, df, id_sel, pode_editar=True):
     total      = len(df) if not df.empty else 0
     pagos      = int(df['pago'].sum())         if not df.empty and 'pago'      in df.columns else 0
     pendente   = total - pagos
@@ -331,8 +478,8 @@ def renderizar_cabecalho(evento, df, id_sel):
 
     components.html(html, height=altura, scrolling=False)
 
-    # Botões de adicionar ônibus (fora do HTML)
-    if needs_add:
+    # Botões de adicionar ônibus (fora do HTML) — só quem pode editar
+    if needs_add and pode_editar:
         cols = st.columns(len(needs_add))
         for idx, (dia, prox) in enumerate(needs_add.items()):
             with cols[idx]:
@@ -345,7 +492,7 @@ def renderizar_cabecalho(evento, df, id_sel):
 # PRINCIPAL
 # =========================================================
 
-def exibir_modulo_passagens():
+def exibir_modulo_passagens(pode_editar=True):
     eventos_ativos = carregar_eventos()
 
     if not eventos_ativos:
@@ -355,9 +502,13 @@ def exibir_modulo_passagens():
             "border-radius:16px;padding:24px;color:white;'>"
             "<div style='font-size:1.5rem;font-weight:700;color:white;'>🕊️ VGP Passagens</div>"
             "<div style='font-size:0.82rem;color:rgba(255,255,255,0.6);margin-top:4px;'>"
-            "Nenhum evento ativo — crie o primeiro abaixo</div></div>",
+            "Nenhum evento ativo" + ("" if pode_editar else " — fale com um administrador") +
+            "</div></div>",
             height=110
         )
+        if not pode_editar:
+            st.info("🔒 Você não tem permissão para criar eventos. Fale com um administrador.")
+            return
         with st.form("criar_evento_inicial"):
             st.subheader("Novo Evento")
             n_ev = st.text_input("Nome do Evento (ex: Assembleia Março)")
@@ -369,6 +520,9 @@ def exibir_modulo_passagens():
                     st.rerun()
                 else:
                     st.error("Informe o nome e ao menos um dia.")
+
+        st.divider()
+        _bloco_importar_planilha()
         return
 
     # Seletor de evento
@@ -389,7 +543,7 @@ def exibir_modulo_passagens():
             df[col] = df[col].fillna(default)
 
     # CABEÇALHO
-    renderizar_cabecalho(evento, df, id_sel)
+    renderizar_cabecalho(evento, df, id_sel, pode_editar)
 
     # ABAS
     tab_reserva, tab_chamada, tab_ajustes = st.tabs([
@@ -406,38 +560,41 @@ def exibir_modulo_passagens():
 
         with col_form:
             st.markdown("**Nova Reserva**")
-            busca_nome = st.text_input("🔍 Buscar cadastro existente", placeholder="Digite parte do nome...")
-            mestre = buscar_pessoa_central(busca_nome) if busca_nome else None
-            if mestre:
-                st.success("✅ Cadastro encontrado: **" + mestre['nome'] + "**")
+            if not pode_editar:
+                st.info("🔒 Você tem acesso somente leitura — não é possível criar novas reservas.")
+            else:
+                busca_nome = st.text_input("🔍 Buscar cadastro existente", placeholder="Digite parte do nome...")
+                mestre = buscar_pessoa_central(busca_nome) if busca_nome else None
+                if mestre:
+                    st.success("✅ Cadastro encontrado: **" + mestre['nome'] + "**")
 
-            with st.form("reserva_form", clear_on_submit=True):
-                nome_f  = st.text_input("Nome Completo *", value=mestre['nome'] if mestre else busca_nome)
-                ci1, ci2 = st.columns(2)
-                rg_f  = ci1.text_input("RG",  value=mestre.get('rg',  '') if mestre else "")
-                cpf_f = ci2.text_input("CPF", value=mestre.get('cpf', '') if mestre else "")
-                grupo_f = st.selectbox("Grupo / Localização", ["Rosas", "Engenho", "Cohab", "Geral"])
-                st.markdown("**Viagens:**")
-                viagens = []
-                for dia in evento['datas']:
-                    cv1, cv2 = st.columns([1, 2])
-                    if cv1.checkbox(dia, key="f_res_" + dia):
-                        f_dia = evento.get('frotas', {}).get(dia, 1)
-                        b_sel = cv2.selectbox("Ônibus " + dia, range(1, f_dia + 1), key="f_bus_" + dia)
-                        viagens.append({"dia": dia, "bus": b_sel})
-                pago_f = st.toggle("Pagamento confirmado neste ato")
-                if st.form_submit_button("✅ Confirmar Reserva", type="primary", use_container_width=True):
-                    if nome_f and viagens:
-                        vt = evento['valor'] * len(viagens)
-                        salvar_passageiro(id_sel, {
-                            "nome": nome_f, "rg": rg_f, "cpf": cpf_f, "grupo": grupo_f,
-                            "dias_onibus": viagens, "pago": pago_f, "embarcou": False,
-                            "valor_total": vt, "valor_pago": vt if pago_f else 0.0
-                        })
-                        st.success("Reserva gravada com sucesso!")
-                        st.rerun()
-                    else:
-                        st.error("Informe o nome e selecione ao menos um dia.")
+                with st.form("reserva_form", clear_on_submit=True):
+                    nome_f  = st.text_input("Nome Completo *", value=mestre['nome'] if mestre else busca_nome)
+                    ci1, ci2 = st.columns(2)
+                    rg_f  = ci1.text_input("RG",  value=mestre.get('rg',  '') if mestre else "")
+                    cpf_f = ci2.text_input("CPF", value=mestre.get('cpf', '') if mestre else "")
+                    grupo_f = st.selectbox("Grupo / Localização", GRUPOS_PADRAO)
+                    st.markdown("**Viagens:**")
+                    viagens = []
+                    for dia in evento['datas']:
+                        cv1, cv2 = st.columns([1, 2])
+                        if cv1.checkbox(dia, key="f_res_" + dia):
+                            f_dia = evento.get('frotas', {}).get(dia, 1)
+                            b_sel = cv2.selectbox("Ônibus " + dia, range(1, f_dia + 1), key="f_bus_" + dia)
+                            viagens.append({"dia": dia, "bus": b_sel})
+                    pago_f = st.toggle("Pagamento confirmado neste ato")
+                    if st.form_submit_button("✅ Confirmar Reserva", type="primary", use_container_width=True):
+                        if nome_f and viagens:
+                            vt = evento['valor'] * len(viagens)
+                            salvar_passageiro(id_sel, {
+                                "nome": nome_f, "rg": rg_f, "cpf": cpf_f, "grupo": grupo_f,
+                                "dias_onibus": viagens, "pago": pago_f, "embarcou": False,
+                                "valor_total": vt, "valor_pago": vt if pago_f else 0.0
+                            })
+                            st.success("Reserva gravada com sucesso!")
+                            st.rerun()
+                        else:
+                            st.error("Informe o nome e selecione ao menos um dia.")
 
         with col_pend:
             st.markdown("**Pagamentos Pendentes**")
@@ -474,7 +631,7 @@ def exibir_modulo_passagens():
                                 "– R$ {:,.2f}".format(v_falta) + "</div>"
                                 "</div>", unsafe_allow_html=True)
                         with cb:
-                            if st.button("✏️", key="ed_pe_" + r['nome'], help="Editar / Receber pagamento"):
+                            if pode_editar and st.button("✏️", key="ed_pe_" + r['nome'], help="Editar / Receber pagamento"):
                                 gerenciar_pax_dialog(r.to_dict(), id_sel, evento)
 
                     st.markdown(
@@ -538,23 +695,27 @@ def exibir_modulo_passagens():
                                         "letter-spacing:.08em;color:#f59e0b;margin-bottom:8px;'>⏳ Aguardando</div>",
                                         unsafe_allow_html=True)
                             for _, p in df_grp[df_grp['embarcou'] == False].sort_values('nome').iterrows():
-                                cn, cb = st.columns([5, 1])
+                                cn, ce, cb = st.columns([4, 1, 1])
                                 cn.markdown("<div style='font-weight:500;font-size:0.87rem;color:#1e293b;"
                                             "padding:6px 0;border-bottom:1px solid #f1f5f9;'>" + p['nome'] + "</div>",
                                             unsafe_allow_html=True)
-                                if cb.button("✅", key="emb_" + grp + "_" + p['nome']):
+                                if pode_editar and ce.button("✏️", key="ed_wait_" + grp + "_" + p['nome'], help="Editar / estornar pagamento"):
+                                    gerenciar_pax_dialog(p.to_dict(), id_sel, evento)
+                                if cb.button("✅", key="emb_" + grp + "_" + p['nome'], help="Confirmar embarque"):
                                     atualizar_embarque(id_sel, p.to_dict(), True); st.rerun()
                         with co:
                             st.markdown("<div style='font-size:0.7rem;font-weight:700;text-transform:uppercase;"
                                         "letter-spacing:.08em;color:#22c55e;margin-bottom:8px;'>🟢 Embarcados</div>",
                                         unsafe_allow_html=True)
                             for _, p in df_grp[df_grp['embarcou'] == True].sort_values('nome').iterrows():
-                                cn, cb = st.columns([5, 1])
+                                cn, ce, cb = st.columns([4, 1, 1])
                                 cn.markdown("<div style='font-weight:500;font-size:0.87rem;color:#94a3b8;"
                                             "text-decoration:line-through;padding:6px 0;"
                                             "border-bottom:1px solid #f1f5f9;'>" + p['nome'] + "</div>",
                                             unsafe_allow_html=True)
-                                if cb.button("↩️", key="rem_" + grp + "_" + p['nome']):
+                                if pode_editar and ce.button("✏️", key="ed_board_" + grp + "_" + p['nome'], help="Editar / estornar pagamento"):
+                                    gerenciar_pax_dialog(p.to_dict(), id_sel, evento)
+                                if cb.button("↩️", key="rem_" + grp + "_" + p['nome'], help="Cancelar embarque"):
                                     atualizar_embarque(id_sel, p.to_dict(), False); st.rerun()
 
     # -------------------------------------------------------
@@ -564,13 +725,16 @@ def exibir_modulo_passagens():
         ca1, ca2 = st.columns(2)
         with ca1:
             st.markdown("**Novo Evento**")
-            with st.form("criar_evento_adj"):
-                n_ev = st.text_input("Nome do Evento")
-                v_ev = st.number_input("Valor da Passagem (R$)", min_value=0.0, value=50.0, step=5.0)
-                d_ev = st.multiselect("Dias de Operação", ["Sexta", "Sábado", "Domingo"])
-                if st.form_submit_button("🚀 Criar Evento", type="primary"):
-                    if n_ev and d_ev:
-                        criar_evento(n_ev, d_ev, v_ev); st.rerun()
+            if not pode_editar:
+                st.caption("🔒 Somente leitura.")
+            else:
+                with st.form("criar_evento_adj"):
+                    n_ev = st.text_input("Nome do Evento")
+                    v_ev = st.number_input("Valor da Passagem (R$)", min_value=0.0, value=50.0, step=5.0)
+                    d_ev = st.multiselect("Dias de Operação", ["Sexta", "Sábado", "Domingo"])
+                    if st.form_submit_button("🚀 Criar Evento", type="primary"):
+                        if n_ev and d_ev:
+                            criar_evento(n_ev, d_ev, v_ev); st.rerun()
             st.divider()
             st.markdown("**Exportar Dados**")
             if not df.empty:
@@ -581,16 +745,91 @@ def exibir_modulo_passagens():
                                    "lista_" + id_sel + ".xlsx", use_container_width=True)
         with ca2:
             st.markdown("**Encerrar Evento**")
-            with st.container(border=True):
-                st.warning("Encerrar **" + evento['nome'] + "** o moverá para o histórico.")
-                confirmacao = st.text_input("Digite o nome do evento para confirmar:", placeholder=evento['nome'])
-                if st.button("🏁 Arquivar Evento", type="primary", use_container_width=True):
-                    if confirmacao.strip().lower() == evento['nome'].strip().lower():
-                        inicializar_db().collection("eventos").document(id_sel).update({"status": "finalizado"})
-                        st.success("Evento arquivado.")
-                        st.rerun()
-                    else:
-                        st.error("Nome não confere. Tente novamente.")
+            if not pode_editar:
+                st.caption("🔒 Somente leitura.")
+            else:
+                with st.container(border=True):
+                    st.warning("Encerrar **" + evento['nome'] + "** o moverá para o histórico.")
+                    confirmacao = st.text_input("Digite o nome do evento para confirmar:", placeholder=evento['nome'])
+                    if st.button("🏁 Arquivar Evento", type="primary", use_container_width=True):
+                        if confirmacao.strip().lower() == evento['nome'].strip().lower():
+                            inicializar_db().collection("eventos").document(id_sel).update({"status": "finalizado"})
+                            st.success("Evento arquivado.")
+                            st.rerun()
+                        else:
+                            st.error("Nome não confere. Tente novamente.")
+
+        if pode_editar:
+            st.divider()
+            _bloco_importar_planilha()
+
+
+# =========================================================
+# BLOCO: Importar planilha de evento antigo
+# =========================================================
+def _bloco_importar_planilha():
+    with st.expander("📤 Importar Passageiros de Planilha (evento antigo)"):
+        st.caption(
+            "Aceita o arquivo **.xlsx** exportado pelo próprio sistema (aba 'Exportar Dados' → "
+            "'📥 Baixar Excel'), com as colunas: grupo, cpf, nome, valor_pago, embarcou, "
+            "valor_total, dias_onibus, rg, pago. Um evento NOVO será criado aqui com todos "
+            "os passageiros da planilha já lançados (reserva, pagamento e embarque preservados)."
+        )
+        arquivo = st.file_uploader("Selecione a planilha (.xlsx)", type=["xlsx"], key="import_upload")
+        if not arquivo:
+            return
+
+        try:
+            df_imp = pd.read_excel(arquivo)
+        except Exception as e:
+            st.error(f"Não consegui ler o arquivo: {e}")
+            return
+
+        colunas_necessarias = {"nome", "dias_onibus"}
+        faltando = colunas_necessarias - set(df_imp.columns)
+        if faltando:
+            st.error("Planilha fora do formato esperado. Faltam colunas: " + ", ".join(sorted(faltando)))
+            return
+
+        datas_det, frotas_det, valor_det = detectar_datas_frotas_valor(df_imp)
+        linhas_validas = [p for p in (linha_para_passageiro(r) for _, r in df_imp.iterrows()) if p]
+
+        if not linhas_validas:
+            st.warning("Nenhum passageiro com nome válido foi encontrado nessa planilha.")
+            return
+
+        st.markdown(f"**{len(linhas_validas)}** passageiro(s) válido(s) encontrado(s) "
+                    f"(de {len(df_imp)} linha(s) na planilha).")
+
+        nome_imp = st.text_input("Nome do Evento a criar", value="Evento Importado",
+                                 key="imp_nome_evento")
+        datas_imp = st.multiselect("Dias de Operação (detectados automaticamente)",
+                                   ["Sexta", "Sábado", "Domingo"],
+                                   default=datas_det, key="imp_dias")
+        valor_imp = st.number_input("Valor da Passagem por dia (R$) — detectado automaticamente",
+                                    min_value=0.0, value=float(valor_det), step=5.0,
+                                    key="imp_valor")
+
+        with st.expander("👁️ Pré-visualizar dados que serão importados"):
+            st.dataframe(pd.DataFrame(linhas_validas), use_container_width=True)
+
+        if st.button("📤 Importar para Novo Evento", type="primary",
+                     use_container_width=True, key="btn_importar_planilha"):
+            if not nome_imp.strip() or not datas_imp:
+                st.error("Informe o nome do evento e pelo menos um dia de operação.")
+            else:
+                frotas_final = {d: frotas_det.get(d, 1) for d in datas_imp}
+                id_novo, qtd = importar_evento_de_planilha(
+                    nome_imp.strip(), datas_imp, valor_imp, frotas_final, linhas_validas
+                )
+                if id_novo:
+                    st.success(f"✅ Evento **{nome_imp}** criado com **{qtd}** passageiro(s) "
+                               f"importado(s) da planilha!")
+                    st.balloons()
+                    time.sleep(1.2)
+                    st.rerun()
+                else:
+                    st.error("Não foi possível conectar ao banco de dados para importar.")
 
 
 if __name__ == "__main__":
