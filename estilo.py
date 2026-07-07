@@ -13,6 +13,23 @@
 # página, no bloco ".pa-filtros". Mobile-first: tabs quebram em
 # várias linhas em telas estreitas, cards empilham em coluna única.
 #
+# ATUALIZAÇÃO (v6.2):
+#  - CORREÇÃO DE VAZAMENTO ENTRE ABAS: o Streamlit controla qual
+#    conteúdo de aba fica visível usando o atributo HTML nativo
+#    "hidden" no painel (elemento [data-baseweb="tab-panel"]). Como
+#    quase todas as regras deste arquivo usam !important, havia risco
+#    de conflito de prioridade entre o CSS customizado e o mecanismo
+#    interno do Streamlit — o painel "escondido" podia continuar
+#    sendo desenhado na tela junto com o painel ativo (o usuário via
+#    o conteúdo de mais de uma aba ao mesmo tempo).
+#    Corrigido reforçando explicitamente, com máxima especificidade,
+#    que SOMENTE o painel sem o atributo "hidden" é exibido — todos
+#    os demais ficam display:none, não importa o que mais exista na
+#    folha de estilo. Veja o bloco "CORREÇÃO: isolar painel da aba
+#    ativa" logo abaixo do bloco de estilo das Tabs.
+#  - Extra: pequena transição de opacidade no conteúdo da aba ativa,
+#    para a troca de abas parecer mais fluida (sem depender de JS).
+#
 # LOGO PERSONALIZADO
 # -------------------
 # Coloque o arquivo do seu logo na RAIZ do projeto (mesmo nível
@@ -176,6 +193,29 @@ h3 { font-weight: 700 !important; font-size: 1.02rem !important; }
     [data-testid="stTabs"] [data-testid="stTab"] {
         font-size: 0.74rem !important; padding: 6px 9px !important;
     }
+}
+
+/* ---- CORREÇÃO (v6.2): isolar painel da aba ativa -------------------
+   O Streamlit marca o painel de cada aba inativa com o atributo HTML
+   nativo "hidden" (ex: <div data-baseweb="tab-panel" hidden>...</div>).
+   Isso normalmente já basta para escondê-lo, mas como este arquivo usa
+   !important em quase tudo, um conflito de prioridade entre o CSS
+   customizado e o próprio Streamlit pode fazer o painel "escondido"
+   continuar visível na tela ao lado do painel ativo.
+   As regras abaixo eliminam essa ambiguidade: por padrão TODO painel
+   de aba fica oculto; só o painel que NÃO tiver o atributo "hidden"
+   (ou seja, a aba selecionada no momento) é exibido. Isso garante que
+   apenas o conteúdo da aba em foco apareça na tela, sempre. */
+[data-testid="stTabs"] [data-baseweb="tab-panel"] {
+    display: none !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab-panel"]:not([hidden]) {
+    display: block !important;
+    animation: pa-fade-in 0.18s ease;
+}
+@keyframes pa-fade-in {
+    from { opacity: 0; transform: translateY(2px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ---- Cards & Metrics ---- */
