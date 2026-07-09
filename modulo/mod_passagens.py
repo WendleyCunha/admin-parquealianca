@@ -29,11 +29,27 @@
 #    — e aqui quase toda ação causa rerun (confirmar reserva, marcar
 #    embarque, salvar no diálogo de gerenciar reserva, importar
 #    planilha). Trocado por abas_persistentes() (tabs_persistentes.py).
+#
+# CORREÇÃO (v2.1) — EVENTO NÃO ACEITAVA EDIÇÃO DE VALOR/CUSTO:
+#  - Não existia NENHUMA forma de editar um evento já criado (valor
+#    da passagem, custo do ônibus, etc.) — só era possível CRIAR um
+#    evento novo ou ARQUIVAR o existente. Por isso qualquer alteração
+#    feita "no valor" de um evento ativo simplesmente não tinha para
+#    onde ser gravada. Adicionada atualizar_evento() + bloco "Editar
+#    Evento Atual" na aba Ajustes.
+#  - Adicionado o campo "custo_onibus" (o quanto a viação cobra por
+#    ônibus fretado, ex. R$ 1.770,00), separado do "valor" (preço da
+#    passagem cobrado do passageiro). São conceitos diferentes:
+#    um é o que você RECEBE por passageiro, outro é o que você PAGA
+#    pra empresa por veículo contratado.
+#  - Cabeçalho agora mostra: nº de ônibus contratados, custo total da
+#    frota e quanto falta sair do seu bolso se o evento fechar hoje.
 # =============================================================
 import os
 import sys
 import io
 import time
+import math
 import ast
 from collections import Counter
 from datetime import datetime
@@ -51,6 +67,7 @@ from tabs_persistentes import abas_persistentes
 
 CAPACIDADE = 46
 GRUPOS_PADRAO = ["Rosas", "Engenho", "Cohab", "Geral"]
+CUSTO_ONIBUS_PADRAO = 1770.00  # valor cobrado pela viação por ônibus fretado
 
 # =========================================================
 # DADOS
@@ -76,16 +93,40 @@ def buscar_pessoa_central(nome_pesquisa):
             return dados
     return None
 
-def criar_evento(nome, datas, valor_passagem):
+def criar_evento(nome, datas, valor_passagem, custo_onibus=CUSTO_ONIBUS_PADRAO):
     db = inicializar_db()
     if db:
         id_evento = f"{nome.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}"
         db.collection("eventos").document(id_evento).set({
             "nome": nome, "datas": datas, "valor": valor_passagem,
+            "custo_onibus": custo_onibus,
             "status": "ativo", "criado_em": datetime.now(),
             "frotas": {dia: 1 for dia in datas}
         })
         return id_evento
+
+def atualizar_evento(id_evento, valor_passagem=None, custo_onibus=None):
+    """Atualiza campos de um evento JÁ EXISTENTE (valor da passagem e/ou
+    custo por ônibus). Antes desta função não havia NENHUM jeito de
+    persistir alterações num evento ativo — só criar um novo ou
+    arquivar o atual. Isso é o que faltava para 'gravar' esse tipo de
+    ajuste.
+    Observação: alterar o valor aqui vale só para novas reservas e para
+    o cálculo de custo total da frota; passageiros já cadastrados
+    mantêm o valor_total que foi gravado no momento da reserva (assim
+    como já acontece ao editar uma reserva individual)."""
+    db = inicializar_db()
+    if not db:
+        return False
+    dados = {}
+    if valor_passagem is not None:
+        dados["valor"] = valor_passagem
+    if custo_onibus is not None:
+        dados["custo_onibus"] = custo_onibus
+    if not dados:
+        return False
+    db.collection("eventos").document(id_evento).update(dados)
+    return True
 
 def adicionar_novo_onibus(id_evento, dia):
     db = inicializar_db()
@@ -238,7 +279,7 @@ def linha_para_passageiro(row):
     }
 
 def importar_evento_de_planilha(nome_evento: str, datas: list, valor_passagem: float,
-                                 frotas: dict, passageiros: list):
+                                 frotas: dict, passageiros: list, custo_onibus: float = CUSTO_ONIBUS_PADRAO):
     """Cria um evento NOVO no Firestore e importa cada passageiro da
     planilha antiga para dentro dele — é o 'subir os dados' do relatório
     antigo para o sistema novo."""
@@ -248,6 +289,7 @@ def importar_evento_de_planilha(nome_evento: str, datas: list, valor_passagem: f
     id_evento = f"{nome_evento.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     db.collection("eventos").document(id_evento).set({
         "nome": nome_evento, "datas": datas, "valor": valor_passagem,
+        "custo_onibus": custo_onibus,
         "status": "ativo", "criado_em": datetime.now(),
         "frotas": frotas or {d: 1 for d in datas},
         "origem": "importado_planilha",
@@ -351,6 +393,13 @@ def renderizar_cabecalho(evento, df, id_sel, pode_editar=True):
     datas_str  = ", ".join(evento.get("datas", []))
     nome_ev    = evento.get('nome', '')
 
+    # ---- Custo da frota contratada x arrecadação (o que importa pra
+    #      responder "quanto falta sair do meu bolso se eu fechar hoje") ----
+    total_onibus     = sum(evento.get('frotas', {}).get(d, 1) for d in evento.get('datas', []))
+    custo_por_onibus = evento.get('custo_onibus', CUSTO_ONIBUS_PADRAO)
+    custo_total_frota = total_onibus * custo_por_onibus
+    saldo_se_fechar_hoje = custo_total_frota - arrecadado  # >0 = sai do bolso; <=0 = sobra
+
     # ---- Montar HTML dos cards de frota ----
     frotas_html  = ""
     needs_add    = {}
@@ -396,20 +445,28 @@ def renderizar_cabecalho(evento, df, id_sel, pode_editar=True):
             "</div>"
         )
 
-    kpis_html = (
-        kpi("Reservas",   total,                             "passageiros")
-      + kpi("Pagos",      pagos,                             str(pct) + "% confirmados", "#a8e6cf")
-      + kpi("Pendentes",  pendente,                          "aguardando",                "#ffd166")
-      + kpi("Arrecadado", "R$ {:,.0f}".format(arrecadado),  "recebido",                  "#a8e6cf")
-      + kpi("A Receber",  "R$ {:,.0f}".format(a_receber),   "em aberto",                 "#ffd166")
-    )
+    lista_kpis = [
+        kpi("Reservas",   total,                             "passageiros"),
+        kpi("Pagos",      pagos,                             str(pct) + "% confirmados", "#a8e6cf"),
+        kpi("Pendentes",  pendente,                          "aguardando",                "#ffd166"),
+        kpi("Arrecadado", "R$ {:,.0f}".format(arrecadado),  "recebido",                  "#a8e6cf"),
+        kpi("A Receber",  "R$ {:,.0f}".format(a_receber),   "em aberto",                 "#ffd166"),
+        kpi("Custo da Frota", "R$ {:,.0f}".format(custo_total_frota),
+            str(total_onibus) + " ônibus × R$ {:,.0f}".format(custo_por_onibus), "white"),
+        kpi("Se Fechar Hoje",
+            "R$ {:,.0f}".format(abs(saldo_se_fechar_hoje)),
+            "do seu bolso" if saldo_se_fechar_hoje > 0 else "de sobra / cobre o custo",
+            "#f87171" if saldo_se_fechar_hoje > 0 else "#a8e6cf"),
+    ]
+    kpis_html = "".join(lista_kpis)
 
     # ---- Calcular altura conservadora (pior caso = mobile 1 coluna) ----
     n_frotas_total       = sum(evento.get('frotas', {}).get(d, 1) for d in evento.get('datas', []))
     linhas_frota_mobile  = n_frotas_total
+    linhas_kpi_mobile    = math.ceil(len(lista_kpis) / 2)  # ~2 kpis por linha no mobile
     altura = (
         72
-        + 3 * 78
+        + linhas_kpi_mobile * 78
         + 50
         + linhas_frota_mobile * 82
         + 56
@@ -492,11 +549,15 @@ def exibir_modulo_passagens(pode_editar=True):
         with st.form("criar_evento_inicial"):
             st.subheader("Novo Evento")
             n_ev = st.text_input("Nome do Evento (ex: Assembleia Março)")
-            v_ev = st.number_input("Valor da Passagem (R$)", min_value=0.0, value=50.0, step=5.0)
+            v_ev = st.number_input("Valor da Passagem por passageiro/dia (R$)", min_value=0.0, value=50.0, step=5.0)
+            c_ev = st.number_input("Custo do Ônibus contratado (R$ por ônibus/dia)",
+                                   min_value=0.0, value=CUSTO_ONIBUS_PADRAO, step=10.0,
+                                   help="Quanto a viação cobra por cada ônibus fretado. Usado para calcular "
+                                        "quanto falta sair do seu bolso se o evento fechar hoje.")
             d_ev = st.multiselect("Dias de Operação", ["Sexta", "Sábado", "Domingo"])
             if st.form_submit_button("🚀 Criar Evento", type="primary"):
                 if n_ev and d_ev:
-                    criar_evento(n_ev, d_ev, v_ev)
+                    criar_evento(n_ev, d_ev, v_ev, c_ev)
                     st.rerun()
                 else:
                     st.error("Informe o nome e ao menos um dia.")
@@ -710,11 +771,13 @@ def exibir_modulo_passagens(pode_editar=True):
             else:
                 with st.form("criar_evento_adj"):
                     n_ev = st.text_input("Nome do Evento")
-                    v_ev = st.number_input("Valor da Passagem (R$)", min_value=0.0, value=50.0, step=5.0)
+                    v_ev = st.number_input("Valor da Passagem por passageiro/dia (R$)", min_value=0.0, value=50.0, step=5.0)
+                    c_ev = st.number_input("Custo do Ônibus contratado (R$ por ônibus/dia)",
+                                           min_value=0.0, value=CUSTO_ONIBUS_PADRAO, step=10.0)
                     d_ev = st.multiselect("Dias de Operação", ["Sexta", "Sábado", "Domingo"])
                     if st.form_submit_button("🚀 Criar Evento", type="primary"):
                         if n_ev and d_ev:
-                            criar_evento(n_ev, d_ev, v_ev); st.rerun()
+                            criar_evento(n_ev, d_ev, v_ev, c_ev); st.rerun()
             st.divider()
             st.markdown("**Exportar Dados**")
             if not df.empty:
@@ -724,6 +787,25 @@ def exibir_modulo_passagens(pode_editar=True):
                 st.download_button("📥 Baixar Excel", output.getvalue(),
                                    "lista_" + id_sel + ".xlsx", use_container_width=True)
         with ca2:
+            st.markdown("**Editar Evento Atual**")
+            if not pode_editar:
+                st.caption("🔒 Somente leitura.")
+            else:
+                with st.form("editar_evento_atual"):
+                    st.caption("Ajusta valor da passagem e/ou custo do ônibus de **" + evento['nome'] + "**. "
+                               "Reservas já lançadas mantêm o valor com que foram gravadas.")
+                    novo_valor  = st.number_input("Valor da Passagem por passageiro/dia (R$)",
+                                                  min_value=0.0, value=float(evento.get('valor', 50.0)), step=5.0)
+                    novo_custo  = st.number_input("Custo do Ônibus contratado (R$ por ônibus/dia)",
+                                                  min_value=0.0,
+                                                  value=float(evento.get('custo_onibus', CUSTO_ONIBUS_PADRAO)),
+                                                  step=10.0)
+                    if st.form_submit_button("💾 Salvar Alterações do Evento", type="primary", use_container_width=True):
+                        atualizar_evento(id_sel, valor_passagem=novo_valor, custo_onibus=novo_custo)
+                        st.success("Evento atualizado!")
+                        st.rerun()
+
+            st.divider()
             st.markdown("**Encerrar Evento**")
             if not pode_editar:
                 st.caption("🔒 Somente leitura.")
@@ -789,6 +871,9 @@ def _bloco_importar_planilha():
         valor_imp = st.number_input("Valor da Passagem por dia (R$) — detectado automaticamente",
                                     min_value=0.0, value=float(valor_det), step=5.0,
                                     key="imp_valor")
+        custo_imp = st.number_input("Custo do Ônibus contratado (R$ por ônibus/dia)",
+                                    min_value=0.0, value=CUSTO_ONIBUS_PADRAO, step=10.0,
+                                    key="imp_custo")
 
         with st.expander("👁️ Pré-visualizar dados que serão importados"):
             st.dataframe(pd.DataFrame(linhas_validas), use_container_width=True)
@@ -800,7 +885,7 @@ def _bloco_importar_planilha():
             else:
                 frotas_final = {d: frotas_det.get(d, 1) for d in datas_imp}
                 id_novo, qtd = importar_evento_de_planilha(
-                    nome_imp.strip(), datas_imp, valor_imp, frotas_final, linhas_validas
+                    nome_imp.strip(), datas_imp, valor_imp, frotas_final, linhas_validas, custo_imp
                 )
                 if id_novo:
                     st.success(f"✅ Evento **{nome_imp}** criado com **{qtd}** passageiro(s) "
