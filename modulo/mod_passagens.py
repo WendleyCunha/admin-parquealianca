@@ -387,8 +387,22 @@ def renderizar_cabecalho(evento, df, id_sel, pode_editar=True):
     pagos      = int(df['pago'].sum())         if not df.empty and 'pago'      in df.columns else 0
     pendente   = total - pagos
     arrecadado = float(df['valor_pago'].sum()) if not df.empty and 'valor_pago' in df.columns else 0.0
-    a_receber  = float((df['valor_total'].fillna(0) - df['valor_pago'].fillna(0)).clip(lower=0).sum()) \
-                 if not df.empty and 'valor_total' in df.columns else 0.0
+
+    # "A Receber" tem que usar EXATAMENTE a mesma regra da aba Pendentes:
+    # soma o saldo em aberto só de quem está com 'pago' == False. Antes isso
+    # era calculado em cima de TODAS as linhas (valor_total - valor_pago),
+    # o que inflava o número sempre que alguém marcado como pago não tinha
+    # 'valor_pago' gravado (ex.: dado antigo/importado) — nesse caso o campo
+    # vira 0 e o valor dele inteiro era contado como "a receber" por engano,
+    # mesmo já estando quitado.
+    a_receber = 0.0
+    if not df.empty and 'pago' in df.columns:
+        pendentes_df = df[df['pago'] == False]
+        for _, r in pendentes_df.iterrows():
+            v_total = float(r.get('valor_total') or 0) or (len(r.get('dias_onibus') or []) * evento['valor'])
+            v_pago  = float(r.get('valor_pago') or 0)
+            a_receber += max(v_total - v_pago, 0)
+
     pct        = round((pagos / total) * 100) if total else 0
     datas_str  = ", ".join(evento.get("datas", []))
     nome_ev    = evento.get('nome', '')
@@ -398,7 +412,10 @@ def renderizar_cabecalho(evento, df, id_sel, pode_editar=True):
     total_onibus     = sum(evento.get('frotas', {}).get(d, 1) for d in evento.get('datas', []))
     custo_por_onibus = evento.get('custo_onibus', CUSTO_ONIBUS_PADRAO)
     custo_total_frota = total_onibus * custo_por_onibus
-    saldo_se_fechar_hoje = custo_total_frota - arrecadado  # >0 = sai do bolso; <=0 = sobra
+    # "Fechar hoje" = parar de vender passagem nova, mas ainda cobrar quem já
+    # reservou (arrecadado + a_receber = tudo que está garantido). O que
+    # faltar disso pro custo da frota é o que sai do bolso.
+    saldo_se_fechar_hoje = custo_total_frota - (arrecadado + a_receber)  # >0 = sai do bolso; <=0 = sobra
 
     # ---- Montar HTML dos cards de frota ----
     frotas_html  = ""
