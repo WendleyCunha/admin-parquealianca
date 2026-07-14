@@ -543,6 +543,40 @@ def renderizar_cabecalho(evento, df, id_sel, pode_editar=True):
 
 
 # =========================================================
+# EXPORTAÇÃO — LISTA DE CHAMADA (Excel)
+# =========================================================
+
+def gerar_excel_chamada(df_pagos: pd.DataFrame) -> bytes:
+    """Monta a planilha da lista de chamada a partir dos passageiros com
+    pagamento confirmado: uma linha por pessoa, com grupo, viagens e status
+    de embarque — pronta pra imprimir e usar no dia do evento. Só entram
+    aqui quem já pagou, seguindo a mesma regra da própria aba de Chamada
+    (quem não pagou nem aparece na lista de embarque)."""
+    linhas = []
+    for _, p in df_pagos.sort_values(['grupo', 'nome']).iterrows():
+        viagens_txt = ", ".join(
+            f"{v.get('dia')} (Ônibus {v.get('bus')})" for v in (p.get('dias_onibus') or [])
+        )
+        linhas.append({
+            "Grupo": p.get('grupo', 'Geral'),
+            "Nome": p.get('nome', ''),
+            "RG": p.get('rg', ''),
+            "Viagens": viagens_txt,
+            "Embarcou": "Sim" if p.get('embarcou') else "Não",
+        })
+    df_export = pd.DataFrame(linhas)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_export.to_excel(writer, index=False, sheet_name='Chamada de Embarque')
+        worksheet = writer.sheets['Chamada de Embarque']
+        for i, col in enumerate(df_export.columns):
+            maior_valor = df_export[col].astype(str).map(len).max() if not df_export.empty else 0
+            worksheet.set_column(i, i, max(maior_valor, len(col)) + 2)
+    return output.getvalue()
+
+
+# =========================================================
 # PRINCIPAL
 # =========================================================
 
@@ -741,6 +775,16 @@ def exibir_modulo_passagens(pode_editar=True):
                     "letter-spacing:.08em;font-weight:700;'>Aguardando</div>"
                     "<div style='font-size:1.5rem;font-weight:700;color:#f59e0b;'>" + str(falt_t) + "</div></div>"
                     "</div>", unsafe_allow_html=True)
+
+                cexp, _ = st.columns([1, 2])
+                with cexp:
+                    st.download_button(
+                        "📥 Baixar Lista de Chamada (Excel)",
+                        gerar_excel_chamada(df_pagos),
+                        "chamada_embarque_" + evento['nome'].lower().replace(' ', '_') + ".xlsx",
+                        use_container_width=True
+                    )
+                st.write("")
 
                 for grp in sorted(df_pagos['grupo'].unique()):
                     df_grp = df_pagos[df_pagos['grupo'] == grp]
