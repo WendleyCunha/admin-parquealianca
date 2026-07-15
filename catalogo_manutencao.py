@@ -1,9 +1,19 @@
 # =============================================================
-# catalogo_manutencao.py  (NOVO)
+# catalogo_manutencao.py
 # Catalogo de problemas por categoria, extraido 1:1 da planilha
 # "Planejamento_para_consertos_no_Salao_do_Reino" (aba "Problemas").
 # Usado pelo modulo/mod_manutencao.py para popular categoria -> problema
 # -> solucao recomendada + risco padrao, sem precisar digitar de novo.
+#
+# ATUALIZAÇÃO:
+#  - Acrescentado SUGESTOES_APR_POR_CATEGORIA e sugestao_apr(): ponto de
+#    partida para a Análise Preliminar de Risco (DC-83) de cada reparo,
+#    combinando a categoria, o campo "responsavel" (CONGREGAÇÃO/TM/LDC)
+#    já existente no catálogo, e a marcação de "trabalho de alto risco"
+#    feita em Novo Reparo. Baseado nas categorias de risco do DC-83i e
+#    nos alertas de segurança do Manual de Manutenção de Salões do
+#    Reino. É só uma sugestão — deve ser revisada pelo responsável
+#    antes de aprovar (DC-83i, § 3-4).
 # =============================================================
 
 CATALOGO_PROBLEMAS = [
@@ -499,279 +509,340 @@ def buscar_problema(categoria: str, problema: str):
         if p["categoria"] == categoria and p["problema"] == problema:
             return p
     return None
-# ---------------------------------------------------------------
+
+
+# =============================================================
 # Sugestões de preenchimento para a Análise Preliminar de Risco
-# (DC-83), com base nas categorias de risco do DC-83i e nos avisos
-# de segurança do Manual de Manutenção. São só um PONTO DE PARTIDA —
-# o DC-83i (§ 3-4) deixa claro que devem ser revisadas pelo
-# responsável antes de aprovar o serviço.
-# ---------------------------------------------------------------
+# (DC-83), com base nas categorias reais deste catálogo, cruzadas
+# com as categorias de risco do DC-83i (§ 6-8) e os avisos de
+# segurança do Manual de Manutenção de Salões do Reino. São só um
+# PONTO DE PARTIDA — devem ser revisadas pelo responsável antes de
+# aprovar o serviço (DC-83i, § 3-4).
+# =============================================================
 SUGESTOES_APR_POR_CATEGORIA = {
-    "Ar-condicionado": {
+    "Alarme_CFTV": {
         "etapas": [
-            "Desligar e bloquear o disjuntor do circuito do ar-condicionado.",
-            "Acessar o aparelho com escada ou andaime adequado.",
-            "Executar a limpeza, o diagnóstico ou a troca da peça.",
-            "Religar o disjuntor e testar o funcionamento.",
+            "Desligar a energia do equipamento antes de manusear conectores ou fiação.",
+            "Diagnosticar o componente com defeito (sensor, câmera, central, cabeamento).",
+            "Executar o reparo/substituição, incluindo eventual trabalho em altura para câmeras externas.",
+            "Testar o sistema completo e atualizar a senha se algo foi reconfigurado.",
         ],
         "riscos": [
-            "Elétrico: choque por equipamento energizado (DC-80 F2, G10).",
-            "Queda durante o acesso ao aparelho em altura.",
-            "Ergonômico: má postura ao trabalhar em posição elevada.",
+            "Elétrico: choque residual em componentes eletrônicos mesmo desconectados (DC-80 A6, F2, G10).",
+            "Segurança: queda ao instalar/ajustar câmeras ou sensores em altura.",
         ],
         "medidas": [
-            "Administrativo: desligar e bloquear o disjuntor antes de iniciar (DC-82).",
-            "Engenharia: usar escada ou andaime adequado e estável.",
-            "EPI: luvas de trabalho e óculos de proteção.",
+            "Administrativo: apenas profissionais técnicos em eletrônica podem desmontar/consertar o equipamento.",
+            "Administrativo: nunca trabalhar desacompanhado em serviço elétrico ou em altura (DC-82).",
         ],
     },
-    "Ventilador de parede": {
+    "Áudio_Vídeo": {
         "etapas": [
-            "Desligar e bloquear o disjuntor do circuito.",
-            "Acessar o aparelho com escada ou andaime adequado.",
-            "Executar o reparo (aperto, troca de peça, limpeza).",
-            "Religar e testar o funcionamento.",
+            "Desligar a energia do sistema antes de manusear cabos, mesa de som ou conectores.",
+            "Diagnosticar o componente com defeito (microfone, amplificador, TV, projetor, câmera).",
+            "Substituir ou reparar o componente conforme o documento de Equipamentos de Áudio e Vídeo.",
+            "Testar o sistema completo antes de liberar para uso.",
         ],
         "riscos": [
-            "Elétrico: choque por equipamento energizado.",
-            "Queda durante o acesso ao aparelho em altura.",
-            "Corte/esmagamento por partes giratórias (hélices).",
+            "Elétrico: choque em componentes eletrônicos, mesmo após desconectados da energia.",
+            "Ergonômico: acesso a locais de difícil alcance (racks, forros, suportes de TV/projetor).",
         ],
         "medidas": [
-            "Administrativo: desligar e bloquear o disjuntor antes de iniciar (DC-82).",
-            "Engenharia: usar escada ou andaime adequado e estável.",
-            "EPI: luvas de trabalho.",
+            "Administrativo: apenas profissionais técnicos em eletrônica podem consertar/desmontar equipamentos.",
+            "Administrativo: nunca trabalhar desacompanhado (DC-82).",
         ],
     },
-    "Exaustor e insuflador": {
+    "Cadeiras_Móveis": {
         "etapas": [
-            "Desligar e bloquear o disjuntor do circuito.",
-            "Acessar o aparelho com escada ou andaime adequado.",
-            "Executar o diagnóstico/reparo/troca de peça.",
-            "Religar e testar o funcionamento.",
+            "Isolar/afastar a cadeira ou móvel da área de circulação antes do reparo.",
+            "Executar o reparo (aperto, troca de estofado, tratamento de cupim, pintura de estrutura).",
+            "Testar a estabilidade e a segurança do item antes de recolocá-lo em uso.",
         ],
         "riscos": [
-            "Elétrico: choque por equipamento energizado.",
-            "Queda durante o acesso ao aparelho em altura.",
+            "Ergonômico: esforço excessivo, má postura ou movimentos repetitivos ao mover/levantar móveis (DC-80 C3, C5, J4-J5).",
+            "Segurança: cortes em estofados rasgados, farpas ou pontas de metal/madeira.",
+            "Químico: poeira ao tratar cupim ou lixar madeira/estrutura (DC-80 D1-D4).",
         ],
         "medidas": [
-            "Administrativo: desligar e bloquear o disjuntor antes de iniciar (DC-82).",
-            "Engenharia: usar escada ou andaime adequado e estável.",
-            "EPI: luvas de trabalho e óculos de proteção.",
-        ],
-    },
-    "Controle de pragas": {
-        "etapas": [
-            "Ler a FISPQ e a Ficha Técnica do produto antes de usar.",
-            "Verificar a direção do vento antes da aplicação.",
-            "Aplicar o produto/armadilha conforme indicado.",
-            "Lavar separadamente as roupas usadas após o serviço.",
-        ],
-        "riscos": [
-            "Químico: exposição/inalação de produto químico (DC-80 D1-D4).",
-            "Biológico: picadas ou ataques de insetos/animais (DC-80 C7).",
-            "Segurança: uso de escada em locais altos.",
-        ],
-        "medidas": [
-            "Substituição: preferir produtos menos tóxicos quando possível.",
-            "EPI: luvas, máscara/respirador e óculos de proteção.",
-            "Administrativo: não usar escada para desalojar insetos/aves em altura — usar cabo telescópico do solo.",
+            "Administrativo: içar/mover peças pesadas em equipe, revezando os trabalhadores.",
+            "EPI: luvas de trabalho e, se houver lixamento ou produto químico, máscara e óculos de proteção.",
         ],
     },
     "Elétrica": {
         "etapas": [
-            "Contatar a concessionária, se necessário desligar o padrão de entrada.",
-            "Desligar e bloquear o disjuntor do circuito.",
+            "Contatar a concessionária, se for preciso desligar o padrão de entrada.",
+            "Desligar e bloquear o disjuntor do circuito antes de iniciar o serviço.",
             "Verificar a ausência de energia com multímetro.",
-            "Executar o reparo/substituição.",
+            "Executar o reparo/substituição (disjuntor, quadro, fiação, gerador, rede).",
             "Religar e testar o circuito.",
         ],
         "riscos": [
-            "Elétrico: choque por contato direto ou indireto (DC-80 A6, F2, G10).",
-            "Elétrico: energização acidental durante o serviço.",
-            "Incêndio: curto-circuito ou sobrecarga.",
+            "Elétrico: choque por contato direto ou indireto em partes eletrificadas (DC-80 A6, F2, G10).",
+            "Elétrico: energização acidental ou inicialização inesperada durante o serviço.",
+            "Incêndio/explosão: curto-circuito ou sobrecarga.",
         ],
         "medidas": [
-            "Administrativo: nunca trabalhar desacompanhado (DC-82).",
-            "Engenharia: bloqueio/sinalização do disjuntor durante o serviço.",
-            "EPI: luvas isolantes e ferramentas com isolamento apropriado.",
+            "Administrativo: nunca trabalhar desacompanhado em serviço elétrico (DC-82).",
+            "Engenharia: bloqueio/sinalização do disjuntor durante todo o serviço.",
+            "EPI: ferramentas com isolamento apropriado; piso, mãos e pés secos.",
         ],
     },
-    "Esquadrias": {
+    "Eletrodomésticos": {
         "etapas": [
-            "Avaliar o tipo de esquadria e a causa do problema.",
-            "Executar a limpeza, o ajuste, a lubrificação ou a troca da peça.",
-            "Testar o funcionamento (abrir/fechar).",
+            "Desligar a energia (e o registro de gás, se aplicável) antes de manusear o equipamento.",
+            "Diagnosticar o defeito (fogão, geladeira, lavadora).",
+            "Executar o reparo ou substituir o equipamento.",
+            "Testar o funcionamento antes de liberar para uso.",
         ],
         "riscos": [
-            "Segurança: cortes ao manusear vidro temperado.",
-            "Ergonômico: esforço ao movimentar peças pesadas.",
+            "Elétrico: choque em equipamentos energizados.",
+            "Vazamento de gás: no caso de fogões (ver também categoria Sistema_de_Gás).",
+            "Ergonômico: esforço ao mover equipamentos pesados.",
         ],
         "medidas": [
-            "EPI: luvas emborrachadas e óculos de proteção ao manusear vidro.",
-            "Administrativo: consultar um profissional para movimentar peças grandes de vidro.",
+            "Administrativo: desligar a fonte de energia/gás antes de iniciar (DC-82).",
+            "EPI: luvas de trabalho ao mover equipamentos.",
         ],
     },
-    "Estrutura": {
+    "Elevador": {
         "etapas": [
-            "Isolar a área de trabalho.",
-            "Avaliar a extensão do problema (trinca, rachadura, etc.).",
-            "Executar o tratamento/reparo.",
-            "Inspecionar novamente após a conclusão.",
+            "Contatar o LDC/empresa de manutenção especializada antes de qualquer intervenção.",
+            "Isolar e sinalizar o elevador, impedindo o uso durante o reparo.",
+            "Acompanhar o diagnóstico e reparo feito por profissional habilitado.",
+            "Testar o funcionamento antes de liberar novamente para uso.",
         ],
         "riscos": [
-            "Segurança: partículas nos olhos ao raspar/lixar/usar talhadeira.",
-            "Segurança: desmoronamento ou queda de material.",
-            "Ergonômico: uso de ferramentas de impacto.",
+            "Mecânico: esmagamento ou aprisionamento em partes móveis do elevador.",
+            "Elétrico: choque em componentes do painel de comando.",
+            "Segurança: queda no poço do elevador durante a manutenção.",
         ],
         "medidas": [
-            "EPI: luvas, máscara e óculos de segurança.",
-            "Administrativo: apenas pessoal treinado deve usar ferramentas elétricas/de corte.",
+            "Administrativo: serviço deve ser feito por empresa/profissional especializado, com aprovação do LDC.",
+            "Engenharia: sinalização e bloqueio de acesso ao elevador durante o serviço.",
         ],
     },
-    "Extintores de incêndio": {
+    "Hidráulica_Esgoto": {
         "etapas": [
-            "Verificar a validade e a pressão do extintor.",
-            "Encaminhar para recarga em empresa credenciada, se necessário.",
-            "Reinstalar o extintor no suporte, devidamente sinalizado.",
-        ],
-        "riscos": [
-            "Segurança: manuseio incorreto pode despressurizar o extintor.",
-            "Incêndio: falta de extintor funcional em caso de emergência.",
-        ],
-        "medidas": [
-            "Administrativo: substituir extintores vencidos/despressurizados imediatamente.",
-            "Administrativo: manter o extintor sinalizado e sem obstruções na frente.",
-        ],
-    },
-    "Hidráulica": {
-        "etapas": [
-            "Fechar o registro geral de água.",
-            "Desmontar a peça/tubulação com defeito.",
-            "Executar o reparo/substituição.",
+            "Fechar o registro geral de água antes de iniciar o reparo.",
+            "Se envolver fossa, sumidouro ou poço, avaliar o risco de espaço confinado antes de aproximar-se.",
+            "Executar o reparo/substituição (registro, tubulação, fossa, caixa d'água).",
             "Reabrir o registro e testar, verificando vazamentos.",
         ],
         "riscos": [
-            "Biológico: contato com esgoto ou água contaminada.",
-            "Segurança: cortes com ferramentas.",
-            "Ergonômico: esforço em posições confinadas.",
+            "Biológico: contato com esgoto, água contaminada ou lodo (DC-80 C7).",
+            "Ambiente de trabalho: espaço confinado com baixos níveis de oxigênio em fossas/poços (DC-80 J1-J9).",
+            "Segurança: cortes com ferramentas ou tampas quebradas.",
         ],
         "medidas": [
-            "Administrativo: fechar o registro antes de iniciar o serviço.",
-            "EPI: luvas e óculos de proteção.",
+            "Administrativo: fechar o registro antes de iniciar; contratar empresa especializada para limpeza de fossa.",
+            "EPI: luvas, óculos de proteção e, se houver risco de gases, verificação de ventilação antes de entrar.",
         ],
     },
-    "Jardins": {
+    "Iluminação": {
         "etapas": [
-            "Avaliar a área e planejar a poda/tratamento.",
-            "Executar a poda ou a aplicação do produto.",
-            "Recolher e descartar os resíduos.",
+            "Desligar e bloquear o disjuntor do circuito de iluminação antes de iniciar.",
+            "Acessar o ponto de luz com escada ou andaime adequado.",
+            "Trocar a lâmpada, luminária ou reator, ou corrigir o ponto de instalação.",
+            "Religar e testar o circuito.",
+        ],
+        "riscos": [
+            "Elétrico: choque por equipamento energizado (DC-80 F2, G10).",
+            "Segurança: queda durante o acesso ao ponto de luz em altura.",
+        ],
+        "medidas": [
+            "Administrativo: desligar e bloquear o disjuntor antes de iniciar (DC-82).",
+            "Engenharia: usar escada ou andaime adequado e estável.",
+        ],
+    },
+    "Laje": {
+        "etapas": [
+            "Isolar a área abaixo e ao redor da laje afetada.",
+            "Avaliar a extensão do problema (rachadura, cedimento, infiltração, ferrugem na armadura).",
+            "Contatar o LDC antes de qualquer intervenção estrutural.",
+            "Executar o reparo aprovado e inspecionar novamente após a conclusão.",
+        ],
+        "riscos": [
+            "Estrutural: colapso parcial ou total da laje.",
+            "Segurança: queda de material ou ferramentas durante o reparo.",
+            "Segurança: partículas nos olhos ao raspar/lixar ou usar ferramentas de impacto.",
+        ],
+        "medidas": [
+            "Administrativo: contatar o LDC antes de iniciar qualquer reparo estrutural; não avançar sem aprovação.",
+            "EPI: luvas, máscara e óculos de segurança.",
+        ],
+    },
+    "Louças_Metais": {
+        "etapas": [
+            "Fechar o registro de água próximo ao vaso/pia antes de iniciar.",
+            "Remover a peça danificada (vaso sanitário, pia) com cuidado para não gerar mais estilhaços.",
+            "Instalar a peça nova ou reapertar a fixação.",
+            "Testar o funcionamento e verificar vazamentos.",
+        ],
+        "riscos": [
+            "Segurança: cortes com louça quebrada/estilhaçada.",
+            "Ergonômico: esforço ao levantar peças pesadas (vaso sanitário, pia).",
+        ],
+        "medidas": [
+            "EPI: luvas resistentes a corte e óculos de proteção.",
+            "Administrativo: içar peças pesadas em equipe.",
+        ],
+    },
+    "Muros_Cercas_Calçadas": {
+        "etapas": [
+            "Isolar a área de trabalho (muro, cerca ou calçada) para pedestres e veículos.",
+            "Avaliar a extensão do problema (rachadura, erosão, ferrugem, desnível).",
+            "Executar o reparo (alvenaria, pintura, solda, concretagem).",
+            "Remover o isolamento somente após a área estar segura para uso.",
+        ],
+        "riscos": [
+            "Estrutural: desmoronamento de muro de arrimo ou trecho comprometido.",
+            "Elétrico: choque ao trabalhar perto de cerca elétrica energizada.",
+            "Segurança: partículas ao quebrar/lixar concreto ou metal; ferramentas de corte.",
+            "Físico: exposição solar prolongada em serviços externos (DC-80 C8-C10).",
+        ],
+        "medidas": [
+            "Administrativo: desligar a cerca elétrica antes de qualquer intervenção nela.",
+            "Engenharia: isolar e sinalizar a área de trabalho para terceiros.",
+            "EPI: luvas, óculos de proteção, calçado de segurança e proteção solar.",
+        ],
+    },
+    "Paisagismo_Decoração": {
+        "etapas": [
+            "Avaliar a área e planejar a poda, irrigação ou tratamento de pragas.",
+            "Executar o serviço (poda, aplicação de produto, reparo de irrigação).",
+            "Recolher e descartar corretamente os resíduos e restos de aplicação.",
         ],
         "riscos": [
             "Físico: insolação, queimaduras e desidratação (DC-80 C8-C10).",
-            "Ruído: uso de cortador de grama (DC-80 C4).",
-            "Biológico: contato com insetos, plantas ou animais.",
+            "Ruído: uso de cortador de grama ou motopoda (DC-80 C4).",
+            "Biológico: contato com insetos, plantas com espinhos/venenosas ou animais (DC-80 C7).",
+            "Químico: exposição a fertilizantes, herbicidas ou inseticidas (DC-80 D1-D4).",
         ],
         "medidas": [
-            "EPI: protetor auditivo, protetor solar e luvas.",
-            "Administrativo: hidratação frequente e pausas em dias de calor.",
+            "EPI: protetor auditivo, protetor solar, luvas e, se houver produto químico, máscara e óculos.",
+            "Administrativo: hidratação frequente e pausas em dias de calor; ler a FISPQ antes de usar produtos químicos.",
         ],
     },
-    "Manutenção de grelhas de águas pluviais": {
+    "Paredes_Acabamentos": {
         "etapas": [
-            "Remover a grelha.",
-            "Limpar a canaleta e verificar trincas internas/externas.",
-            "Reinstalar a grelha e testar o escoamento.",
+            "Isolar a área e proteger o piso/mobiliário próximo.",
+            "Preparar a superfície (raspar, lixar, tratar rachaduras/infiltração).",
+            "Aplicar fundo preparador/selador e depois a pintura ou o revestimento final.",
         ],
         "riscos": [
-            "Biológico: animais peçonhentos escondidos sob folhas secas.",
-            "Ergonômico: postura ao trabalhar próximo ao solo.",
+            "Químico: inalação de poeira do lixamento ou de solventes/tintas (DC-80 D1-D4).",
+            "Segurança: queda ao usar escada/andaime para paredes altas.",
+            "Estrutural: paredes com rachaduras/infiltração podem indicar problema maior na fundação.",
         ],
         "medidas": [
-            "EPI: luvas resistentes e calçado adequado.",
-            "Administrativo: inspecionar visualmente antes de colocar as mãos no local.",
+            "EPI: máscara/respirador, óculos de proteção e luvas.",
+            "Engenharia: manter o ambiente bem ventilado durante a aplicação de produtos químicos.",
+            "Administrativo: se a trinca/rachadura estiver aumentando, contatar o TM antes de seguir com o reparo estético.",
         ],
     },
-    "Pintura": {
+    "Piso_Contrapiso": {
         "etapas": [
-            "Preparar a superfície (lixar/raspar/limpar).",
-            "Aplicar o fundo preparador ou selador, se necessário.",
-            "Aplicar a tinta de acabamento.",
+            "Isolar a área e sinalizar para evitar quedas em piso molhado ou danificado.",
+            "Remover a peça/trecho danificado (piso, contrapiso, corrimão).",
+            "Executar o reparo e aguardar o tempo de cura recomendado.",
+            "Reabrir a área somente quando estiver seca e segura.",
         ],
         "riscos": [
-            "Químico: inalação de solventes e vapores (DC-80 D1-D4).",
-            "Segurança: queda ao usar escada/andaime.",
-            "Incêndio: faíscas próximas a solventes inflamáveis.",
+            "Segurança: partículas ao cortar/quebrar cerâmica ou concreto.",
+            "Segurança: escorregões ou tropeços durante o serviço e antes da cura completa.",
+            "Ergonômico: postura ao trabalhar próximo ao piso por tempo prolongado.",
         ],
         "medidas": [
-            "EPI: respirador, óculos de proteção e luvas.",
-            "Engenharia: manter o ambiente bem ventilado.",
-            "Administrativo: não fumar nem gerar faíscas perto de solventes.",
+            "EPI: óculos de proteção, luvas e joelheiras.",
+            "Administrativo: cortar peças cerâmicas em área externa; sinalizar piso molhado/em obras.",
         ],
     },
-    "Revestimento cerâmico": {
+    "Portas_Janelas": {
         "etapas": [
-            "Remover a peça danificada.",
-            "Aplicar nova argamassa e assentar a peça.",
-            "Aplicar o rejunte após o tempo de cura.",
+            "Avaliar o tipo de porta/janela e a causa do problema (madeira, ferro, vidro).",
+            "Executar o ajuste, a lubrificação, o tratamento de ferrugem/cupim ou a troca da peça.",
+            "Testar o funcionamento (abrir/fechar/travar) antes de concluir.",
         ],
         "riscos": [
-            "Segurança: partículas ao quebrar/cortar cerâmica.",
-            "Ergonômico: postura ao trabalhar próximo ao piso.",
+            "Segurança: cortes ao manusear vidro temperado, sobretudo peças grandes soltas.",
+            "Segurança: partículas ao lixar ferrugem ou cupim.",
+            "Ergonômico: esforço ao movimentar portas/janelas pesadas.",
         ],
         "medidas": [
-            "EPI: óculos de proteção e luvas.",
-            "Administrativo: cortar as peças cerâmicas em área externa ao salão.",
+            "EPI: luvas emborrachadas e óculos de proteção ao manusear vidro; máscara ao lixar.",
+            "Administrativo: consultar um profissional para movimentar vidro temperado solto, especialmente peças grandes.",
         ],
     },
-    "Sistema de áudio e vídeo": {
+    "Rufos_Calhas": {
         "etapas": [
-            "Desligar a energia do sistema antes de manusear.",
-            "Diagnosticar o componente com defeito (cabo, conector, etc.).",
-            "Substituir ou reparar o componente.",
-            "Testar o sistema completo.",
+            "Avaliar o acesso ao rufo/calha e usar escada ou andaime adequado.",
+            "Limpar ou reparar o item (entupimento, vazamento, ferrugem).",
+            "Testar o escoamento de água antes de descer.",
         ],
         "riscos": [
-            "Elétrico: choque residual em componentes eletrônicos.",
-            "Ergonômico: acesso a locais de difícil alcance (racks, forros).",
+            "Segurança: queda de altura ao acessar calhas e rufos, geralmente próximos ao beiral do telhado.",
+            "Biológico: animais peçonhentos ou insetos escondidos em folhas acumuladas.",
+            "Segurança: partículas ao remover ferrugem.",
         ],
         "medidas": [
-            "Administrativo: apenas profissionais técnicos em eletrônica podem desmontar equipamentos.",
-            "Administrativo: nunca trabalhar desacompanhado (DC-82).",
+            "Administrativo: nunca trabalhar sozinho em altura; avaliar se o serviço exige o mesmo cuidado de um trabalho no telhado.",
+            "EPI: luvas resistentes, óculos de proteção e, se a altura exigir, sistema de proteção contra quedas.",
         ],
     },
-    "Sistemas de segurança e de internet": {
+    "Sistema_de_Gás": {
         "etapas": [
-            "Desligar a energia do equipamento.",
-            "Diagnosticar sensores, central ou cabeamento.",
-            "Executar o reparo/substituição.",
-            "Testar o sistema e atualizar senhas, se necessário.",
+            "Fechar o registro de gás imediatamente ao identificar vazamento; ventilar o ambiente.",
+            "Não acionar interruptores elétricos nem gerar faíscas na área.",
+            "Contatar a concessionária/profissional habilitado para localizar e corrigir o vazamento.",
+            "Testar o sistema (com espuma de detecção, nunca com chama) antes de liberar o uso.",
         ],
         "riscos": [
-            "Elétrico: choque em componentes eletrônicos.",
-            "Segurança: trabalho em altura para câmeras/sensores externos.",
+            "Incêndio/explosão: vazamento de gás combinado com fonte de ignição.",
+            "Asfixia: acúmulo de gás em ambiente mal ventilado.",
+            "Segurança: válvulas ou tubulações danificadas sob pressão.",
         ],
         "medidas": [
-            "Administrativo: apenas profissionais técnicos em eletrônica podem consertar/desmontar.",
-            "Administrativo: nunca trabalhar desacompanhado (DC-82).",
+            "Eliminação: fechar o registro de gás antes de qualquer outra ação.",
+            "Administrativo: apenas profissional qualificado deve reparar vazamentos ou trocar válvulas; nunca usar chama para testar vazamento.",
+            "Engenharia: garantir ventilação adequada do ambiente antes de retomar o uso.",
         ],
     },
-    "Telhado": {
+    "Telhado_Forro_Acabamentos": {
         "etapas": [
-            "Avaliar o acesso e instalar sistema de proteção contra quedas.",
-            "Subir ao telhado com uso de EPI para trabalho em altura.",
-            "Executar o reparo (troca de telha, vedação, estrutura, etc.).",
+            "Contatar o TM antes de iniciar qualquer serviço estrutural no telhado (tesoura, terça, viga).",
+            "Instalar o sistema de proteção contra quedas e preencher o DC-85.",
+            "Subir ao telhado com uso de EPI para trabalho em altura, usando plataforma de tábuas se houver telhas frágeis.",
+            "Executar o reparo (troca de telha, tratamento de cupim/ferrugem, vedação, forro).",
             "Descer e guardar os equipamentos de segurança.",
         ],
         "riscos": [
-            "Segurança: queda de altura (acima de 1,80 m).",
-            "Segurança: queda de objetos ou ferramentas.",
-            "Ambiente: condições meteorológicas inseguras (vento, chuva).",
+            "Segurança: queda de altura (acima de 1,80 m) — risco alto em praticamente todo serviço nesta categoria.",
+            "Segurança: queda de objetos, ferramentas ou telhas quebradas.",
+            "Ambiente de trabalho: condições meteorológicas inseguras (vento, chuva, tempestade).",
+            "Estrutural: colapso de tesoura, terça ou viga comprometida.",
         ],
         "medidas": [
-            "Administrativo: nunca trabalhar sozinho em altura; preencher o DC-85.",
-            "EPI: cinto tipo paraquedista, talabarte em 'Y', capacete com jugular, trava-queda, corda e fita de ancoragem.",
-            "Engenharia: usar plataforma de tábuas em telhas de fibrocimento.",
+            "Administrativo: nunca trabalhar sozinho em altura; preencher o DC-85 e seguir o capítulo 'Trabalho em altura' do DC-82.",
+            "EPI: cinto tipo paraquedista, talabarte em 'Y', capacete com jugular de 3 pontos, trava-queda, corda e fita de ancoragem.",
+            "Engenharia: usar plataforma de tábuas em telhas de fibrocimento; nunca pisar diretamente na telha.",
+        ],
+    },
+    "Ventilação_Ar Condicionado_Aquecimento": {
+        "etapas": [
+            "Desligar e bloquear o disjuntor do circuito do equipamento antes de iniciar.",
+            "Acessar o aparelho com escada ou andaime adequado, se estiver em altura.",
+            "Executar o diagnóstico/reparo (compressor, condensadora, evaporadora, dutos, termostato).",
+            "Religar o disjuntor e testar o funcionamento e a temperatura de saída do ar.",
+        ],
+        "riscos": [
+            "Elétrico: choque por equipamento energizado (DC-80 F2, G10).",
+            "Segurança: queda durante o acesso ao aparelho em altura.",
+            "Químico: contato com gás refrigerante ou combustível contaminado.",
+        ],
+        "medidas": [
+            "Administrativo: desligar e bloquear o disjuntor antes de iniciar (DC-82).",
+            "Engenharia: usar escada ou andaime adequado e estável.",
+            "EPI: luvas de trabalho e óculos de proteção; manuseio de gás refrigerante apenas por profissional habilitado.",
         ],
     },
 }
@@ -792,14 +863,20 @@ _SUGESTAO_APR_PADRAO = {
     ],
 }
 
+_TEXTO_RESPONSAVEL = {
+    "TM": "Administrativo: este item é de responsabilidade do TM — consultar o TM antes de iniciar o serviço.",
+    "LDC": "Administrativo: este item é de responsabilidade do LDC — não iniciar sem aprovação do LDC.",
+}
 
-def sugestao_apr(categoria, problema=None, risco_alto=False):
+
+def sugestao_apr(categoria, problema=None, responsavel=None, risco_alto=False):
     """
     Ponto de partida para a Análise Preliminar de Risco (DC-83),
-    combinando as sugestões da categoria com um alerta extra quando o
-    reparo foi marcado como "trabalho de alto risco". É só uma
-    sugestão — deve ser revisada pelo responsável antes de aprovar
-    (DC-83i, § 3-4).
+    combinando as sugestões da categoria com o campo "responsavel" já
+    existente no catálogo (CONGREGAÇÃO/TM/LDC) e um alerta extra
+    quando o reparo foi marcado como "trabalho de alto risco". É só
+    uma sugestão — deve ser revisada pelo responsável antes de
+    aprovar (DC-83i, § 3-4).
     """
     base = SUGESTOES_APR_POR_CATEGORIA.get(categoria, _SUGESTAO_APR_PADRAO)
     etapas = list(base["etapas"])
@@ -808,6 +885,10 @@ def sugestao_apr(categoria, problema=None, risco_alto=False):
 
     if problema:
         etapas.insert(0, f"Diagnosticar o problema: {problema}")
+
+    texto_responsavel = _TEXTO_RESPONSAVEL.get((responsavel or "").strip().upper())
+    if texto_responsavel:
+        medidas.append(texto_responsavel)
 
     if risco_alto:
         medidas.append(
