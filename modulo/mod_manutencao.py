@@ -40,6 +40,16 @@
 #    ver sugestao_apr() em catalogo_manutencao.py), revisar/editar o
 #    texto e baixar o PDF do DC-83 já preenchido (apr_dc83.py faz a
 #    sobreposição de texto sobre o template DC83T.pdf).
+# NOVIDADE (v1.4):
+#  - Persistência do rascunho da APR: ao clicar em "Gerar PDF da APR
+#    (DC-83)", os campos digitados (nome do projeto, descrição, local,
+#    data, número de emergência, etapas/riscos/medidas, preparado por
+#    e data de preparação) são salvos no próprio documento do reparo
+#    (campo "apr_dados", via salvar_reparo_manutencao — update parcial,
+#    igual já era feito para o status). Da próxima vez que o bloco da
+#    APR desse reparo for aberto, os campos nascem com o último
+#    rascunho salvo em vez de sempre recomeçar do zero — facilita
+#    fazer um pequeno ajuste/correção e gerar/baixar de novo.
 # =============================================================
 import datetime
 import os
@@ -403,12 +413,24 @@ def _bloco_apr_dc83(r, prefixo):
     de "trabalho de alto risco" feita em Novo Reparo — mas é só um
     ponto de partida: deve ser revisada antes de gerar o PDF
     (DC-83i, § 3-4).
+
+    PERSISTÊNCIA (v1.4): sempre que o PDF é gerado, os campos digitados
+    são salvos no próprio documento do reparo (campo "apr_dados"). Na
+    próxima vez que este bloco for aberto — mesmo em outra sessão —,
+    os campos nascem com o último rascunho salvo em vez de sempre
+    recomeçar da sugestão automática. Isso não precisa de st.rerun():
+    enquanto a sessão do navegador continuar aberta, o Streamlit já
+    preserva o que foi digitado nos widgets pela própria "key"; o que
+    o "apr_dados" resolve é sobreviver a um F5, fechar a aba, ou abrir
+    o mesmo reparo dias depois.
     """
     rid = r["id"]
     mostrar = st.checkbox("🛡️ Gerar Análise Preliminar de Risco (DC-83)",
                            key=f"apr_toggle_{prefixo}_{rid}")
     if not mostrar:
         return
+
+    apr_salvo = r.get("apr_dados") or {}
 
     info_catalogo = buscar_problema(r.get("categoria"), r.get("problema"))
     responsavel = info_catalogo.get("responsavel") if info_catalogo else ""
@@ -420,48 +442,63 @@ def _bloco_apr_dc83(r, prefixo):
         risco_alto=r.get("risco_alto", False),
     )
 
-    st.caption("Sugestão automática com base na categoria, no problema e no campo "
-               "responsável do catálogo (ver DC-83i). Revise e ajuste antes de gerar o PDF.")
+    if apr_salvo:
+        st.caption("📌 Exibindo o último rascunho salvo desta APR. Ajuste o que precisar — "
+                   "ao clicar em 'Gerar PDF' o rascunho é salvo de novo automaticamente.")
+    else:
+        st.caption("Sugestão automática com base na categoria, no problema e no campo "
+                   "responsável do catálogo (ver DC-83i). Revise e ajuste antes de gerar o PDF.")
 
     col1, col2 = st.columns(2)
     nome_projeto = col1.text_input(
-        "Nome do projeto", value=f"Manutenção — {r.get('categoria', '')}",
+        "Nome do projeto",
+        value=apr_salvo.get("nome_projeto", f"Manutenção — {r.get('categoria', '')}"),
         key=f"apr_nome_{prefixo}_{rid}")
     local_servico = col2.text_input(
         "Local do serviço", placeholder="Ex.: Salão do Reino, área externa",
+        value=apr_salvo.get("local_servico", ""),
         key=f"apr_local_{prefixo}_{rid}")
 
     descricao_servico = st.text_input(
-        "Descrição do serviço", value=str(r.get("problema", ""))[:200],
+        "Descrição do serviço",
+        value=apr_salvo.get("descricao_servico", str(r.get("problema", ""))[:200]),
         key=f"apr_desc_{prefixo}_{rid}")
 
     col3, col4 = st.columns(2)
     data_inicio = col3.text_input(
-        "Data programada para o início", value=str(r.get("mes_execucao", "")),
+        "Data programada para o início",
+        value=apr_salvo.get("data_inicio", str(r.get("mes_execucao", ""))),
         key=f"apr_data_{prefixo}_{rid}")
     numero_emergencia = col4.text_input(
         "Número(s) de emergência", placeholder="Ex.: 190 / 193",
+        value=apr_salvo.get("numero_emergencia", ""),
         key=f"apr_emerg_{prefixo}_{rid}")
 
     st.markdown("##### Etapas, riscos e medidas de controle")
     st.caption("Uma linha por item — cada linha vira um item de lista na célula do PDF. "
                "O formulário DC-83 comporta até 5 linhas na tabela.")
-    etapas_txt = st.text_area("Etapas do serviço (uma por linha)",
-                               value="\n".join(sugestao["etapas"]), height=120,
-                               key=f"apr_etapas_{prefixo}_{rid}")
-    riscos_txt = st.text_area("Riscos (um por linha)",
-                               value="\n".join(sugestao["riscos"]), height=120,
-                               key=f"apr_riscos_{prefixo}_{rid}")
-    medidas_txt = st.text_area("Medidas de controle (uma por linha)",
-                                value="\n".join(sugestao["medidas"]), height=120,
-                                key=f"apr_medidas_{prefixo}_{rid}")
+    etapas_txt = st.text_area(
+        "Etapas do serviço (uma por linha)",
+        value="\n".join(apr_salvo.get("etapas") or sugestao["etapas"]), height=120,
+        key=f"apr_etapas_{prefixo}_{rid}")
+    riscos_txt = st.text_area(
+        "Riscos (um por linha)",
+        value="\n".join(apr_salvo.get("riscos") or sugestao["riscos"]), height=120,
+        key=f"apr_riscos_{prefixo}_{rid}")
+    medidas_txt = st.text_area(
+        "Medidas de controle (uma por linha)",
+        value="\n".join(apr_salvo.get("medidas") or sugestao["medidas"]), height=120,
+        key=f"apr_medidas_{prefixo}_{rid}")
 
     col5, col6 = st.columns(2)
-    preparado_por = col5.text_input("Preparado por", value=str(r.get("executor", "")),
-                                     key=f"apr_preparado_{prefixo}_{rid}")
-    data_preparacao = col6.text_input("Data da preparação",
-                                       value=datetime.date.today().strftime("%d/%m/%Y"),
-                                       key=f"apr_datapreparo_{prefixo}_{rid}")
+    preparado_por = col5.text_input(
+        "Preparado por",
+        value=apr_salvo.get("preparado_por", str(r.get("executor", ""))),
+        key=f"apr_preparado_{prefixo}_{rid}")
+    data_preparacao = col6.text_input(
+        "Data da preparação",
+        value=apr_salvo.get("data_preparacao", datetime.date.today().strftime("%d/%m/%Y")),
+        key=f"apr_datapreparo_{prefixo}_{rid}")
 
     etapas_lista = [l.strip() for l in etapas_txt.split("\n") if l.strip()]
     riscos_lista = [l.strip() for l in riscos_txt.split("\n") if l.strip()]
@@ -491,8 +528,26 @@ def _bloco_apr_dc83(r, prefixo):
                 "preparado_por": preparado_por,
                 "data_preparacao": data_preparacao,
             })
+            # Salva o rascunho digitado junto ao reparo (update parcial,
+            # igual já era feito para o status) — assim, ao reabrir este
+            # reparo depois, os campos já vêm preenchidos com o que foi
+            # digitado aqui, facilitando um ajuste pequeno + gerar de novo.
+            salvar_reparo_manutencao({
+                "apr_dados": {
+                    "nome_projeto": nome_projeto,
+                    "descricao_servico": descricao_servico,
+                    "local_servico": local_servico,
+                    "data_inicio": data_inicio,
+                    "numero_emergencia": numero_emergencia,
+                    "etapas": etapas_lista,
+                    "riscos": riscos_lista,
+                    "medidas": medidas_lista,
+                    "preparado_por": preparado_por,
+                    "data_preparacao": data_preparacao,
+                }
+            }, doc_id=rid)
             st.session_state[f"apr_pdf_{prefixo}_{rid}"] = pdf_bytes
-            st.success("✅ PDF gerado! Use o botão abaixo para baixar.")
+            st.success("✅ PDF gerado e rascunho salvo! Use o botão abaixo para baixar.")
         except FileNotFoundError as e:
             st.error(str(e))
 
