@@ -32,7 +32,16 @@
 #    "jogava" o conteúdo de todas as sub-abas na tela ao mesmo tempo.
 #    Trocado por abas_persistentes() (tabs_persistentes.py), que guarda
 #    a aba ativa em st.session_state — sobrevive a qualquer rerun.
+# NOVIDADE (v1.3):
+#  - Análise Preliminar de Risco (DC-83): dentro de cada reparo
+#    (Pendentes e Finalizados), é possível gerar uma sugestão
+#    automática de etapas/riscos/medidas de controle (baseada na
+#    categoria, no problema e no campo "responsavel" do catálogo —
+#    ver sugestao_apr() em catalogo_manutencao.py), revisar/editar o
+#    texto e baixar o PDF do DC-83 já preenchido (apr_dc83.py faz a
+#    sobreposição de texto sobre o template DC83T.pdf).
 # =============================================================
+import datetime
 import os
 import sys
 
@@ -50,11 +59,12 @@ from database import (
 )
 from catalogo_manutencao import (
     CATEGORIAS_MANUTENCAO, TABELA_GRAVIDADE, MESES_MANUTENCAO, STATUS_MANUTENCAO,
-    problemas_da_categoria, buscar_problema,
+    problemas_da_categoria, buscar_problema, sugestao_apr,
 )
 import permissoes
 from tema import CORES
 from tabs_persistentes import abas_persistentes
+from apr_dc83 import gerar_pdf_apr
 
 _COR_STATUS = {
     "Planejado":    "#64748B",
@@ -211,6 +221,8 @@ def _sub_lista_reparos(df, pode_editar, prefixo, vazio_msg, permitir_editar_camp
     Na aba de Finalizados, mesmo com pode_editar=True, só se pode
     reabrir (mudar status) ou excluir — não faz sentido reeditar
     detalhes de um reparo já concluído.
+    Em ambas as abas, é possível gerar a Análise Preliminar de Risco
+    (DC-83) do reparo, independente do modo de edição.
     """
     if df.empty:
         st.info(vazio_msg)
@@ -250,6 +262,9 @@ def _sub_lista_reparos(df, pode_editar, prefixo, vazio_msg, permitir_editar_camp
                   font-size:0.72rem;padding:3px 10px;border-radius:999px;">
                   💰 R$ {float(r.get('custo_estimado', 0) or 0):,.2f}</span>
             </div>""", unsafe_allow_html=True)
+
+            _bloco_apr_dc83(r, prefixo)
+            st.markdown("---")
 
             if not pode_editar:
                 st.markdown(f"**Solução recomendada:** {r.get('solucao_recomendada','—')}")
@@ -374,6 +389,124 @@ def _formulario_edicao_completo(r, prefixo):
             deletar_reparo_manutencao(rid)
             st.toast("🗑️ Reparo excluído.")
             st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────
+# Análise Preliminar de Risco (DC-83)
+# ─────────────────────────────────────────────────────────────
+def _bloco_apr_dc83(r, prefixo):
+    """
+    Sugestão automática + edição + geração/download da Análise
+    Preliminar de Risco (DC-83) para este reparo específico.
+    A sugestão combina a categoria/problema do reparo com o campo
+    "responsavel" (CONGREGAÇÃO/TM/LDC) do catálogo e com a marcação
+    de "trabalho de alto risco" feita em Novo Reparo — mas é só um
+    ponto de partida: deve ser revisada antes de gerar o PDF
+    (DC-83i, § 3-4).
+    """
+    rid = r["id"]
+    mostrar = st.checkbox("🛡️ Gerar Análise Preliminar de Risco (DC-83)",
+                           key=f"apr_toggle_{prefixo}_{rid}")
+    if not mostrar:
+        return
+
+    info_catalogo = buscar_problema(r.get("categoria"), r.get("problema"))
+    responsavel = info_catalogo.get("responsavel") if info_catalogo else ""
+
+    sugestao = sugestao_apr(
+        categoria=r.get("categoria"),
+        problema=r.get("problema"),
+        responsavel=responsavel,
+        risco_alto=r.get("risco_alto", False),
+    )
+
+    st.caption("Sugestão automática com base na categoria, no problema e no campo "
+               "responsável do catálogo (ver DC-83i). Revise e ajuste antes de gerar o PDF.")
+
+    col1, col2 = st.columns(2)
+    nome_projeto = col1.text_input(
+        "Nome do projeto", value=f"Manutenção — {r.get('categoria', '')}",
+        key=f"apr_nome_{prefixo}_{rid}")
+    local_servico = col2.text_input(
+        "Local do serviço", placeholder="Ex.: Salão do Reino, área externa",
+        key=f"apr_local_{prefixo}_{rid}")
+
+    descricao_servico = st.text_input(
+        "Descrição do serviço", value=str(r.get("problema", ""))[:200],
+        key=f"apr_desc_{prefixo}_{rid}")
+
+    col3, col4 = st.columns(2)
+    data_inicio = col3.text_input(
+        "Data programada para o início", value=str(r.get("mes_execucao", "")),
+        key=f"apr_data_{prefixo}_{rid}")
+    numero_emergencia = col4.text_input(
+        "Número(s) de emergência", placeholder="Ex.: 190 / 193",
+        key=f"apr_emerg_{prefixo}_{rid}")
+
+    st.markdown("##### Etapas, riscos e medidas de controle")
+    st.caption("Uma linha por item — cada linha vira um item de lista na célula do PDF. "
+               "O formulário DC-83 comporta até 5 linhas na tabela.")
+    etapas_txt = st.text_area("Etapas do serviço (uma por linha)",
+                               value="\n".join(sugestao["etapas"]), height=120,
+                               key=f"apr_etapas_{prefixo}_{rid}")
+    riscos_txt = st.text_area("Riscos (um por linha)",
+                               value="\n".join(sugestao["riscos"]), height=120,
+                               key=f"apr_riscos_{prefixo}_{rid}")
+    medidas_txt = st.text_area("Medidas de controle (uma por linha)",
+                                value="\n".join(sugestao["medidas"]), height=120,
+                                key=f"apr_medidas_{prefixo}_{rid}")
+
+    col5, col6 = st.columns(2)
+    preparado_por = col5.text_input("Preparado por", value=str(r.get("executor", "")),
+                                     key=f"apr_preparado_{prefixo}_{rid}")
+    data_preparacao = col6.text_input("Data da preparação",
+                                       value=datetime.date.today().strftime("%d/%m/%Y"),
+                                       key=f"apr_datapreparo_{prefixo}_{rid}")
+
+    etapas_lista = [l.strip() for l in etapas_txt.split("\n") if l.strip()]
+    riscos_lista = [l.strip() for l in riscos_txt.split("\n") if l.strip()]
+    medidas_lista = [l.strip() for l in medidas_txt.split("\n") if l.strip()]
+
+    n_linhas = min(5, max(len(etapas_lista), len(riscos_lista), len(medidas_lista), 1))
+    if max(len(etapas_lista), len(riscos_lista), len(medidas_lista)) > 5:
+        st.warning("⚠️ O DC-83 só tem 5 linhas na tabela. As linhas excedentes não entrarão "
+                    "no PDF — use mais de um formulário se precisar (como o próprio DC-83 orienta).")
+
+    linhas = [{
+        "etapa":   etapas_lista[i] if i < len(etapas_lista) else "",
+        "riscos":  riscos_lista[i] if i < len(riscos_lista) else "",
+        "medidas": medidas_lista[i] if i < len(medidas_lista) else "",
+    } for i in range(n_linhas)]
+
+    if st.button("📄 Gerar PDF da APR (DC-83)", key=f"apr_gerar_{prefixo}_{rid}",
+                 type="primary", use_container_width=True):
+        try:
+            pdf_bytes = gerar_pdf_apr({
+                "nome_projeto": nome_projeto,
+                "descricao_servico": descricao_servico,
+                "local_servico": local_servico,
+                "data_inicio": data_inicio,
+                "numero_emergencia": numero_emergencia,
+                "linhas": linhas,
+                "preparado_por": preparado_por,
+                "data_preparacao": data_preparacao,
+            })
+            st.session_state[f"apr_pdf_{prefixo}_{rid}"] = pdf_bytes
+            st.success("✅ PDF gerado! Use o botão abaixo para baixar.")
+        except FileNotFoundError as e:
+            st.error(str(e))
+
+    pdf_pronto = st.session_state.get(f"apr_pdf_{prefixo}_{rid}")
+    if pdf_pronto:
+        nome_arquivo = f"DC-83_{r.get('categoria', 'reparo')}_{rid}.pdf".replace(" ", "_")
+        st.download_button(
+            "⬇️ Baixar DC-83 preenchido",
+            data=pdf_pronto,
+            file_name=nome_arquivo,
+            mime="application/pdf",
+            key=f"apr_download_{prefixo}_{rid}",
+            use_container_width=True,
+        )
 
 
 # ─────────────────────────────────────────────────────────────
