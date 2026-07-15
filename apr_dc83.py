@@ -7,12 +7,13 @@
 #   pip install pypdf reportlab
 #
 # SOBRE AS COORDENADAS:
-# O DC83T.pdf não tem campos de formulário (AcroForm) — é uma tabela
-# desenhada. Por isso o preenchimento é feito desenhando texto por
-# cima, em posições estimadas a partir do layout visual do formulário.
-# É praticamente certo que alguns campos vão precisar de ajuste fino.
-# Use gerar_grade_calibracao() (no fim do arquivo) para conferir e
-# corrigir os números abaixo.
+# Diferente de uma estimativa visual, as posições abaixo foram
+# extraídas diretamente da geometria real do DC83T.pdf (retângulos
+# dos campos de cabeçalho e linhas/colunas da tabela, lidos com
+# pdfplumber). O template é uma página paisagem de 841.9 x 595.2 pt.
+# Se o template for substituído por outra versão/diagramação do
+# DC-83, as coordenadas abaixo podem precisar de novo ajuste — use
+# gerar_grade_calibracao() (no fim do arquivo) para conferir.
 # =============================================================
 import io
 import os
@@ -24,37 +25,53 @@ _root = os.path.abspath(os.path.dirname(__file__))
 CAMINHO_TEMPLATE_PADRAO = os.path.join(_root, "DC83T.pdf")
 
 FONTE = "Helvetica"
-TAM_FONTE_CABECALHO = 9
-TAM_FONTE_TABELA = 8
-ENTRELINHA_TABELA = 9.5
+TAM_FONTE_CABECALHO = 8.5
+TAM_FONTE_TABELA = 7.8
+ENTRELINHA_TABELA = 9.2
+TAM_FONTE_RODAPE = 8
 
-# --- Cabeçalho: (x_frac_inicio, y_frac_do_topo, largura_frac) ------
+# --- Cabeçalho: 5 caixas, todas com a mesma faixa horizontal -------
+# (x0, x1, topo, base) — coordenadas em pontos, medidas a partir do
+# topo da página (como no pdfplumber), convertidas para o sistema
+# bottom-up do reportlab dentro de _caixa_texto_simples().
 CAMPOS_CABECALHO = {
-    "nome_projeto":      (0.225, 0.150, 0.365),
-    "descricao_servico": (0.225, 0.202, 0.365),
-    "local_servico":     (0.225, 0.254, 0.365),
-    "data_inicio":       (0.225, 0.310, 0.365),
-    "numero_emergencia": (0.225, 0.362, 0.365),
+    "nome_projeto":      (187.8, 503.5, 78.5, 98.5),
+    "descricao_servico": (187.8, 503.5, 108.7, 128.7),
+    "local_servico":     (187.8, 503.5, 139.1, 159.1),
+    "data_inicio":       (187.8, 503.5, 169.4, 189.4),
+    "numero_emergencia": (187.8, 503.5, 199.7, 219.8),
 }
 
 # --- Tabela principal: 3 colunas x até 5 linhas --------------------
 COLUNAS_TABELA = {
-    "etapa":   (0.050, 0.296),
-    "riscos":  (0.352, 0.302),
-    "medidas": (0.655, 0.296),
+    "etapa":   (36.2, 292.5),
+    "riscos":  (292.5, 549.2),
+    "medidas": (549.2, 805.5),
 }
-LINHAS_TABELA_Y = [0.425, 0.505, 0.585, 0.665, 0.745]   # topo de cada linha
-ALTURA_LINHA_TABELA = 0.078
+# (topo, base) de cada linha da tabela
+LINHAS_TABELA = [
+    (253.9, 301.5),
+    (301.5, 348.8),
+    (348.8, 396.1),
+    (396.1, 444.0),
+    (444.0, 490.9),
+]
 
 # --- Rodapé: preparado por / data / revisado / data / revisado / data
+# (x0, x1, topo, base) — a faixa de escrita fica logo abaixo do rótulo
+# impresso (que termina em top=507.6) e antes do texto de rodapé do
+# formulário (que começa em top~536).
 CAMPOS_RODAPE = {
-    "preparado_por":    (0.050, 0.833, 0.148),
-    "data_preparacao":  (0.203, 0.833, 0.148),
-    "revisado_por_1":   (0.356, 0.833, 0.148),
-    "data_revisao_1":   (0.509, 0.833, 0.148),
-    "revisado_por_2":   (0.662, 0.833, 0.148),
-    "data_revisao_2":   (0.815, 0.833, 0.148),
+    "preparado_por":    (41.9, 178.0, 508.0, 519.0),
+    "data_preparacao":  (183.6, 295.0, 508.0, 519.0),
+    "revisado_por_1":   (299.4, 436.0, 508.0, 519.0),
+    "data_revisao_1":   (440.2, 552.0, 508.0, 519.0),
+    "revisado_por_2":   (555.9, 693.0, 508.0, 519.0),
+    "data_revisao_2":   (696.7, 805.0, 508.0, 519.0),
 }
+
+PADDING_X = 3
+PADDING_TOPO = 2
 
 
 def _quebrar_linhas(c, texto, largura_pt, tamanho_fonte):
@@ -70,37 +87,39 @@ def _quebrar_linhas(c, texto, largura_pt, tamanho_fonte):
         else:
             if linha_atual:
                 linhas.append(linha_atual)
+            # palavra sozinha maior que a largura: corta na força
+            while c.stringWidth(palavra, FONTE, tamanho_fonte) > largura_pt and len(palavra) > 1:
+                palavra = palavra[:-1]
             linha_atual = palavra
     if linha_atual:
         linhas.append(linha_atual)
     return linhas
 
 
-def _texto_simples(c, largura_pg, altura_pg, texto, campo):
-    """Campos do cabeçalho/rodapé: uma linha só, corta com '…' se não couber."""
-    x_frac, y_frac, larg_frac = campo
-    x = x_frac * largura_pg
-    y = altura_pg - (y_frac * altura_pg) - TAM_FONTE_CABECALHO
-    largura_pt = larg_frac * largura_pg
+def _caixa_texto_simples(c, altura_pg, texto, caixa, tamanho_fonte=TAM_FONTE_CABECALHO):
+    """Cabeçalho/rodapé: uma linha só, corta com '…' se não couber na largura da caixa."""
+    x0, x1, topo, base = caixa
+    largura_pt = (x1 - x0) - 2 * PADDING_X
+    x = x0 + PADDING_X
+    y = (altura_pg - topo) - tamanho_fonte - PADDING_TOPO
 
-    c.setFont(FONTE, TAM_FONTE_CABECALHO)
-    linhas = _quebrar_linhas(c, texto, largura_pt, TAM_FONTE_CABECALHO)
+    c.setFont(FONTE, tamanho_fonte)
+    linhas = _quebrar_linhas(c, texto, largura_pt, tamanho_fonte)
     if not linhas:
         return
     primeira = linhas[0]
     if len(linhas) > 1:
-        while primeira and c.stringWidth(primeira + "…", FONTE, TAM_FONTE_CABECALHO) > largura_pt:
+        while primeira and c.stringWidth(primeira + "…", FONTE, tamanho_fonte) > largura_pt:
             primeira = primeira[:-1]
         primeira += "…"
     c.drawString(x, y, primeira)
 
 
-def _texto_multilinha(c, largura_pg, altura_pg, texto, x_frac, y_topo_frac, largura_frac, altura_frac):
+def _celula_texto_multilinha(c, altura_pg, texto, x0, x1, topo, base):
     """Células da tabela: várias linhas, cortando se não couber na altura da célula."""
-    x = x_frac * largura_pg
-    y_topo = altura_pg - (y_topo_frac * altura_pg)
-    largura_pt = largura_frac * largura_pg
-    altura_pt = altura_frac * altura_pg
+    largura_pt = (x1 - x0) - 2 * PADDING_X
+    altura_pt = (base - topo) - 2 * PADDING_TOPO
+    x = x0 + PADDING_X
 
     c.setFont(FONTE, TAM_FONTE_TABELA)
     max_linhas = max(1, int(altura_pt // ENTRELINHA_TABELA))
@@ -114,15 +133,18 @@ def _texto_multilinha(c, largura_pg, altura_pg, texto, x_frac, y_topo_frac, larg
     for paragrafo in texto_final.split("\n"):
         linhas.extend(_quebrar_linhas(c, paragrafo, largura_pt, TAM_FONTE_TABELA) or [""])
 
+    truncado = False
     if len(linhas) > max_linhas:
         linhas = linhas[:max_linhas]
-        if linhas:
-            ultima = linhas[-1]
-            while ultima and c.stringWidth(ultima + "…", FONTE, TAM_FONTE_TABELA) > largura_pt:
-                ultima = ultima[:-1]
-            linhas[-1] = ultima + "…"
+        truncado = True
 
-    y = y_topo - TAM_FONTE_TABELA
+    if truncado and linhas:
+        ultima = linhas[-1]
+        while ultima and c.stringWidth(ultima + "…", FONTE, TAM_FONTE_TABELA) > largura_pt:
+            ultima = ultima[:-1]
+        linhas[-1] = ultima + "…"
+
+    y = (altura_pg - topo) - PADDING_TOPO - TAM_FONTE_TABELA
     for linha in linhas:
         c.drawString(x, y, linha)
         y -= ENTRELINHA_TABELA
@@ -154,18 +176,17 @@ def gerar_pdf_apr(dados, caminho_template=CAMINHO_TEMPLATE_PADRAO):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=(largura_pg, altura_pg))
 
-    for campo, posicao in CAMPOS_CABECALHO.items():
-        _texto_simples(c, largura_pg, altura_pg, dados.get(campo, ""), posicao)
+    for campo, caixa in CAMPOS_CABECALHO.items():
+        _caixa_texto_simples(c, altura_pg, dados.get(campo, ""), caixa)
 
     for i, linha_dados in enumerate(dados.get("linhas", [])[:5]):
-        y_topo = LINHAS_TABELA_Y[i]
-        for coluna, (x_frac, larg_frac) in COLUNAS_TABELA.items():
+        topo, base = LINHAS_TABELA[i]
+        for coluna, (x0, x1) in COLUNAS_TABELA.items():
             valor = linha_dados.get(coluna, "")
-            _texto_multilinha(c, largura_pg, altura_pg, valor,
-                               x_frac, y_topo, larg_frac, ALTURA_LINHA_TABELA)
+            _celula_texto_multilinha(c, altura_pg, valor, x0, x1, topo, base)
 
-    for campo, posicao in CAMPOS_RODAPE.items():
-        _texto_simples(c, largura_pg, altura_pg, dados.get(campo, ""), posicao)
+    for campo, caixa in CAMPOS_RODAPE.items():
+        _caixa_texto_simples(c, altura_pg, dados.get(campo, ""), caixa, tamanho_fonte=TAM_FONTE_RODAPE)
 
     c.save()
     buffer.seek(0)
@@ -186,12 +207,10 @@ def gerar_pdf_apr(dados, caminho_template=CAMINHO_TEMPLATE_PADRAO):
 
 def gerar_grade_calibracao(caminho_template=CAMINHO_TEMPLATE_PADRAO, caminho_saida="DC83T_grade.pdf"):
     """
-    Rode manualmente num terminal Python (fora do Streamlit):
-        from apr_dc83 import gerar_grade_calibracao
-        gerar_grade_calibracao()
-    Gera um PDF com uma grade de 0.00 a 1.00 (passo 0.05) sobre o
-    template, pra você comparar visualmente e ajustar os números em
-    CAMPOS_CABECALHO / COLUNAS_TABELA / LINHAS_TABELA_Y / CAMPOS_RODAPE.
+    Ferramenta de apoio: gera um PDF com uma grade de 50 em 50 pontos
+    sobre o template, para conferir/ajustar as coordenadas acima caso
+    o template seja substituído por outra versão. Rode manualmente:
+        python3 -c "from apr_dc83 import gerar_grade_calibracao as g; g()"
     """
     leitor = PdfReader(caminho_template)
     largura_pg = float(leitor.pages[0].mediabox.width)
@@ -201,17 +220,21 @@ def gerar_grade_calibracao(caminho_template=CAMINHO_TEMPLATE_PADRAO, caminho_sai
     c = canvas.Canvas(buffer, pagesize=(largura_pg, altura_pg))
     c.setStrokeColorRGB(1, 0, 0)
     c.setFillColorRGB(1, 0, 0)
-    c.setFont("Helvetica", 6)
+    c.setFont("Helvetica", 5)
 
-    frac = 0.0
-    while frac <= 1.0:
-        x = frac * largura_pg
-        y = frac * altura_pg
+    passo = 50
+    x = 0
+    while x <= largura_pg:
         c.line(x, 0, x, altura_pg)
-        c.line(0, altura_pg - y, largura_pg, altura_pg - y)
-        c.drawString(x + 1, altura_pg - 8, f"{frac:.2f}")
-        c.drawString(2, altura_pg - y - 6, f"{frac:.2f}")
-        frac += 0.05
+        c.drawString(x + 1, altura_pg - 8, str(int(x)))
+        x += passo
+
+    y_topo = 0
+    while y_topo <= altura_pg:
+        y_pdf = altura_pg - y_topo
+        c.line(0, y_pdf, largura_pg, y_pdf)
+        c.drawString(2, y_pdf - 6, str(int(y_topo)))
+        y_topo += passo
 
     c.save()
     buffer.seek(0)
