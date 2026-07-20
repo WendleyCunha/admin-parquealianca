@@ -62,6 +62,15 @@
 #    específico, com grupo, RG, número do ônibus e status de pagamento.
 #    Isso separa fisicamente a chamada de cada dia sem precisar de
 #    vários arquivos.
+#  - A TELA "🚌 Chamada de Embarque" ganhou a mesma separação: agora
+#    tem sub-abas — uma por dia do evento (📅 Sexta / 📅 Sábado /
+#    📅 Domingo) + uma "🔎 Geral" com todo mundo junto. Cada sub-aba
+#    de dia mostra só quem embarca naquele dia específico, já com o
+#    número do ônibus daquele dia ao lado do nome. IMPORTANTE: o campo
+#    "embarcou" continua sendo único por passageiro (não por dia) —
+#    se a pessoa viaja em mais de um dia do evento, confirmar embarque
+#    numa sub-aba marca embarcado nas outras sub-abas dela também, já
+#    que o cadastro ainda não guarda esse status separado por viagem.
 # =============================================================
 import os
 import sys
@@ -677,6 +686,108 @@ def gerar_excel_chamada(df_passageiros: pd.DataFrame, datas_evento: list) -> byt
     return output.getvalue()
 
 
+def _badge_pendente(pago: bool) -> str:
+    """Badge vermelho 'pendente' pra quem ainda não pagou — usado tanto
+    nas sub-abas por dia quanto na aba Geral da Chamada de Embarque.
+    Quem não pagou continua liberado a embarcar, só fica marcado."""
+    if pago:
+        return ""
+    return (" <span style='background:#fee2e2;color:#b91c1c;font-size:0.6rem;"
+            "font-weight:700;padding:1px 7px;border-radius:6px;margin-left:6px;"
+            "white-space:nowrap;'>💸 pendente</span>")
+
+def _badge_onibus(row) -> str:
+    """Badge cinza com o número do ônibus — só aparece nas sub-abas por
+    dia (onde cada linha já sabe em qual ônibus daquele dia a pessoa
+    está), e fica em branco na aba Geral (ela não tem um único dia de
+    referência)."""
+    bus = row.get('_onibus_dia')
+    if bus is None:
+        return ""
+    return (" <span style='background:#e0e7ff;color:#3730a3;font-size:0.6rem;"
+            "font-weight:700;padding:1px 7px;border-radius:6px;margin-left:6px;"
+            "white-space:nowrap;'>🚌 Ônibus " + str(bus) + "</span>")
+
+def _renderizar_chamada_lista(df_lista: pd.DataFrame, id_sel: str, evento: dict,
+                              pode_editar: bool, sufixo_key: str, rotulo_vazio: str = None):
+    """Renderiza os KPIs + grupos (Aguardando/Embarcados) para um
+    subconjunto de passageiros — usado tanto pra cada sub-aba de dia
+    (só quem viaja naquele dia) quanto pra sub-aba Geral (todo mundo).
+    `sufixo_key` garante que os keys dos widgets não colidam entre as
+    diferentes sub-abas."""
+    if df_lista.empty:
+        st.info(rotulo_vazio or "Nenhuma reserva para exibir.")
+        return
+
+    tot_p  = len(df_lista)
+    emb_t  = int(df_lista['embarcou'].sum())
+    falt_t = tot_p - emb_t
+    nao_pg = int((df_lista['pago'] == False).sum())
+
+    st.markdown(
+        "<div style='display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;'>"
+        "<div style='background:white;border:1px solid #e8eaf0;border-radius:10px;"
+        "padding:12px 18px;flex:1;min-width:110px;'>"
+        "<div style='font-size:0.62rem;color:#94a3b8;text-transform:uppercase;"
+        "letter-spacing:.08em;font-weight:700;'>Na Lista</div>"
+        "<div style='font-size:1.5rem;font-weight:700;color:#1a3a6b;'>" + str(tot_p) + "</div></div>"
+
+        "<div style='background:white;border:1px solid #e8eaf0;border-left:3px solid #22c55e;"
+        "border-radius:10px;padding:12px 18px;flex:1;min-width:110px;'>"
+        "<div style='font-size:0.62rem;color:#94a3b8;text-transform:uppercase;"
+        "letter-spacing:.08em;font-weight:700;'>Embarcados</div>"
+        "<div style='font-size:1.5rem;font-weight:700;color:#22c55e;'>" + str(emb_t) + "</div></div>"
+
+        "<div style='background:white;border:1px solid #e8eaf0;border-left:3px solid #f59e0b;"
+        "border-radius:10px;padding:12px 18px;flex:1;min-width:110px;'>"
+        "<div style='font-size:0.62rem;color:#94a3b8;text-transform:uppercase;"
+        "letter-spacing:.08em;font-weight:700;'>Aguardando</div>"
+        "<div style='font-size:1.5rem;font-weight:700;color:#f59e0b;'>" + str(falt_t) + "</div></div>"
+
+        "<div style='background:white;border:1px solid #e8eaf0;border-left:3px solid #ef4444;"
+        "border-radius:10px;padding:12px 18px;flex:1;min-width:110px;'>"
+        "<div style='font-size:0.62rem;color:#94a3b8;text-transform:uppercase;"
+        "letter-spacing:.08em;font-weight:700;'>💸 Não Pagos</div>"
+        "<div style='font-size:1.5rem;font-weight:700;color:#ef4444;'>" + str(nao_pg) + "</div></div>"
+        "</div>", unsafe_allow_html=True)
+
+    for grp in sorted(df_lista['grupo'].unique()):
+        df_grp = df_lista[df_lista['grupo'] == grp]
+        n_grp  = len(df_grp)
+        e_grp  = int(df_grp['embarcou'].sum())
+        with st.expander("📍 " + grp.upper() + "  —  " + str(e_grp) + "/" + str(n_grp) + " embarcados", expanded=True):
+            cf, co = st.columns(2)
+            with cf:
+                st.markdown("<div style='font-size:0.7rem;font-weight:700;text-transform:uppercase;"
+                            "letter-spacing:.08em;color:#f59e0b;margin-bottom:8px;'>⏳ Aguardando</div>",
+                            unsafe_allow_html=True)
+                for _, p in df_grp[df_grp['embarcou'] == False].sort_values('nome').iterrows():
+                    cn, ce, cb = st.columns([4, 1, 1])
+                    cn.markdown("<div style='font-weight:500;font-size:0.87rem;color:#1e293b;"
+                                "padding:6px 0;border-bottom:1px solid #f1f5f9;'>" + p['nome']
+                                + _badge_onibus(p) + _badge_pendente(p.get('pago', False)) + "</div>",
+                                unsafe_allow_html=True)
+                    if pode_editar and ce.button("✏️", key="ed_wait_" + sufixo_key + "_" + grp + "_" + p['nome'], help="Editar / receber pagamento"):
+                        gerenciar_pax_dialog(p.to_dict(), id_sel, evento)
+                    if cb.button("✅", key="emb_" + sufixo_key + "_" + grp + "_" + p['nome'], help="Confirmar embarque"):
+                        atualizar_embarque(id_sel, p.to_dict(), True); st.rerun()
+            with co:
+                st.markdown("<div style='font-size:0.7rem;font-weight:700;text-transform:uppercase;"
+                            "letter-spacing:.08em;color:#22c55e;margin-bottom:8px;'>🟢 Embarcados</div>",
+                            unsafe_allow_html=True)
+                for _, p in df_grp[df_grp['embarcou'] == True].sort_values('nome').iterrows():
+                    cn, ce, cb = st.columns([4, 1, 1])
+                    cn.markdown("<div style='font-weight:500;font-size:0.87rem;color:#94a3b8;"
+                                "text-decoration:line-through;padding:6px 0;"
+                                "border-bottom:1px solid #f1f5f9;'>" + p['nome']
+                                + _badge_onibus(p) + _badge_pendente(p.get('pago', False)) + "</div>",
+                                unsafe_allow_html=True)
+                    if pode_editar and ce.button("✏️", key="ed_board_" + sufixo_key + "_" + grp + "_" + p['nome'], help="Editar / estornar pagamento"):
+                        gerenciar_pax_dialog(p.to_dict(), id_sel, evento)
+                    if cb.button("↩️", key="rem_" + sufixo_key + "_" + grp + "_" + p['nome'], help="Cancelar embarque"):
+                        atualizar_embarque(id_sel, p.to_dict(), False); st.rerun()
+
+
 # =========================================================
 # PRINCIPAL
 # =========================================================
@@ -846,42 +957,12 @@ def exibir_modulo_passagens(pode_editar=True):
         else:
             # Agora a chamada mostra TODOS os reservados, pagos ou não —
             # quem não pagou continua liberado a embarcar, só que marcado
-            # com o badge "💸 pendente" (ver mais abaixo, dentro de cada
-            # grupo) pra não passar despercebido.
+            # com o badge "💸 pendente" pra não passar despercebido.
             df_chamada = df.copy()
 
-            tot_p  = len(df_chamada)
-            emb_t  = int(df_chamada['embarcou'].sum())
-            falt_t = tot_p - emb_t
-            nao_pg = int((df_chamada['pago'] == False).sum())
-
-            st.markdown(
-                "<div style='display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;'>"
-                "<div style='background:white;border:1px solid #e8eaf0;border-radius:10px;"
-                "padding:12px 18px;flex:1;min-width:110px;'>"
-                "<div style='font-size:0.62rem;color:#94a3b8;text-transform:uppercase;"
-                "letter-spacing:.08em;font-weight:700;'>Na Lista</div>"
-                "<div style='font-size:1.5rem;font-weight:700;color:#1a3a6b;'>" + str(tot_p) + "</div></div>"
-
-                "<div style='background:white;border:1px solid #e8eaf0;border-left:3px solid #22c55e;"
-                "border-radius:10px;padding:12px 18px;flex:1;min-width:110px;'>"
-                "<div style='font-size:0.62rem;color:#94a3b8;text-transform:uppercase;"
-                "letter-spacing:.08em;font-weight:700;'>Embarcados</div>"
-                "<div style='font-size:1.5rem;font-weight:700;color:#22c55e;'>" + str(emb_t) + "</div></div>"
-
-                "<div style='background:white;border:1px solid #e8eaf0;border-left:3px solid #f59e0b;"
-                "border-radius:10px;padding:12px 18px;flex:1;min-width:110px;'>"
-                "<div style='font-size:0.62rem;color:#94a3b8;text-transform:uppercase;"
-                "letter-spacing:.08em;font-weight:700;'>Aguardando</div>"
-                "<div style='font-size:1.5rem;font-weight:700;color:#f59e0b;'>" + str(falt_t) + "</div></div>"
-
-                "<div style='background:white;border:1px solid #e8eaf0;border-left:3px solid #ef4444;"
-                "border-radius:10px;padding:12px 18px;flex:1;min-width:110px;'>"
-                "<div style='font-size:0.62rem;color:#94a3b8;text-transform:uppercase;"
-                "letter-spacing:.08em;font-weight:700;'>💸 Não Pagos</div>"
-                "<div style='font-size:1.5rem;font-weight:700;color:#ef4444;'>" + str(nao_pg) + "</div></div>"
-                "</div>", unsafe_allow_html=True)
-
+            # Botão de exportação fica visível independente do dia
+            # selecionado abaixo — o Excel já sai com uma aba por dia +
+            # uma aba "Todos os Dias", espelhando esta mesma separação.
             cexp, _ = st.columns([1, 2])
             with cexp:
                 st.download_button(
@@ -892,48 +973,37 @@ def exibir_modulo_passagens(pode_editar=True):
                 )
             st.write("")
 
-            def _badge_pendente(pago: bool) -> str:
-                if pago:
-                    return ""
-                return (" <span style='background:#fee2e2;color:#b91c1c;font-size:0.6rem;"
-                        "font-weight:700;padding:1px 7px;border-radius:6px;margin-left:6px;"
-                        "white-space:nowrap;'>💸 pendente</span>")
+            # Sub-abas dentro de "Chamada de Embarque": uma por dia do
+            # evento (ex.: Sexta / Sábado / Domingo) + uma "Geral" com
+            # todo mundo junto — cada dia chama só quem viaja naquele
+            # dia específico, sem misturar com os outros dias.
+            # OBS: o campo "embarcou" é único por passageiro (não por
+            # dia). Se a pessoa viaja em mais de um dia do evento,
+            # confirmar embarque numa aba também marca embarcado nas
+            # demais abas dela — hoje não existe controle de embarque
+            # separado por viagem/dia no cadastro do passageiro.
+            labels_dias = ["📅 " + dia for dia in evento['datas']] + ["🔎 Geral"]
+            idx_dia = abas_persistentes(labels_dias, key="abas_chamada_dias")
 
-            for grp in sorted(df_chamada['grupo'].unique()):
-                df_grp = df_chamada[df_chamada['grupo'] == grp]
-                n_grp  = len(df_grp)
-                e_grp  = int(df_grp['embarcou'].sum())
-                with st.expander("📍 " + grp.upper() + "  —  " + str(e_grp) + "/" + str(n_grp) + " embarcados", expanded=True):
-                    cf, co = st.columns(2)
-                    with cf:
-                        st.markdown("<div style='font-size:0.7rem;font-weight:700;text-transform:uppercase;"
-                                    "letter-spacing:.08em;color:#f59e0b;margin-bottom:8px;'>⏳ Aguardando</div>",
-                                    unsafe_allow_html=True)
-                        for _, p in df_grp[df_grp['embarcou'] == False].sort_values('nome').iterrows():
-                            cn, ce, cb = st.columns([4, 1, 1])
-                            cn.markdown("<div style='font-weight:500;font-size:0.87rem;color:#1e293b;"
-                                        "padding:6px 0;border-bottom:1px solid #f1f5f9;'>" + p['nome']
-                                        + _badge_pendente(p.get('pago', False)) + "</div>",
-                                        unsafe_allow_html=True)
-                            if pode_editar and ce.button("✏️", key="ed_wait_" + grp + "_" + p['nome'], help="Editar / receber pagamento"):
-                                gerenciar_pax_dialog(p.to_dict(), id_sel, evento)
-                            if cb.button("✅", key="emb_" + grp + "_" + p['nome'], help="Confirmar embarque"):
-                                atualizar_embarque(id_sel, p.to_dict(), True); st.rerun()
-                    with co:
-                        st.markdown("<div style='font-size:0.7rem;font-weight:700;text-transform:uppercase;"
-                                    "letter-spacing:.08em;color:#22c55e;margin-bottom:8px;'>🟢 Embarcados</div>",
-                                    unsafe_allow_html=True)
-                        for _, p in df_grp[df_grp['embarcou'] == True].sort_values('nome').iterrows():
-                            cn, ce, cb = st.columns([4, 1, 1])
-                            cn.markdown("<div style='font-weight:500;font-size:0.87rem;color:#94a3b8;"
-                                        "text-decoration:line-through;padding:6px 0;"
-                                        "border-bottom:1px solid #f1f5f9;'>" + p['nome']
-                                        + _badge_pendente(p.get('pago', False)) + "</div>",
-                                        unsafe_allow_html=True)
-                            if pode_editar and ce.button("✏️", key="ed_board_" + grp + "_" + p['nome'], help="Editar / estornar pagamento"):
-                                gerenciar_pax_dialog(p.to_dict(), id_sel, evento)
-                            if cb.button("↩️", key="rem_" + grp + "_" + p['nome'], help="Cancelar embarque"):
-                                atualizar_embarque(id_sel, p.to_dict(), False); st.rerun()
+            if idx_dia < len(evento['datas']):
+                dia_sel = evento['datas'][idx_dia]
+                linhas_dia = []
+                for _, p in df_chamada.iterrows():
+                    bus_dia = None
+                    for v in (p.get('dias_onibus') or []):
+                        if v.get('dia') == dia_sel:
+                            bus_dia = v.get('bus')
+                            break
+                    if bus_dia is None:
+                        continue  # não viaja neste dia — não aparece nesta aba
+                    linha = p.to_dict()
+                    linha['_onibus_dia'] = bus_dia
+                    linhas_dia.append(linha)
+                df_dia = pd.DataFrame(linhas_dia)
+                _renderizar_chamada_lista(df_dia, id_sel, evento, pode_editar,
+                                          "d" + str(idx_dia), rotulo_vazio="Ninguém embarca em " + dia_sel + ".")
+            else:
+                _renderizar_chamada_lista(df_chamada, id_sel, evento, pode_editar, "geral")
 
     # -------------------------------------------------------
     # ABA 3: AJUSTES
