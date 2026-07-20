@@ -56,11 +56,12 @@
 #    Excel), pra quem está na porta do ônibus saber que precisa
 #    cobrar/anotar essa pendência antes ou depois da viagem.
 #  - O Excel de chamada não concatena mais os dias numa única célula
-#    tipo "Sexta, Sábado" — cada dia do evento agora é a SUA PRÓPRIA
-#    coluna (uma coluna "Sexta", uma "Sábado", uma "Domingo" etc.),
-#    com o número do ônibus na célula quando a pessoa viaja naquele
-#    dia, e vazio quando não viaja. Facilita filtrar/organizar a
-#    planilha por dia na hora da chamada.
+#    tipo "Sexta, Sábado". O arquivo continua sendo UM SÓ (geral), mas
+#    agora com UMA ABA POR DIA do evento (aba "Sexta", aba "Sábado",
+#    aba "Domingo" etc.) — cada aba lista só quem embarca naquele dia
+#    específico, com grupo, RG, número do ônibus e status de pagamento.
+#    Isso separa fisicamente a chamada de cada dia sem precisar de
+#    vários arquivos.
 # =============================================================
 import os
 import sys
@@ -574,63 +575,105 @@ def renderizar_cabecalho(evento, df, id_sel, pode_editar=True):
 # EXPORTAÇÃO — LISTA DE CHAMADA (Excel)
 # =========================================================
 
+def _sheet_name_valido(nome: str) -> str:
+    """Nome de aba do Excel tem limite de 31 caracteres e não aceita
+    alguns símbolos ([]:*?/\\) — sanitiza pra evitar erro do xlsxwriter
+    com nomes de dia mais longos ou digitados de forma inesperada."""
+    invalidos = '[]:*?/\\'
+    limpo = "".join(c for c in nome if c not in invalidos).strip()
+    return (limpo or "Dia")[:31]
+
+def _escrever_aba_chamada(writer, workbook, sheet_name: str, df_dia: pd.DataFrame):
+    """Escreve uma aba da chamada (já filtrada pra um único dia/geral),
+    aplicando o destaque em vermelho claro pra linha de quem não pagou
+    e ajustando a largura das colunas."""
+    sheet_name = _sheet_name_valido(sheet_name)
+    df_dia.to_excel(writer, index=False, sheet_name=sheet_name)
+    worksheet = writer.sheets[sheet_name]
+
+    if not df_dia.empty:
+        formato_nao_pago = workbook.add_format({'bg_color': '#fde8e8'})
+        col_pago_letra = _col_letra(df_dia.columns.get_loc("Pago"))
+        n_linhas = len(df_dia)
+        n_cols   = len(df_dia.columns)
+        worksheet.conditional_format(
+            1, 0, n_linhas, n_cols - 1,
+            {
+                'type': 'formula',
+                'criteria': '=$' + col_pago_letra + '2="Não"',
+                'format': formato_nao_pago,
+            }
+        )
+
+    for i, col in enumerate(df_dia.columns):
+        maior_valor = df_dia[col].astype(str).map(len).max() if not df_dia.empty else 0
+        worksheet.set_column(i, i, max(maior_valor, len(str(col))) + 2)
+
 def gerar_excel_chamada(df_passageiros: pd.DataFrame, datas_evento: list) -> bytes:
-    """Monta a planilha da lista de chamada a partir de TODOS os
-    passageiros reservados no evento — pagos e não pagos. Antes só entrava
-    aqui quem já tinha pago (regra antiga: quem não pagou nem aparecia na
-    lista de embarque). Isso mudou: agora é permitido embarcar mesmo sem
-    pagamento confirmado, então a pessoa precisa continuar na chamada, só
-    que com uma marcação clara de pendência (coluna "Pago" = "Não" +
-    linha destacada em vermelho claro), pra quem está conferindo a lista
-    saber que ainda precisa cobrar/anotar esse valor.
+    """Monta a lista de chamada a partir de TODOS os passageiros
+    reservados no evento — pagos e não pagos. Antes só entrava aqui quem
+    já tinha pago (regra antiga: quem não pagou nem aparecia na lista de
+    embarque). Isso mudou: agora é permitido embarcar mesmo sem pagamento
+    confirmado, então a pessoa precisa continuar na chamada, só que com
+    uma marcação clara de pendência (coluna "Pago" = "Não" + linha
+    destacada em vermelho claro), pra quem está conferindo a lista saber
+    que ainda precisa cobrar/anotar esse valor.
 
-    Os dias de viagem saem em UMA COLUNA POR DIA (ex.: colunas "Sexta",
-    "Sábado", "Domingo"), com o número do ônibus na célula quando a
-    pessoa viaja naquele dia — nunca mais concatenado tipo
-    "Sexta, Sábado" numa célula só.
+    O arquivo continua sendo UM SÓ (geral), mas agora com UMA ABA POR DIA
+    do evento (aba "Sexta", aba "Sábado", aba "Domingo" etc.) — cada aba
+    lista só quem embarca naquele dia específico, com o número do ônibus.
+    Assim a chamada de cada dia fica fisicamente separada, sem misturar
+    passageiros de dias diferentes na mesma lista — e ainda existe uma
+    aba "Todos os Dias" com a visão geral, caso seja útil de conferência.
     """
-    linhas = []
-    for _, p in df_passageiros.sort_values(['grupo', 'nome']).iterrows():
-        viagens_dia = {v.get('dia'): v.get('bus') for v in (p.get('dias_onibus') or [])}
-        linha = {
-            "Grupo": p.get('grupo', 'Geral'),
-            "Nome": p.get('nome', ''),
-            "RG": p.get('rg', ''),
-        }
-        for dia in datas_evento:
-            bus = viagens_dia.get(dia)
-            linha[dia] = ("Ônibus " + str(bus)) if bus else ""
-        linha["Pago"] = "Sim" if p.get('pago') else "Não"
-        linha["Embarcou"] = "Sim" if p.get('embarcou') else "Não"
-        linhas.append(linha)
-    df_export = pd.DataFrame(linhas)
-
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_export.to_excel(writer, index=False, sheet_name='Chamada de Embarque')
-        workbook  = writer.book
-        worksheet = writer.sheets['Chamada de Embarque']
+        workbook = writer.book
 
-        # Destaca em vermelho claro a linha inteira de quem ainda não pagou
-        # — assim pula aos olhos na hora da chamada mesmo estando liberado
-        # a embarcar sem pagamento confirmado.
-        if not df_export.empty:
-            formato_nao_pago = workbook.add_format({'bg_color': '#fde8e8'})
-            col_pago_letra = _col_letra(df_export.columns.get_loc("Pago"))
-            n_linhas = len(df_export)
-            n_cols   = len(df_export.columns)
-            worksheet.conditional_format(
-                1, 0, n_linhas, n_cols - 1,
-                {
-                    'type': 'formula',
-                    'criteria': '=$' + col_pago_letra + '2="Não"',
-                    'format': formato_nao_pago,
-                }
-            )
+        # --- Uma aba por dia: só quem viaja naquele dia específico ---
+        for dia in datas_evento:
+            linhas_dia = []
+            for _, p in df_passageiros.iterrows():
+                bus = None
+                for v in (p.get('dias_onibus') or []):
+                    if v.get('dia') == dia:
+                        bus = v.get('bus')
+                        break
+                if bus is None:
+                    continue  # não viaja neste dia — não entra nesta aba
+                linhas_dia.append({
+                    "Grupo": p.get('grupo', 'Geral'),
+                    "Nome": p.get('nome', ''),
+                    "RG": p.get('rg', ''),
+                    "Ônibus": bus,
+                    "Pago": "Sim" if p.get('pago') else "Não",
+                    "Embarcou": "Sim" if p.get('embarcou') else "Não",
+                })
+            df_dia = pd.DataFrame(linhas_dia)
+            if not df_dia.empty:
+                df_dia = df_dia.sort_values(['Grupo', 'Nome'])
+            _escrever_aba_chamada(writer, workbook, dia, df_dia)
 
-        for i, col in enumerate(df_export.columns):
-            maior_valor = df_export[col].astype(str).map(len).max() if not df_export.empty else 0
-            worksheet.set_column(i, i, max(maior_valor, len(str(col))) + 2)
+        # --- Aba geral: todo mundo junto, com os dias em colunas separadas
+        #     (útil só pra conferência geral — a chamada do dia em si usa
+        #     as abas individuais acima). ---
+        linhas_geral = []
+        for _, p in df_passageiros.sort_values(['grupo', 'nome']).iterrows():
+            viagens_dia = {v.get('dia'): v.get('bus') for v in (p.get('dias_onibus') or [])}
+            linha = {
+                "Grupo": p.get('grupo', 'Geral'),
+                "Nome": p.get('nome', ''),
+                "RG": p.get('rg', ''),
+            }
+            for dia in datas_evento:
+                bus = viagens_dia.get(dia)
+                linha[dia] = ("Ônibus " + str(bus)) if bus else ""
+            linha["Pago"] = "Sim" if p.get('pago') else "Não"
+            linha["Embarcou"] = "Sim" if p.get('embarcou') else "Não"
+            linhas_geral.append(linha)
+        df_geral = pd.DataFrame(linhas_geral)
+        _escrever_aba_chamada(writer, workbook, "Todos os Dias", df_geral)
+
     return output.getvalue()
 
 
