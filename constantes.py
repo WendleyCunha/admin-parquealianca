@@ -17,17 +17,24 @@
 #   PERMISSOES_PADRAO_ADMIN    → atalho: admin sempre enxerga/edita
 #                                 tudo, sem precisar gravar permissão
 #                                 aba a aba no Firestore.
+#
+# ATUALIZAÇÃO (virada de ano de serviço — CORREÇÃO):
+#   `meses_referencia_ordem` ERA uma lista fixa, escrita à mão, que
+#   terminava em "AGOSTO 2026". Isso exigia que alguém lembrasse de
+#   editar este arquivo TODA virada de ano de serviço (setembro),
+#   acrescentando os 12 meses seguintes manualmente. Se isso fosse
+#   esquecido, qualquer membro com `mes_inicio` num mês fora da
+#   lista tinha seu índice de ordenação calculado incorretamente
+#   como 0 (ver `mod_relatorios.aba_relatorios`, aba Pendências) —
+#   fazendo-o aparecer como pendente até em meses anteriores à
+#   entrada dele no sistema, um bug silencioso e difícil de notar.
+#
+#   Agora a lista é GERADA por código a partir de `_MESES_ORDEM`
+#   (os 12 nomes cíclicos do ano de serviço, Setembro→Agosto), para
+#   um número grande de anos à frente — nenhuma virada de ano de
+#   serviço, daqui em diante, precisa de edição manual neste arquivo.
 # =============================================================
 categorias_lista = ["PUBLICADOR", "PIONEIRO AUXILIAR", "PIONEIRO REGULAR"]
-
-meses_referencia_ordem = [
-    "SETEMBRO 2024", "OUTUBRO 2024", "NOVEMBRO 2024", "DEZEMBRO 2024",
-    "JANEIRO 2025", "FEVEREIRO 2025", "MARÇO 2025", "ABRIL 2025", "MAIO 2025",
-    "JUNHO 2025", "JULHO 2025", "AGOSTO 2025",
-    "SETEMBRO 2025", "OUTUBRO 2025", "NOVEMBRO 2025", "DEZEMBRO 2025",
-    "JANEIRO 2026", "FEVEREIRO 2026", "MARÇO 2026", "ABRIL 2026", "MAIO 2026",
-    "JUNHO 2026", "JULHO 2026", "AGOSTO 2026",
-]
 
 # Usado por utilitarios.ordenar_df_por_mes() para ordenar cronologicamente
 # (ano de serviço começa em Setembro) e também referenciado por pdf_s21.py
@@ -37,6 +44,37 @@ _MESES_ORDEM = [
     "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL",
     "MAIO", "JUNHO", "JULHO", "AGOSTO"
 ]
+
+
+def _gerar_meses_referencia_ordem(ano_inicio_servico: int = 2024, anos_a_gerar: int = 20) -> list:
+    """
+    Gera a lista linear "MES ANO" cobrindo `anos_a_gerar` anos de serviço
+    completos (Setembro→Agosto) a partir do ano de serviço que COMEÇA em
+    setembro de `ano_inicio_servico`.
+
+    [ATUALIZADO — convenção "ano de serviço"] O rótulo do ano usado para
+    TODOS os 12 meses de um ciclo é o ANO DE ENCERRAMENTO daquele ciclo
+    (o ano do Agosto) — não mais o ano civil de cada mês individualmente.
+    Ex.: o ciclo que começa em setembro de 2026 e termina em agosto de
+    2027 gera "SETEMBRO 2027", "OUTUBRO 2027", ..., "AGOSTO 2027" — o
+    próprio Setembro que abre o ano já usa o número do ano seguinte.
+
+    Isso é uma mudança de convenção em relação aos dados já gravados
+    antes desta correção (que usavam o ano civil: "SETEMBRO 2024" para o
+    Setembro que abre o ciclo 2024-2025). Registros antigos de Setembro/
+    Outubro/Novembro/Dezembro precisam ser migrados (ver script de
+    migração) para ficarem consistentes com os novos.
+    """
+    lista = []
+    for i in range(anos_a_gerar):
+        ano_servico_inicio = ano_inicio_servico + i
+        ano_rotulo = ano_servico_inicio + 1
+        for nome_mes in _MESES_ORDEM:
+            lista.append(f"{nome_mes} {ano_rotulo}")
+    return lista
+
+
+meses_referencia_ordem = _gerar_meses_referencia_ordem(ano_inicio_servico=2024, anos_a_gerar=20)
 
 # Meses por ano de serviço (Set–Ago) — mantido por compatibilidade,
 # mesmo não sendo referenciado ativamente em nenhum módulo no momento
