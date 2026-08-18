@@ -5,7 +5,15 @@
 #
 # Origem: Seção 5 ("FUNÇÕES UTILITÁRIAS") + Seção 10
 # ("PROCESSAMENTO DE DADOS") do antigo main.py monolítico.
-# Nenhuma lógica foi alterada — só o arquivo mudou.
+# Nenhuma lógica original foi alterada — só o arquivo mudou.
+#
+# ATUALIZAÇÃO (correção — ordenação do seletor de mês):
+#   Adicionada `ordenar_lista_meses`, que reaproveita a mesma chave
+#   cronológica de `ordenar_df_por_mes` (extraída para
+#   `_chave_ordenacao_mes`) para ordenar uma lista simples de
+#   strings "MES ANO" — usada pelo seletor de mês em main.py, que
+#   antes usava `sorted()` puro (ordem alfabética de texto, não
+#   cronológica; ver changelog de main.py/constantes.py).
 # =============================================================
 import unicodedata
 from difflib import SequenceMatcher
@@ -26,15 +34,33 @@ def normalizar_texto(texto):
 
 
 def obter_mes_vigente_str():
+    """
+    [ATUALIZADO — convenção "ano de serviço"] O "ano" retornado não é mais
+    o ano civil de cada mês — é o ANO DE ENCERRAMENTO do ano de serviço
+    (o ano do Agosto daquele ciclo), valendo para os 12 meses inteiros,
+    INCLUSIVE o Setembro que abre o ciclo. Ex.: Setembro/2026 (calendário)
+    passa a ser rotulado "SETEMBRO 2027", já que ele abre o ano de serviço
+    que termina em Agosto/2027. Janeiro–Agosto NÃO mudam de rótulo (já
+    usavam o ano seguinte ao Setembro que os precede, que é exatamente o
+    ano de encerramento do próprio ciclo deles).
+    """
     meses = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO",
              "JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"]
     hoje = date.today()
     if hoje.day >= 20:
-        return f"{meses[hoje.month - 1]} {hoje.year}"
+        mes_num, ano_civil = hoje.month, hoje.year
     else:
         if hoje.month == 1:
-            return f"DEZEMBRO {hoje.year - 1}"
-        return f"{meses[hoje.month - 2]} {hoje.year}"
+            mes_num, ano_civil = 12, hoje.year - 1
+        else:
+            mes_num, ano_civil = hoje.month - 1, hoje.year
+
+    nome_mes = meses[mes_num - 1]
+    # Setembro(9)–Dezembro(12) pertencem ao ano de serviço que TERMINA no
+    # ano civil seguinte (ano_civil + 1). Janeiro–Agosto já pertencem ao
+    # ano de serviço que termina no próprio ano civil deles (sem ajuste).
+    ano_rotulo = ano_civil + 1 if mes_num in (9, 10, 11, 12) else ano_civil
+    return f"{nome_mes} {ano_rotulo}"
 
 
 def cargos_para_lista(cargo_val):
@@ -45,17 +71,50 @@ def cargos_para_lista(cargo_val):
     return [cargo_val] if cargo_val else []
 
 
+def _chave_ordenacao_mes(mes_ref):
+    """
+    Chave de ordenação cronológica para uma string "MES ANO".
+
+    [ATUALIZADO — convenção "ano de serviço"] Com a mudança para o rótulo
+    de ANO DE SERVIÇO (ver `obter_mes_vigente_str` e `constantes.py`), os
+    12 meses de um mesmo ciclo (Setembro a Agosto) passam a compartilhar
+    o MESMO número de ano no rótulo (ex.: "SETEMBRO 2027" ... "AGOSTO
+    2027"). Isso torna a ordenação simples — (ano do rótulo, índice do
+    mês em `_MESES_ORDEM`) — correta de novo, sem precisar de nenhum
+    ajuste de -1 para Janeiro–Agosto. (Uma versão anterior desta função
+    fazia esse ajuste, porque a convenção ANTIGA usava o ano CIVIL de
+    cada mês — o que causava uma inversão bem na fronteira Agosto/
+    Setembro. Essa correção deixou de ser necessária, e foi revertida,
+    assim que a gravação passou a usar ano de serviço uniforme. Só
+    funciona corretamente, porém, depois que os dados antigos (gravados
+    na convenção de ano civil) forem migrados — ver script de migração.)
+    """
+    partes = str(mes_ref).upper().split()
+    nome_mes = partes[0] if partes else ""
+    ano = int(partes[1]) if len(partes) > 1 else 0
+    idx = _MESES_ORDEM.index(nome_mes) if nome_mes in _MESES_ORDEM else 99
+    return (ano, idx)
+
+
 def ordenar_df_por_mes(df_input):
-    def chave_mes(mes_ref):
-        partes = str(mes_ref).upper().split()
-        nome_mes = partes[0] if partes else ""
-        ano = int(partes[1]) if len(partes) > 1 else 0
-        idx = _MESES_ORDEM.index(nome_mes) if nome_mes in _MESES_ORDEM else 99
-        return (ano, idx)
     df_sorted = df_input.copy()
-    df_sorted["_sort_key"] = df_sorted["mes_referencia"].apply(chave_mes)
+    df_sorted["_sort_key"] = df_sorted["mes_referencia"].apply(_chave_ordenacao_mes)
     df_sorted = df_sorted.sort_values("_sort_key").drop(columns=["_sort_key"])
     return df_sorted
+
+
+def ordenar_lista_meses(lista_meses):
+    """
+    [NOVO — correção] Ordena uma lista/array de strings "MES ANO" em ordem
+    CRONOLÓGICA (ano de serviço, Setembro→Agosto), reaproveitando a mesma
+    chave de `ordenar_df_por_mes`. Criada para o seletor de mês em main.py
+    (`_renderizar_filtros`), que antes usava `sorted()` puro — ordem
+    alfabética de texto, não cronológica. Isso já embaralhava a lista assim
+    que havia mais de 1 ano de dados (ex.: "SETEMBRO 2024" ficava ordenado
+    depois de "OUTUBRO 2025" em ordem alfabética, mas deveria vir antes em
+    ordem cronológica).
+    """
+    return sorted(lista_meses, key=_chave_ordenacao_mes)
 
 
 def normalizar_nome_no_banco(nome_recebido, lista_membros):
