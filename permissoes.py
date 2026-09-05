@@ -1,5 +1,5 @@
 # =============================================================
-# permissoes.py  (NOVO)
+# permissoes.py
 # Camada fina de controle de acesso por aba, baseada no usuário
 # que fez login (guardado em st.session_state["usuario_logado_dados"]
 # por autenticacao.py).
@@ -7,15 +7,38 @@
 # Nenhum outro módulo deve ler st.session_state["usuario_logado_dados"]
 # diretamente — sempre passar por aqui, para manter uma única fonte
 # da verdade sobre "quem pode ver o quê" e "quem pode editar o quê".
+#
+# ATUALIZAÇÃO (reorganização visual — menu por módulo + área de admin):
+#   eh_admin() → [NOVO] "Usuários e Permissões" deixou de ser mais uma
+#   sub-aba de Configuração (gated por nivel_acesso("configuracao"))
+#   e virou um botão à parte no cabeçalho, visível só para quem é
+#   administrador de verdade (flag admin=True do usuário, não mais
+#   uma permissão de aba). Isso foi um pedido explícito do usuário
+#   ("é um acesso ADM"), então é a ÚNICA mudança de regra desta
+#   reorganização — todo o resto (abas_visiveis, pode_ver, pode_editar)
+#   continua exatamente com a mesma lógica de antes.
 # =============================================================
 import streamlit as st
-
 from constantes import ABAS_SISTEMA, PERMISSOES_PADRAO_ADMIN
 
 
 def usuario_atual():
     """Dict completo do usuário logado (ou {} se, por algum motivo, vazio)."""
     return st.session_state.get("usuario_logado_dados") or {}
+
+
+def eh_admin() -> bool:
+    """
+    True se o usuário logado for administrador (acesso total automático).
+
+    [NOVO] Usada especificamente para liberar o botão/tela de "Usuários
+    e Permissões" no cabeçalho — essa área agora é exclusiva de quem é
+    admin de verdade, e não mais de quem tem nivel_acesso("configuracao")
+    == "editar". As demais permissões (abas_visiveis, pode_ver, pode_editar)
+    continuam usando permissoes_usuario_atual()/nivel_acesso() normalmente,
+    sem nenhuma mudança de comportamento.
+    """
+    return bool(usuario_atual().get("admin"))
 
 
 def permissoes_usuario_atual():
