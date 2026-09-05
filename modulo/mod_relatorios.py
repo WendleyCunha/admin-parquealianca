@@ -2,14 +2,31 @@
 # modulo/mod_relatorios.py
 # Aba "RELATÓRIOS" — publicadores por categoria + pendências do mês.
 #
-# ATUALIZAÇÃO: Triagem e Consolidado agora vivem AQUI DENTRO, como
-# sub-abas logo depois de "Pendências" — é o mesmo sistema/dados,
-# só fazia sentido juntar. A permissão de "relatorios" (Configuração
-# → Usuários e Permissões) passa a valer para as três sub-abas.
+# Triagem e Consolidado vivem AQUI DENTRO, como sub-abas logo depois
+# de "Pendências" — é o mesmo sistema/dados, só fazia sentido juntar.
+# A permissão de "relatorios" (Configuração → Usuários e Permissões)
+# vale para essas sub-abas.
 #
-# Aceita pode_editar=True/False. Quando False (usuário só com
-# permissão de visualização), os botões de edição ficam ocultos e
-# um aviso de somente-leitura é exibido.
+# ATUALIZAÇÃO (reorganização visual — fusão com Configuração):
+#  - [NOVO] "⚙️ CONFIGURAÇÃO" agora é a 8ª sub-aba desta tela, chamando
+#    mod_configuracao.aba_configuracao() — antes era um módulo/aba
+#    própria no menu principal (ver adendo do usuário: "Configuração
+#    precisa ficar dentro da ABA RELATÓRIOS, pois é uma coisa só").
+#  - IMPORTANTE sobre permissão: "configuracao" continua sendo uma
+#    permissão INDEPENDENTE de "relatorios" — não foram fundidas.
+#    Por isso esta função agora recebe pode_ver_configuracao e
+#    pode_editar_configuracao, resolvidos por main.py a partir de
+#    permissoes.pode_ver("configuracao")/pode_editar("configuracao").
+#    Um usuário com relatorios:sem_acesso mas configuracao:editar
+#    ainda consegue chegar aqui (main.py permite entrar no módulo
+#    "Relatórios" se o usuário tiver relatorios OU configuracao) —
+#    e, nesse caso, só a sub-aba "⚙️ CONFIGURAÇÃO" aparece pra ele,
+#    as outras 7 ficam de fora. Nenhuma combinação de acesso que
+#    funcionava antes deixou de funcionar.
+#  - "🔐 USUÁRIOS E PERMISSÕES" NÃO está mais dentro de Configuração
+#    (nem aqui). Virou uma tela própria, no cabeçalho, só para admin
+#    — ver mod_configuracao.renderizar_usuarios_e_permissoes() e
+#    permissoes.eh_admin().
 #
 # ATUALIZAÇÃO (v1.1) — CORREÇÃO DO SUMIÇO DOS CAMPOS DE ASSISTÊNCIA:
 #  - "Registro de Assistência" (formulário S-88-T) estava dentro de
@@ -27,7 +44,7 @@
 #    2 níveis que funcionava antes. Removido de mod_consolidado.py.
 #
 # CORREÇÃO (v1.2):
-#  - As 7 sub-abas desta tela usavam st.tabs(), que perde a aba
+#  - As sub-abas desta tela usavam st.tabs(), que perde a aba
 #    selecionada em qualquer rerun — e "Dar Baixa em Todos"/"Dar Baixa"
 #    (na sub-aba Pendências) chamam st.rerun() diretamente. Era esse
 #    o principal gerador do "todas as abas aparecem juntas" relatado,
@@ -51,18 +68,26 @@ import permissoes
 from modulo.mod_triagem import aba_triagem
 from modulo.mod_consolidado import aba_consolidado
 from modulo.mod_assistencia import render_tab_assistencia
+from modulo.mod_configuracao import aba_configuracao
 from tabs_persistentes import abas_persistentes
 
 
-def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registros_assistencia, pode_editar=True):
+def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registros_assistencia,
+                    pode_editar=True, pode_ver_configuracao=False, pode_editar_configuracao=False):
     st.markdown(f"### 📋 Relatórios de {mes_sel}")
     if not pode_editar:
         permissoes.aviso_somente_leitura()
 
-    idx_rel = abas_persistentes([
+    labels_rel = [
         "👤 PUBLICADOR", "🌟 P. AUXILIAR", "💎 P. REGULAR", "⏳ PENDÊNCIAS",
         "⚠️ TRIAGEM", "📈 CONSOLIDADO", "🏛️ ASSISTÊNCIA",
-    ], key="abas_relatorios")
+    ]
+    # [NOVO] "Configuração" só entra na lista de sub-abas se o usuário
+    # tiver a permissão "configuracao" — independente de "relatorios".
+    if pode_ver_configuracao:
+        labels_rel.append("⚙️ CONFIGURAÇÃO")
+
+    idx_rel = abas_persistentes(labels_rel, key="abas_relatorios")
 
     entregaram = set(df_ok['nome_oficial'].unique()) if not df_ok.empty else set()
 
@@ -175,3 +200,7 @@ def aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registro
     if idx_rel == 6:
         db = inicializar_db()
         render_tab_assistencia(db, congregacao_id="parque_alianca", pode_editar=pode_editar)
+
+    # ---- Sub-aba: Configuração (fundida aqui — ver nota no topo) ----
+    if pode_ver_configuracao and idx_rel == 7:
+        aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=pode_editar_configuracao)
