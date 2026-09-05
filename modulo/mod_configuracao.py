@@ -1,28 +1,47 @@
 # =============================================================
 # modulo/mod_configuracao.py
-# Aba "CONFIGURAÇÃO" — editar relatórios do mês, gerenciar membros
-# (ativos/inativos), cadastrar novo membro e (NOVO) gerenciar
-# usuários e permissões de acesso por aba.
+# Seção "CONFIGURAÇÃO" — editar relatórios do mês, gerenciar membros
+# (ativos/inativos) e cadastrar novo membro.
 #
-# ATUALIZAÇÃO:
-#  - Nova sub-aba "👥 USUÁRIOS E PERMISSÕES": cria usuários e define,
-#    para cada aba do sistema, um de três níveis — sem acesso,
-#    somente visualizar, ou visualizar e editar.
-#  - aceita pode_editar=True/False (permissão da própria aba
-#    Configuração). Sem edição, tudo aparece só para consulta.
+# ATUALIZAÇÃO (reorganização visual — fusão com Relatórios):
+#  - Esta tela DEIXOU DE SER um módulo/aba própria no menu principal.
+#    Passou a ser chamada de DENTRO de mod_relatorios.py, como mais uma
+#    sub-aba ("⚙️ CONFIGURAÇÃO") do módulo Relatórios — ver o adendo do
+#    usuário: "Configuração precisa ficar dentro da ABA RELATÓRIOS,
+#    pois é uma coisa só, é ajuste de relatórios". A permissão que
+#    controla o acesso a esta função (nível "configuracao" em
+#    Usuários e Permissões) NÃO MUDOU — só o lugar visual onde ela
+#    aparece.
+#  - "🔐 USUÁRIOS E PERMISSÕES" SAIU inteiramente daqui (era a 4ª
+#    sub-aba). Virou uma tela separada, acessada por um botão próprio
+#    no cabeçalho, visível só para administradores — ver o adendo:
+#    "essa aba precisa ficar de fora, separada apenas para visão do
+#    ADM". Essa é a ÚNICA mudança de REGRA desta reorganização (antes
+#    gated por nivel_acesso("configuracao")=="editar", agora gated por
+#    permissoes.eh_admin()) — pedida explicitamente pelo usuário. A
+#    função que renderiza essa tela continua aqui neste arquivo
+#    (`renderizar_usuarios_e_permissoes`, antes chamada
+#    `_sub_usuarios_e_permissoes`), só passou a ser pública porque
+#    agora é chamada de fora (main.py), não mais só internamente.
 #
-# CORREÇÃO (v1.1):
-#  - Os dois conjuntos de sub-abas deste arquivo (o principal — Editar
-#    Relatórios/Gerenciar Membros/Novo Membro/Usuários e Permissões —
-#    e o aninhado dentro de Gerenciar Membros — Ativos/Inativos) usavam
-#    st.tabs(), que perde a aba selecionada sempre que uma ação chama
-#    st.rerun(). E quase toda ação aqui chama (salvar relatório,
-#    excluir, salvar membro, criar/editar usuário). O sintoma era o
-#    conteúdo de todas as sub-abas aparecendo junto depois de qualquer
-#    uma dessas ações.
-#    Trocado por abas_persistentes() (tabs_persistentes.py) nos dois
-#    conjuntos — a aba ativa fica em st.session_state e sobrevive a
-#    qualquer rerun.
+# CORREÇÃO (v1.1, mantida) — Os dois conjuntos de sub-abas deste
+# arquivo (o principal — Editar Relatórios/Gerenciar Membros/Novo
+# Membro/Usuários e Permissões — e o aninhado dentro de Gerenciar
+# Membros — Ativos/Inativos) usavam st.tabs()/abas_persistentes(),
+# que perdiam a seleção seguida de qualquer ação que causasse
+# st.rerun(). Isso já tinha sido corrigido trocando por
+# abas_persistentes(). NESTA reorganização, essas DUAS escolhas
+# passaram de abas_persistentes() para st.radio() horizontal — não
+# por causa desse bug antigo (que já estava resolvido), mas porque
+# a fusão com Relatórios acrescentaria mais um nível de abas
+# aninhadas bem em cima do formulário "Editar Relatórios", que usa
+# st.number_input — o mesmo tipo de widget que já causou o bug
+# relatado de sumiço de campos quando abas ficam fundas demais (ver
+# nota em mod_relatorios.py sobre a Assistência). Trocar por st.radio
+# nesses dois pontos evita reproduzir esse problema, deixando a
+# profundidade de abas final MENOR do que a de hoje, não maior.
+#  → Nenhuma opção, texto ou regra de negócio mudou — só a troca do
+#    widget de navegação (abas → radio) nesses dois pontos.
 # =============================================================
 import os
 import sys
@@ -43,22 +62,27 @@ from constantes import (
     ABAS_SISTEMA, NIVEIS_PERMISSAO, NIVEIS_PERMISSAO_LABELS,
 )
 import permissoes
-from tabs_persistentes import abas_persistentes
 
 
 def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
-    idx_cfg = abas_persistentes([
-        "✏️ EDITAR RELATÓRIOS",
-        "👥 GERENCIAR MEMBROS",
-        "➕ NOVO MEMBRO",
-        "🔐 USUÁRIOS E PERMISSÕES",
-    ], key="abas_configuracao")
-
+    """
+    Chamada de dentro de mod_relatorios.py (sub-aba "⚙️ CONFIGURAÇÃO").
+    `pode_editar` aqui é o nível de acesso à permissão "configuracao"
+    especificamente (independente do nível de acesso a "relatorios") —
+    quem chama (mod_relatorios.aba_relatorios) já resolve isso.
+    """
     if not pode_editar:
         permissoes.aviso_somente_leitura()
 
-    # ---- Sub-aba: Editar Relatórios ----
-    if idx_cfg == 0:
+    secao = st.radio(
+        "Seção de Configuração",
+        ["✏️ EDITAR RELATÓRIOS", "👥 GERENCIAR MEMBROS", "➕ NOVO MEMBRO"],
+        horizontal=True, key="radio_secao_configuracao", label_visibility="collapsed",
+    )
+    st.markdown("")
+
+    # ---- Seção: Editar Relatórios ----
+    if secao == "✏️ EDITAR RELATÓRIOS":
         st.markdown(f"#### Relatórios Identificados — {mes_sel}")
         if not df.empty:
             df_ok_mes = df[
@@ -107,13 +131,14 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
                                                  type="primary", use_container_width=True):
                                         deletar_relatorio(r['id'])
 
-    # ---- Sub-aba: Gerenciar Membros ----
-    elif idx_cfg == 1:
+    # ---- Seção: Gerenciar Membros ----
+    elif secao == "👥 GERENCIAR MEMBROS":
         st.markdown("#### 👥 Gerenciar Membros")
         st.caption("Categoria aqui é a FONTE DA VERDADE para todos os relatórios.")
 
-        idx_membros = abas_persistentes(
-            ["👥 Membros Ativos", "💤 Membros Inativos"], key="abas_membros"
+        filtro_membros = st.radio(
+            "Filtro de membros", ["👥 Membros Ativos", "💤 Membros Inativos"],
+            horizontal=True, key="radio_filtro_membros", label_visibility="collapsed",
         )
 
         def renderizar_formulario_membro(nome):
@@ -195,7 +220,7 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
 
         membros_ordenados = sorted(membros_db.keys())
 
-        if idx_membros == 0:
+        if filtro_membros == "👥 Membros Ativos":
             ativos = [n for n in membros_ordenados if membros_db[n].get('status', 'Ativo') == 'Ativo']
             if ativos:
                 for nome in ativos:
@@ -203,7 +228,7 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
             else:
                 st.info("Nenhum membro ativo cadastrado.")
 
-        elif idx_membros == 1:
+        else:
             inativos = [n for n in membros_ordenados if membros_db[n].get('status', 'Ativo') == 'Inativo']
             if inativos:
                 for nome in inativos:
@@ -211,8 +236,8 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
             else:
                 st.info("Nenhum membro inativo.")
 
-    # ---- Sub-aba: Novo Membro ----
-    elif idx_cfg == 2:
+    # ---- Seção: Novo Membro ----
+    elif secao == "➕ NOVO MEMBRO":
         st.markdown("#### ➕ Cadastrar Novo Membro")
         if not pode_editar:
             st.caption("Sem permissão de edição nesta aba.")
@@ -258,10 +283,6 @@ def aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=True):
                     else:
                         st.error("Informe o nome completo.")
 
-    # ---- Sub-aba: Usuários e Permissões ----
-    elif idx_cfg == 3:
-        _sub_usuarios_e_permissoes(pode_editar=pode_editar)
-
 
 def _seletor_permissoes(prefixo_key: str, permissoes_atuais: dict, admin: bool):
     """
@@ -293,7 +314,16 @@ def _seletor_permissoes(prefixo_key: str, permissoes_atuais: dict, admin: bool):
     return novo
 
 
-def _sub_usuarios_e_permissoes(pode_editar=True):
+def renderizar_usuarios_e_permissoes(pode_editar=True):
+    """
+    [ANTES: _sub_usuarios_e_permissoes, era a 4ª sub-aba de Configuração]
+    Agora é uma tela própria, chamada diretamente por main.py a partir do
+    botão de cabeçalho "🔐 Usuários e Permissões" — visível e acessível
+    somente para quem é admin (permissoes.eh_admin()). Quem chama já
+    resolve isso; esta função em si não muda de comportamento, só passou
+    a ser pública (nome sem "_" na frente) para poder ser importada de
+    fora deste arquivo.
+    """
     st.markdown("#### 🔐 Usuários e Permissões")
     st.caption(
         "Crie um usuário para cada pessoa que precisa acessar o sistema e defina, "
