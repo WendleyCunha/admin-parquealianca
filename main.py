@@ -37,23 +37,43 @@
 #    (iframe + observer + polling de 300ms procurando por elementos
 #    que não existem mais) e foi REMOVIDA daqui (v6.4), melhorando a
 #    fluidez ao trocar de aba.
+#
+# ATUALIZAÇÃO (reorganização visual — menu por módulo + área de admin):
+#  Pedido do usuário: "quando eu selecionar Relatórios, as outras abas
+#  não podem aparecer — preciso apenas de um botão Voltar". Trocamos a
+#  barra de abas principal (Relatórios/Anúncios/Passagens/Manutenção/
+#  Configuração sempre visíveis lado a lado) por um MENU inicial (o
+#  usuário escolhe 1 módulo) + um botão "← Voltar" dentro do módulo
+#  ativo — só um módulo fica visível de cada vez, dando "visão única"
+#  do que está sendo acessado.
+#   - "⚙️ Configuração" deixou de ser um módulo próprio no menu — fundiu
+#     com "Relatórios" (ver mod_relatorios.py e mod_configuracao.py).
+#   - "🔐 Usuários e Permissões" saiu do fluxo de módulos inteiramente:
+#     agora é um botão à parte no cabeçalho, ao lado de "Sair", visível
+#     só para quem é administrador (permissoes.eh_admin()) — pedido
+#     explícito do usuário ("é um acesso ADM... separada apenas para
+#     visão do ADM").
+#  NENHUMA regra de permissão mudou nesta atualização, EXCETO a de
+#  Usuários e Permissões (antes: nivel_acesso("configuracao")=="editar";
+#  agora: eh_admin()) — mudança pedida explicitamente pelo usuário. Ver
+#  permissoes.py para o comentário completo sobre essa única exceção.
 # =============================================================
 import pandas as pd
 import streamlit as st
 
 from estilo import aplicar_estilo, get_logo_path, get_logo_base64
-from tabs_persistentes import abas_persistentes
 from autenticacao import tela_login
 from database import carregar_membros, carregar_relatorios, carregar_assistencia
 from utilitarios import obter_mes_vigente_str, processar_dataframe
 from constantes import ABAS_SISTEMA
+from tema import CORES, FONTE
 import permissoes
 
 from modulo.mod_relatorios import aba_relatorios
 from modulo.mod_anuncios import aba_anuncios
 from modulo.mod_passagens import exibir_modulo_passagens
 from modulo.mod_manutencao import aba_manutencao
-from modulo.mod_configuracao import aba_configuracao
+from modulo.mod_configuracao import renderizar_usuarios_e_permissoes
 
 
 # =============================================================
@@ -127,6 +147,20 @@ def _renderizar_cabecalho():
             <div class="pa-header-user-role">Conectado</div>
           </div>
         </div>""", unsafe_allow_html=True)
+
+        # [NOVO] Acesso a "Usuários e Permissões" — antes era a 4ª sub-aba
+        # de Configuração (liberada por nivel_acesso("configuracao")==
+        # "editar"); agora é este botão à parte, liberado só para quem é
+        # administrador de verdade. Única mudança de REGRA desta
+        # reorganização, pedida explicitamente pelo usuário — ver nota
+        # completa em permissoes.eh_admin().
+        if permissoes.eh_admin():
+            if st.button("🔐 Usuários e Permissões", use_container_width=True,
+                         key="btn_abrir_usuarios_permissoes"):
+                st.session_state["ver_usuarios_permissoes"] = True
+                st.session_state["modulo_ativo"] = None
+                st.rerun()
+
         if st.button("Sair", use_container_width=True, key="btn_sair_topo"):
             for k in ["autenticado", "usuario_logado", "usuario_logado_dados"]:
                 st.session_state.pop(k, None)
@@ -177,6 +211,62 @@ def _renderizar_filtros(df, mes_vigente):
     return mes_sel
 
 
+def _renderizar_menu_modulos(modulos_menu):
+    """
+    [NOVO] Tela inicial de escolha de módulo — substitui a antiga barra
+    de abas sempre-visível. O usuário clica em um card e entra "em
+    foco" naquele módulo (ver _renderizar_modulo_ativo); só um botão
+    "← Voltar" o traz de volta pra cá.
+    """
+    st.markdown(f"""
+    <div style="text-align:center;margin:0.8rem 0 1.6rem;">
+        <div style="font-size:1.3rem;font-weight:800;color:{CORES['primaria_escura']};
+            font-family:{FONTE};">
+            Selecione um módulo
+        </div>
+        <div style="font-size:0.85rem;color:{CORES['texto_muted']};margin-top:2px;">
+            Escolha abaixo em qual área você quer trabalhar agora
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if not modulos_menu:
+        st.info("Nenhum módulo disponível para o seu usuário no momento.")
+        return
+
+    n_cols = min(len(modulos_menu), 4)
+    cols = st.columns(n_cols)
+    for i, mod in enumerate(modulos_menu):
+        with cols[i % n_cols]:
+            st.markdown(f"""
+            <div style="background:linear-gradient(160deg,{CORES['fundo_card_1']},{CORES['fundo_card_2']});
+                border:1px solid {CORES['primaria_borda']}; border-radius:16px;
+                padding:22px 14px 14px; text-align:center; margin-bottom:8px;
+                box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                <div style="font-size:2.3rem;line-height:1;">{mod['icone']}</div>
+                <div style="font-weight:700;font-size:1.02rem;color:{CORES['primaria_escura']};
+                    margin-top:10px;font-family:{FONTE};">{mod['label']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("Abrir →", key=f"menu_{mod['id']}", use_container_width=True):
+                st.session_state["modulo_ativo"] = mod["id"]
+                st.rerun()
+
+
+def _botao_voltar(key):
+    if st.button("← Voltar", key=key):
+        st.session_state["modulo_ativo"] = None
+        st.rerun()
+
+
+def _rodape():
+    st.markdown("""
+    <div style="text-align:center;padding:2rem 0 0.5rem;
+        font-size:0.72rem;color:#5B7BA6;letter-spacing:0.05em;">
+        v6.3 · Parque Aliança · Sistema de Gestão
+    </div>""", unsafe_allow_html=True)
+
+
 # =============================================================
 # PONTO DE ENTRADA PRINCIPAL
 # =============================================================
@@ -190,68 +280,90 @@ def main():
 
     _renderizar_cabecalho()
 
-    if not abas_permitidas:
+    if not abas_permitidas and not permissoes.eh_admin():
         st.markdown("""
         <div class="pa-aviso-atencao">
         ⚠️ Seu usuário não tem acesso a nenhuma aba. Contate um administrador
         para liberar as permissões em <strong>Configuração → Usuários e Permissões</strong>.
         </div>""", unsafe_allow_html=True)
+        _rodape()
         return
 
     ids_permitidos = {a["id"] for a in abas_permitidas}
-    precisa_filtro_mes = bool(ids_permitidos & ABAS_QUE_USAM_FILTRO_MES)
 
-    # ---- Só carrega dados de Relatórios e mostra a barra de Mês/KPIs ----
-    # ---- se o usuário realmente tiver acesso a uma aba que usa isso. ----
-    mes_vigente = obter_mes_vigente_str()
-    if precisa_filtro_mes:
-        membros_db        = carregar_membros()
-        relatorios_brutos = carregar_relatorios()
-        registros_assist  = carregar_assistencia()
-        df                = _processar_dataframe_cached(relatorios_brutos, membros_db)
+    # [NOVO] Módulos que aparecem no MENU principal. "Configuração" nunca
+    # aparece aqui como módulo próprio (fundiu-se em "Relatórios" — ver
+    # mod_relatorios.py). "Relatórios" aparece no menu se o usuário tiver
+    # a permissão "relatorios" OU "configuracao" (as duas continuam
+    # independentes — ver nota em mod_relatorios.py sobre por quê).
+    mostrar_relatorios = "relatorios" in ids_permitidos or "configuracao" in ids_permitidos
+    modulos_menu = []
+    for aba in ABAS_SISTEMA:
+        if aba["id"] == "configuracao":
+            continue
+        if aba["id"] == "relatorios":
+            if mostrar_relatorios:
+                modulos_menu.append(aba)
+        elif aba["id"] in ids_permitidos:
+            modulos_menu.append(aba)
 
-        mes_sel = _renderizar_filtros(df, mes_vigente)
+    # ---- [NOVO] Tela de Usuários e Permissões — fora do fluxo de módulos,
+    # acessada pelo botão do cabeçalho, só para administradores. ----
+    if st.session_state.get("ver_usuarios_permissoes"):
+        if st.button("← Voltar", key="voltar_usuarios_perm"):
+            st.session_state["ver_usuarios_permissoes"] = False
+            st.rerun()
+        renderizar_usuarios_e_permissoes(pode_editar=True)  # admin sempre edita
+        _rodape()
+        return
 
-        df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
-        df_ok  = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+    modulo_ativo = st.session_state.get("modulo_ativo")
+
+    # ---- [NOVO] Um módulo específico está em foco ----
+    if modulo_ativo:
+        ids_modulos_menu = {a["id"] for a in modulos_menu}
+        if modulo_ativo not in ids_modulos_menu:
+            # Segurança: se por algum motivo esse módulo deixou de ser
+            # permitido (ex: permissão revogada em outra aba do navegador),
+            # volta pro menu em vez de tentar renderizar algo indevido.
+            st.session_state["modulo_ativo"] = None
+            st.rerun()
+
+        _botao_voltar("voltar_modulo")
+
+        if modulo_ativo == "relatorios":
+            mes_vigente = obter_mes_vigente_str()
+            membros_db        = carregar_membros()
+            relatorios_brutos = carregar_relatorios()
+            registros_assist  = carregar_assistencia()
+            df                = _processar_dataframe_cached(relatorios_brutos, membros_db)
+
+            mes_sel = _renderizar_filtros(df, mes_vigente)
+
+            df_mes = df[df['mes_referencia'] == mes_sel] if not df.empty else pd.DataFrame()
+            df_ok  = df_mes[df_mes['status_validacao'] == "IDENTIFICADO"] if not df_mes.empty else pd.DataFrame()
+
+            aba_relatorios(
+                df_ok, df_mes, mes_sel, membros_db, df, mes_vigente, registros_assist,
+                pode_editar=permissoes.pode_editar("relatorios"),
+                pode_ver_configuracao=permissoes.pode_ver("configuracao"),
+                pode_editar_configuracao=permissoes.pode_editar("configuracao"),
+            )
+
+        elif modulo_ativo == "anuncios":
+            aba_anuncios(pode_editar=permissoes.pode_editar("anuncios"))
+
+        elif modulo_ativo == "passagens":
+            exibir_modulo_passagens(pode_editar=permissoes.pode_editar("passagens"))
+
+        elif modulo_ativo == "manutencao":
+            aba_manutencao(pode_editar=permissoes.pode_editar("manutencao"))
+
+    # ---- [NOVO] Nenhum módulo em foco: mostra o menu de escolha ----
     else:
-        # Usuário sem acesso a Relatórios/Configuração: nenhum dado de
-        # relatório é carregado nem exibido — nem a barra, nem os KPIs.
-        membros_db       = {}
-        registros_assist = None
-        df     = pd.DataFrame()
-        df_mes = pd.DataFrame()
-        df_ok  = pd.DataFrame()
-        mes_sel = mes_vigente
+        _renderizar_menu_modulos(modulos_menu)
 
-    labels_abas = [f"{a['icone']}  {a['label'].upper()}" for a in abas_permitidas]
-    idx_aba_ativa = abas_persistentes(labels_abas, key="abas_principais")
-    aba_ativa   = abas_permitidas[idx_aba_ativa]
-    aba_id      = aba_ativa["id"]
-    pode_editar = permissoes.pode_editar(aba_id)
-
-    if aba_id == "relatorios":
-        aba_relatorios(df_ok, df_mes, mes_sel, membros_db, df,
-                       mes_vigente, registros_assist, pode_editar=pode_editar)
-
-    elif aba_id == "anuncios":
-        aba_anuncios(pode_editar=pode_editar)
-
-    elif aba_id == "passagens":
-        exibir_modulo_passagens(pode_editar=pode_editar)
-
-    elif aba_id == "manutencao":
-        aba_manutencao(pode_editar=pode_editar)
-
-    elif aba_id == "configuracao":
-        aba_configuracao(df, df_ok, df_mes, mes_sel, membros_db, pode_editar=pode_editar)
-
-    # Rodapé
-    st.markdown("""
-    <div style="text-align:center;padding:2rem 0 0.5rem;
-        font-size:0.72rem;color:#5B7BA6;letter-spacing:0.05em;">
-        v6.3 · Parque Aliança · Sistema de Gestão
-    </div>""", unsafe_allow_html=True)
+    _rodape()
 
 
 if __name__ == "__main__":
