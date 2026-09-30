@@ -30,6 +30,16 @@
 #  - Extra: pequena transição de opacidade no conteúdo da aba ativa,
 #    para a troca de abas parecer mais fluida (sem depender de JS).
 #
+# ATUALIZAÇÃO (embutido no Painel de Sistemas — Opção A):
+#  - Nova função aplicar_modo_embutido() (ver rodapé do arquivo): só
+#    detecta, via um script minúsculo, se esta página está rodando
+#    dentro de outro iframe (o shell unificado) e, se estiver, marca
+#    o <body> com a classe "pa-embutido". A regra CSS nova
+#    ("body.pa-embutido .pa-header") usa essa classe pra esconder só
+#    o bloco de marca/identidade — o shell de fora já mostra isso, e
+#    manter os dois juntos duplicava a marca na tela. Nada mais no
+#    arquivo mudou: nenhuma regra existente foi tocada.
+#
 # LOGO PERSONALIZADO
 # -------------------
 # Coloque o arquivo do seu logo na RAIZ do projeto (mesmo nível
@@ -46,6 +56,7 @@ import os
 import base64
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from tema import CORES, GRADIENTE_AVATAR, FONTE, FONTE_GOOGLE_IMPORT
 
@@ -371,6 +382,14 @@ button[kind="primary"], .stButton [kind="primary"] > button {
         min-width: 100% !important;
     }
 }
+
+/* ---- [NOVO] Modo embutido (rodando dentro do shell/Home.html) ----
+   Só entra em vigor quando aplicar_modo_embutido() (rodapé do arquivo)
+   detecta, via JS, que esta página está dentro de outro iframe — nesse
+   caso ele marca <body class="pa-embutido">. Sozinha, sem essa classe,
+   esta regra não faz nada — o app roda 100% igual a hoje quando aberto
+   direto (fora do shell). */
+body.pa-embutido .pa-header { display: none !important; }
 </style>
 """
 
@@ -418,6 +437,38 @@ def _montar_css() -> str:
 
 def aplicar_estilo():
     st.markdown(_montar_css(), unsafe_allow_html=True)
+
+
+def aplicar_modo_embutido():
+    """[NOVO] Detecta se esta página está rodando dentro de um iframe
+    (o shell unificado, Home.html) e, se estiver, marca o <body> com a
+    classe "pa-embutido" — é essa classe que a regra CSS
+    "body.pa-embutido .pa-header" (no fim do _CSS_TEMPLATE acima) usa
+    pra esconder o bloco de marca duplicado.
+
+    Só funciona via components.v1.html (height=0): scripts inseridos
+    por st.markdown(unsafe_allow_html=True) são inertes no navegador —
+    o próprio Streamlit não executa <script> injetado dessa forma.
+    components.v1.html cria um iframe de verdade, que executa o script
+    normalmente; como ele roda na mesma origem do app Streamlit, o
+    script consegue alcançar `window.parent.document` (o app em si) pra
+    adicionar a classe lá.
+
+    Quando o app roda solto (fora de qualquer shell), window.parent é o
+    próprio window — a checagem dá falso, a classe nunca é adicionada,
+    e nada muda visualmente. Zero efeito colateral no uso direto."""
+    components.html("""
+    <script>
+    (function(){
+      try {
+        var estaEmIframe = window.parent && window.parent.self !== window.parent.top;
+        if (estaEmIframe) {
+          window.parent.document.body.classList.add('pa-embutido');
+        }
+      } catch (e) {}
+    })();
+    </script>
+    """, height=0)
 
 
 # NOTA (v6.4): a função aplicar_fix_abas() (JS via components.html para
