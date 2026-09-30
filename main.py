@@ -57,11 +57,25 @@
 #  Usuários e Permissões (antes: nivel_acesso("configuracao")=="editar";
 #  agora: eh_admin()) — mudança pedida explicitamente pelo usuário. Ver
 #  permissoes.py para o comentário completo sobre essa única exceção.
+#
+# ATUALIZAÇÃO (embutido no Painel de Sistemas — Opção A):
+#  - O app agora roda também DENTRO do shell unificado (Home.html),
+#    via iframe apontando pra este servidor Streamlit — sem mudar
+#    NADA da navegação interna (menu de módulos, botão Voltar,
+#    permissões: tudo continua exatamente igual a antes).
+#  - A única coisa nova é aplicar_modo_embutido() (ver estilo.py):
+#    detecta, via JS, se esta página está rodando dentro de outro
+#    iframe. Se estiver, some com o bloco de marca/identidade do
+#    cabeçalho (.pa-header) — o shell de fora já mostra isso, então
+#    manter os dois juntos duplicava a marca na tela. O bloco do
+#    usuário logado (avatar, "Sair", "Usuários e Permissões") continua
+#    aparecendo normalmente, mesmo embutido — são funcionais, não
+#    decorativos, e o usuário embutido ainda precisa deles.
 # =============================================================
 import pandas as pd
 import streamlit as st
 
-from estilo import aplicar_estilo, get_logo_path, get_logo_base64
+from estilo import aplicar_estilo, aplicar_modo_embutido, get_logo_path, get_logo_base64
 from autenticacao import tela_login
 from database import carregar_membros, carregar_relatorios, carregar_assistencia
 from utilitarios import obter_mes_vigente_str, processar_dataframe
@@ -87,6 +101,7 @@ st.set_page_config(
 )
 
 aplicar_estilo()
+aplicar_modo_embutido()
 # CORREÇÃO (fluidez): aplicar_fix_abas() foi removida daqui. Ela existia
 # para corrigir o vazamento de conteúdo do st.tabs() NATIVO do Streamlit
 # — mas desde que todo o sistema passou a usar abas_persistentes()
