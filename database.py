@@ -12,6 +12,22 @@
 # para criar usuários e definir permissão (sem_acesso / visualizar
 # / editar) por aba — ver permissoes.py e a nova sub-aba "Usuários
 # e Permissões" em modulo/mod_configuracao.py.
+#
+# CORREÇÃO (v2.0) — "ResourceExhausted" (COTA DIÁRIA DO FIRESTORE):
+#  - O plano grátis do Firestore permite 50 mil leituras por dia, e
+#    cada .stream() lê a coleção INTEIRA (1 leitura por documento).
+#    Os caches duravam só 30–60 s, então com o app aberto as coleções
+#    eram relidas inteiras a cada minuto — relatorios_parque_alianca
+#    cresce todo mês, e isso estourava a cota diária.
+#  - Os caches agora duram 30 min (usuários/manutenção: 10 min). Isso
+#    NÃO atrasa nada do que você salva: toda função de escrita abaixo
+#    já chama .clear() no cache correspondente, então a mudança
+#    aparece na hora. O tempo longo só evita reler o banco sem motivo.
+#  - Se a cota acabar mesmo assim, o app não quebra mais: continua
+#    mostrando a última versão carregada (somente leitura) com um
+#    aviso. Se ainda não houver nada carregado, mostra uma mensagem
+#    clara e para — sem exibir listas vazias que pudessem levar a uma
+#    "Baixa em Todos" errada.
 # =============================================================
 import json
 
@@ -20,6 +36,37 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 
 from utilitarios import obter_mes_vigente_str
+
+TTL_LONGO = 1800   # 30 min — membros, relatórios, anúncios, assistência
+TTL_MEDIO = 600    # 10 min — usuários, manutenção
+
+# Última leitura que deu certo de cada coleção (vale para todas as
+# sessões do app). Usada só quando o Firestore recusa por cota.
+_ULTIMO_OK = {}
+
+
+def _cota_esgotada(e) -> bool:
+    return type(e).__name__ in ("ResourceExhausted", "TooManyRequests") or "Quota exceeded" in str(e)
+
+
+def _seguro(nome, funcao, avisar=False):
+    """Chama a leitura cacheada; se a cota do Firestore acabou, devolve a
+    última versão boa. Sem versão boa, mostra o aviso e interrompe a tela."""
+    try:
+        valor = funcao()
+        _ULTIMO_OK[nome] = valor
+        return valor
+    except Exception as e:
+        if not _cota_esgotada(e):
+            raise
+        if nome in _ULTIMO_OK:
+            if avisar:
+                st.warning("⏳ O limite diário gratuito do banco foi atingido. Mostrando os últimos dados "
+                           "carregados — alterações podem não aparecer até as 04:00 (horário de Brasília).")
+            return _ULTIMO_OK[nome]
+        st.error("⏳ O limite diário gratuito do banco de dados foi atingido. O sistema volta a funcionar "
+                 "automaticamente após as 04:00 (horário de Brasília).")
+        st.stop()
 
 
 def inicializar_db():
@@ -35,7 +82,7 @@ def inicializar_db():
 
 
 # ── Leitura (cacheada) ──────────────────────────────────────────
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=TTL_LONGO, show_spinner=False)
 def carregar_membros_cached():
     db = inicializar_db()
     if not db:
@@ -43,20 +90,20 @@ def carregar_membros_cached():
     return {doc.id: doc.to_dict() for doc in db.collection("membros_v2").stream()}
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=TTL_LONGO, show_spinner=False)
 def carregar_relatorios_cached():
     db = inicializar_db()
     if not db:
         return []
-    docs = db.collection("relatorios_parque_alianca").stream()
-    return [
-        {"id": doc.id, **doc.to_dict()}
-        for doc in docs
-        if doc.to_dict().get("status_validacao") != "EXCLUIDO"
-    ]
+    saida = []
+    for doc in db.collection("relatorios_parque_alianca").stream():
+        d = doc.to_dict() or {}
+        if d.get("status_validacao") != "EXCLUIDO":
+            saida.append({"id": doc.id, **d})
+    return saida
 
 
-@st.cache_data(ttl=120, show_spinner=False)
+@st.cache_data(ttl=TTL_LONGO, show_spinner=False)
 def carregar_anuncios_cached():
     db = inicializar_db()
     if not db:
@@ -66,11 +113,13 @@ def carregar_anuncios_cached():
                   .order_by("data_postagem", direction=firestore.Query.DESCENDING)
                   .stream())
         return [{"id": doc.id, **doc.to_dict()} for doc in docs]
-    except Exception:
+    except Exception as e:
+        if _cota_esgotada(e):
+            raise
         return []
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=TTL_LONGO, show_spinner=False)
 def carregar_assistencia_cached():
     """Carrega todos os registros de assistência às reuniões."""
     db = inicializar_db()
@@ -79,11 +128,13 @@ def carregar_assistencia_cached():
     try:
         docs = db.collection("assistencia_reunioes").stream()
         return [{"id": doc.id, **doc.to_dict()} for doc in docs]
-    except Exception:
+    except Exception as e:
+        if _cota_esgotada(e):
+            raise
         return []
 
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=TTL_MEDIO, show_spinner=False)
 def carregar_usuarios_cached():
     """Dict {username: {senha, nome_exibicao, admin, permissoes}}."""
     db = inicializar_db()
@@ -91,28 +142,30 @@ def carregar_usuarios_cached():
         return {}
     try:
         return {doc.id: doc.to_dict() for doc in db.collection("usuarios_sistema").stream()}
-    except Exception:
+    except Exception as e:
+        if _cota_esgotada(e):
+            raise
         return {}
 
 
 def carregar_membros():
-    return carregar_membros_cached()
+    return _seguro("membros", carregar_membros_cached, avisar=True)
 
 
 def carregar_relatorios():
-    return carregar_relatorios_cached()
+    return _seguro("relatorios", carregar_relatorios_cached)
 
 
 def carregar_anuncios():
-    return carregar_anuncios_cached()
+    return _seguro("anuncios", carregar_anuncios_cached)
 
 
 def carregar_assistencia():
-    return carregar_assistencia_cached()
+    return _seguro("assistencia", carregar_assistencia_cached)
 
 
 def carregar_usuarios():
-    return carregar_usuarios_cached()
+    return _seguro("usuarios", carregar_usuarios_cached)
 
 
 # ── Escrita ───────────────────────────────────────────────────
@@ -263,7 +316,7 @@ def autenticar_usuario(username, senha):
 
 
 # ── Manutenção / consertos do Salão ─────────────────────────────
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=TTL_MEDIO, show_spinner=False)
 def carregar_reparos_manutencao_cached():
     db = inicializar_db()
     if not db:
@@ -271,12 +324,14 @@ def carregar_reparos_manutencao_cached():
     try:
         docs = db.collection("manutencao_reparos").stream()
         return [{"id": doc.id, **doc.to_dict()} for doc in docs]
-    except Exception:
+    except Exception as e:
+        if _cota_esgotada(e):
+            raise
         return []
 
 
 def carregar_reparos_manutencao():
-    return carregar_reparos_manutencao_cached()
+    return _seguro("reparos", carregar_reparos_manutencao_cached)
 
 
 def salvar_reparo_manutencao(dados, doc_id=None):
@@ -301,7 +356,7 @@ def deletar_reparo_manutencao(doc_id):
         carregar_reparos_manutencao_cached.clear()
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def obter_teto_mensal_manutencao_cached():
     db = inicializar_db()
     if not db:
